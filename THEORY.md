@@ -247,15 +247,33 @@ disc < 0:  복소 conjugate 한 쌍
 ### 7.1 왜 필요한가
 PID 가 안정적으로 잘 작동하면 `u/y` 가 거의 일정 → 플랜트 정보 없음. 외부 가진으로 SP 를 흔들어 정보를 만듭니다.
 
-### 7.2 멀티사인 (기본)
+### 7.2 멀티사인 + 저주파 square wave (기본)
+
+진폭 예산을 둘로 분할: 멀티사인 `(1-r)·A` + square wave `r·A`, 기본 `r = 0.5`.
+
+**멀티사인 (P/D 모드 식별):**
 12 성분, 로그 간격 (`fBase` ~ `fMax`), 슈뢰더 위상.
 
-$$x(t) = \sum_{i=0}^{11} \frac{A}{\sqrt{12}} \sin(2\pi f_i t + \phi_i), \quad \phi_i = -\frac{\pi i (i+1)}{12}$$
+$$x_\text{ms}(t) = (1-r) A \sum_{i=0}^{11} \frac{1}{\sqrt{12}} \sin(2\pi f_i t + \phi_i), \quad \phi_i = -\frac{\pi i (i+1)}{12}$$
 
 슈뢰더 위상 → 피크 팩터 ≈ √2 (균일 사인). 같은 RMS 진폭으로 가장 큰 SNR 확보.
 
-### 7.3 Step Prelude (DC 정보 주입)
-멀티사인은 DC 성분 없음 → FRIT 의 DC 동작 매칭이 외삽 영역. 첫 0.5초 일정 SP offset (= amp) → DC 보강.
+**저주파 square wave (I 모드 식별 — DC 정보 보강):**
+
+$$x_\text{sq}(t) = r A \cdot \mathrm{sign}\!\left[\sin(2\pi f_\text{sq} t)\right]$$
+
+기본 `f_sq = 0.1Hz` (주기 10초). 각 half-period 동안 SP 가 일정 → **적분기에 sustained 오차** → Ti 식별 강화. 평균 0 이라 자세 bias 없음. Square 전환 시점마다 transient → FRIT 가 좋아하는 데이터.
+
+전체:
+
+$$x(t) = x_\text{ms}(t) + x_\text{sq}(t)$$
+
+설정: `SquareAmpRatio` (`r`, 기본 0.5), `SquareFreqHz` (`f_sq`, 기본 0.1Hz). `r = 0` 으로 두면 순수 멀티사인.
+
+**왜 DC 정보가 따로 필요한가**: 멀티사인은 DC 성분이 0 (모든 사인의 평균은 0). PID 적분 모드 `(K_p/T_i) ∫e dt` 는 저주파 / DC 오차에 반응 → 저주파 가진 없으면 `T_i` 가 데이터에 거의 안 묻혀나옴. Square wave 의 half-period 가 길수록 (`f_sq` 작을수록) 적분 모드가 더 강하게 식별됨, 단 녹화 시간 내 최소 2회 전환 필요.
+
+### 7.3 Step Prelude (초기 DC kick)
+첫 0.5초는 가진 대신 `x = A` 일정 (full magnitude DC pulse). 이후 multisine + square 정상 사이클. FRIT 는 정상성 가정이 없으므로 **이 transient 도 식별 데이터에 그대로 포함** (구 PEM 시절 step skip 제거됨).
 
 ### 7.4 적응형 진폭
 - `yStd/amp < 0.15` AND `uStd < 0.1` → 진폭 2배 증가 (정보 부족)
@@ -319,7 +337,7 @@ $$x(t) = \sum_{i=0}^{11} \frac{A}{\sqrt{12}} \sin(2\pi f_i t + \phi_i), \quad \p
 
 1. **초기 컨트롤러 안정성 가정.** FRIT 는 폐루프 데이터를 전제. 초기 PID 가 발산 직전이면 데이터 자체가 비선형 transient 라 결과 신뢰도 ↓.
 
-2. **DC 정보 부족 시 Ti 부정확.** 멀티사인에 DC 가 없으므로 step prelude 가 있어도 적분 모드 가진은 약함. Ti 가 250 (=off) 에 가까이 수렴하면 수동 조정 필요.
+2. **Ti 식별 한계.** 저주파 square wave 와 step prelude 로 DC/저주파 가진을 주입하지만, 녹화가 짧으면 (square half-period 보다 짧으면) 적분 모드가 충분히 활성화 안 됨. `SquareFreqHz` 를 낮추거나 녹화 시간을 늘려야 함. Ti 가 250 (=off) 에 가까이 수렴하면 신호 부족 의심.
 
 3. **비선형성.** 큰 진폭에서는 LTI 근사가 깨짐. 적응형 진폭이 자동 축소하지만, 본질적으로 비선형이 강한 경우 (예: 고기동 영역) 는 한계.
 

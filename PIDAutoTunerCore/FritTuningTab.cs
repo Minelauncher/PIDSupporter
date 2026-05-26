@@ -226,6 +226,12 @@ namespace PIDAutoTuner
             public float ChirpStartHz = 0.2f;       // Chirp 시작 주파수
             public float ChirpEndHz = 2.0f;         // Chirp 끝 주파수
 
+            // ===== 저주파 square wave (적분 모드 식별용 DC 보강) =====
+            // MultiSine 가진 위에 sign(sin(2π·f_sq·t)) 를 더해서 적분기에 sustained 오차 주입.
+            // 각 half-period 동안 SP 일정 → Ti 식별이 강해짐. 평균 0 이라 자세 bias 없음.
+            public float SquareAmpRatio = 0.5f;     // 0 = off, 멀티사인 대비 square 진폭 비율
+            public float SquareFreqHz   = 0.1f;     // square 주파수 (주기 10초)
+
             // ===== 적응형 진폭: PID가 가진을 다 눌러버릴 때 자동으로 키움 =====
             public bool AdaptiveAmp = true;         // 적응형 켤지
             public float AdaptiveAmpMax = 10.0f;    // 최대 허용 진폭
@@ -1370,20 +1376,8 @@ namespace PIDAutoTuner
                 return;
             }
 
-            // Step prelude (첫 0.5초) 를 식별 데이터에서 제외 — DC 정보 주입용 transient
-            int stepSkip = 0;
-            if (blkStart == 0)
-            {
-                stepSkip = Math.Min((int)(0.5 / dt) + 1, blkLen / 4);
-                blkStart += stepSkip;
-                blkLen -= stepSkip;
-            }
-            if (blkLen < 64)
-            {
-                _autoState = AutoTuneState.Failed;
-                _sess.LastMessage = $"Auto-tune failed: block too short after step skip / 스텝 제외 후 블록 부족";
-                return;
-            }
+            // Step prelude skip 제거 — FRIT 는 정상성 가정이 없어서 transient 도 유효 식별 데이터
+            // (구 PEM/PBSID VAR 회귀 호환용 잔재였음). DC 정보는 step prelude + 저주파 square 둘 다 포함.
 
             double[] u = new double[blkLen];
             double[] y = new double[blkLen];
@@ -1739,19 +1733,32 @@ namespace PIDAutoTuner
                     }
                 case WaveType.MultiSine:
                     {
-                        // 12성분 멀티사인, 로그 간격 (0.05~5Hz), Schroeder 위상
-                        // 산업용 시스템 식별 표준 방식
+                        // 12성분 멀티사인 (P/D 모드) + 저주파 square wave (I 모드 DC 정보)
+                        // 진폭 예산 분할: 멀티사인 (1-r) : square r,  r = SquareAmpRatio
                         double fBase = Math.Max(0.01, _s.ExciteFreqHz);
                         double fMax = Math.Max(fBase * 2.0, _s.ChirpEndHz);
                         int nComp = 12;
-                        double compAmp = amp / Math.Sqrt(nComp); // RMS 진폭 유지
+
+                        double sqRatio = Math.Max(0.0, Math.Min(0.8, _s.SquareAmpRatio));
+                        double msAmp = amp * (1.0 - sqRatio);
+                        double sqAmp = amp * sqRatio;
+
+                        // 슈뢰더 위상 멀티사인 — P/D 식별
+                        double compAmp = msAmp / Math.Sqrt(nComp);
                         for (int ci = 0; ci < nComp; ci++)
                         {
-                            // 로그 간격 주파수 배치
                             double fi = fBase * Math.Pow(fMax / fBase, (double)ci / (nComp - 1));
-                            // Schroeder 위상: 피크 팩터 최소화
                             double phi = -Math.PI * ci * (ci + 1) / nComp;
                             x += compAmp * Math.Sin(2.0 * Math.PI * fi * t + phi);
+                        }
+
+                        // 저주파 square wave — 각 half-period 동안 SP 일정 → 적분기 sustained 오차 → Ti 식별 강화
+                        // 평균 0 이라 자세 bias 없음. f_sq 주기보다 짧은 chatter 쿨다운 (3초) 과 자연스럽게 어우러짐.
+                        if (sqAmp > 0)
+                        {
+                            double sqFreq = Math.Max(0.01, _s.SquareFreqHz);
+                            double sinPhase = Math.Sin(2.0 * Math.PI * sqFreq * t);
+                            x += sqAmp * (sinPhase >= 0 ? 1.0 : -1.0);
                         }
                         break;
                     }
