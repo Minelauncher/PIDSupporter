@@ -229,7 +229,12 @@ namespace PIDAutoTuner
 
             // ===== 포화 처리 =====
             public float SaturationThreshold = 0.98f;   // |u| >= 이 값이면 포화로 판정
-            public int   TransientTailSamples = 100;    // 포화 이후 IIR 회복 transient 구간 (≈2초)
+            // 포화 이후 IIR 회복 transient 보호 구간 (샘플 수).
+            // 0 = 보호 없음 — 포화 샘플만 down-weight, 회복 transient 는 IRLS Huber 가 처리.
+            //   짧은 spike 는 영향 미미, 긴 포화는 진단 단계가 미리 차단.
+            //   대부분 데이터를 살림 → CRLB 정밀도 ↑.
+            // 100 = 보수적 (≈2초) — 포화 이후 모든 샘플 down-weight. 데이터 손실 큼.
+            public int   TransientTailSamples = 0;
             public float MaxRecordingSec = 60.0f;       // 수집 안전 상한 (이 시간 넘으면 fail or 강제 종료)
 
             // ===== 가진(Excitation): 플랜트를 흔들어서 데이터를 만드는 신호 =====

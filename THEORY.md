@@ -19,7 +19,7 @@
        · 안전 상한 (MaxRecordingSec, 기본 60초) 초과 시 fail
   → Ts 자동 스캔 (10단계)
   → 각 Ts 마다 FRIT (시간 영역 IIR + 가중 LS + LM)
-       · 포화 + 그 뒤 IIR transient tail (≈2초) 인덱스 모두 w = ε 로 down-weight
+       · 포화 인덱스만 w = ε 로 down-weight (IIR 회복 transient 는 IRLS Huber 가 자동 처리)
        · 1/C(z) 안정성 미충족 시 soft barrier
   → 인접 Ts 간 파라미터 안정성 기반 best Ts 선택
   → Apply
@@ -402,52 +402,68 @@ $$x(t) = x_\text{ms}(t) + x_\text{sq}(t)$$
 
 ---
 
-## 9. 포화 처리 — 단일 방어선 (가중치 + 계속 수집)
+## 9. 포화 처리 — 가중치 + IRLS 안전망
 
-`|u| ≥ 0.98` 이면 비선형 영역 → FRIT 의 선형 LTI 가정 위반. 모든 샘플을 연속 저장하되, 식별 단계에서 가중치로 처리:
+`|u| ≥ 0.98` 이면 비선형 영역 → FRIT 의 선형 LTI 가정 위반. 모든 샘플을 연속 저장하되, 식별 단계에서 처리:
 
-### 8.1 실시간 가진 회피 (`ApplyExcitation`)
+### 9.1 실시간 가진 회피 (`ApplyExcitation`)
 가진 적용 시 `|u|` 가 0.98 근처면 가진 진폭을 자동 축소 (스케일 0.1 ~ 1.0). 포화를 사전 차단.
 
-### 8.2 양방향 적응형 진폭
-위 §7.4 — `uStd > 0.7` 이면 진폭 절반. 포화 발생 시 점진적으로 감쇠.
+### 9.2 양방향 적응형 진폭
+위 §7.4 — `uPeak > 0.85` 이면 진폭 ÷1.5. 포화 발생 시 점진적으로 감쇠.
 
-### 8.3 모든 샘플 저장 + 포화 플래그
-포화 여부와 무관하게 `(U, Y, Saturated)` 에 모두 저장. 블록 분리, 샘플 드롭, satRatio fail-fast 모두 제거.
+### 9.3 모든 샘플 저장 + 포화 플래그
+포화 여부와 무관하게 `(U, Y, Saturated)` 에 모두 저장. 블록 분리, 샘플 드롭, satRatio fail-fast 모두 없음.
 
-### 8.4 포화 + Transient Tail 가중치 ε
-`Saturated[k] = true` 이거나 그 직후 `TransientTailSamples` (기본 100 ≈ 2초) 인덱스는 **effective saturated** 로 표시.
-
-이유: `1/C(z)` 역필터는 IIR (메모리 있음). 포화 동안 클립된 `u` 가 필터 state 를 망친 뒤, 회복하는 데 ~`5τ` (PID 가장 느린 pole 기준 ~2초). 이 회복 구간 동안 계산되는 `e[k]` 가 오염됨 → 가중치 down-weight 로 cost 에서 제거.
+### 9.4 포화 인덱스만 가중치 ε
+`Saturated[k] = true` 인 샘플만 `w_sat = 1e-3` 로 down-weight.
 
 ```csharp
-since = ∞
-for k = 0..N-1:
-    if sat[k]: effSat[k] = true; since = 0
-    else:      since++; effSat[k] = (since <= TransientTailSamples)
-
-w[k] = effSat[k] ? 1e-3 : 1.0
+sqrtW[k] = √(sat[k] ? 1e-3 : 1.0)
 ```
 
-### 8.5 EffectiveValidCount 기반 종료
+**`TransientTailSamples = 0` (기본)** — IIR 회복 transient 보호 없음.
+
+### 9.5 IRLS Huber 가 회복 transient 처리
+`1/C(z)` 역필터는 IIR 라 포화 직후 ~2초 회복 transient 가 있음. 명시적으로 tail 을 안 막는 대신 IRLS 가 자동 처리:
+
+```
+LM 1차 → 잔차 계산
+MAD 로 robust scale 추정
+δ = 1.5 × 1.4826 × MAD
+잔차 |r| > δ 인 샘플 → w_huber = δ/|r| (down-weight)
+LM 2차 → 반복
+```
+
+**효과**:
+- 짧은 spike (1~2틱) → 회복 transient 가 작음 → 잔차 분포에 안 묻혀 검출 안 됨 → 그대로 사용. 영향 미미.
+- 좀 긴 포화 (5~20틱) → 회복 transient 잔차가 outlier 처럼 보임 → IRLS 가 자동 down-weight.
+- 매우 긴 포화 (>50틱) → 진단 단계가 차단했어야 함. 진단 통과 후 발생하면 IRLS 보호 약하지만 매우 드문 케이스.
+
+### 9.6 EffectiveValidCount 기반 종료
 수집은 `EffectiveValidCount ≥ MinSamples` 까지 계속. 적응형 진폭이 자동으로 진폭을 줄여서 결국 비포화 영역으로 수렴 → 깨끗한 샘플이 쌓임.
 
-### 8.6 안전 상한
+### 9.7 안전 상한
 `_sess.T > MaxRecordingSec` (기본 60초) 시점:
 - `EffectiveValidCount ≥ 256` → 그 데이터로 진행
 - `< 256` → fail (기체가 정상 비행 상태가 아닌 것으로 판단)
 
 ---
 
-**왜 이렇게 단순화?**
+**왜 IRLS 에 의존하나** (Tail = 0 결정)
 
-이전에는 (a) 짧은 포화 가중치 + (b) 긴 포화 블록 분리 + (c) 적응형 진폭 변경 시 블록 분리 + (d) satRatio fail-fast 의 다층 구조였음. 하지만:
+이전에는 `TransientTailSamples = 100` (≈2초) 로 포화 직후 100 샘플을 통째로 down-weight 했음. 단점:
 
-- (b) 의 "긴 포화 분리" 는 transient tail 가중치로 동등하게 처리됨 (실은 더 정확함 — 분리는 회복 후 깨끗 구간도 같이 버렸음)
-- (c) 의 "진폭 변경 분리" 는 불필요 — FRIT 는 가진 신호 형태 변화에 무관 (포화 안 일으키면 정상 데이터)
-- (d) 의 fail-fast 는 적응형 진폭이 자동으로 해결 → 그냥 더 수집하면 됨
+- 짧은 spike 5개만 있어도 데이터 50% 손실 → CRLB SE % ↑
+- 정통적이지만 과보호
 
-→ 단일 가중치 메커니즘 + 계속 수집으로 동등한 robustness, 더 많은 데이터 활용.
+새 접근 (`Tail = 0` + IRLS):
+- §8 진단이 큰 포화 사전 차단 → recording 중 포화는 대부분 짧은 spike
+- 짧은 spike 의 회복 transient 는 영향 자체가 작음 → tail 보호 불필요
+- IRLS 가 outlier 잔차 자동 처리 → 좀 더 긴 포화도 부분 보호
+- 데이터 손실 50% → 0.5% → CRLB 정밀도 ↑
+
+→ 진단 + 가중치 + IRLS 3중 보호로 동등 robustness, 데이터 활용 극대화.
 
 ---
 
