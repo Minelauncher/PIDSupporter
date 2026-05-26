@@ -1,109 +1,121 @@
 ﻿// ============================================================================
-// FritTuningTab.cs — FRIT 기반 PID 자동 튜닝 UI 탭 (전체 핵심 로직)
+// FritTuningTab.cs — FRIT (Fictitious Reference Iterative Tuning) PID 자동튜닝
+// ============================================================================
 //
-// ■ using 설명 (C# 기본):
-//   using = "이 네임스페이스의 클래스를 쓰겠다"는 선언.
-//   Java의 import, Python의 from X import * 와 비슷.
+// ┌─────────────────────────────────────────────────────────────────────────┐
+// │ 🎯 한 줄 요약                                                            │
+// │   폐루프 데이터 (u, y) 만으로 PID 파라미터 (Kp, Ti, Td) 를 자동 추정.     │
+// │   플랜트 모델 식별 불필요. 시간 영역 IIR + Levenberg-Marquardt 최적화.    │
+// └─────────────────────────────────────────────────────────────────────────┘
+//
+// ┌─────────────────────────────────────────────────────────────────────────┐
+// │ 🔬 핵심 수식                                                             │
+// │                                                                          │
+// │   가상 레퍼런스:  r̃(θ)[k] = y[k] + C(θ)⁻¹ · u[k]                         │
+// │   참조 모델 응답:  ŷ(θ)[k] = M(z) · r̃(θ)[k]                              │
+// │   비용 함수:      J(θ) = Σ w[k] · (y[k] - ŷ(θ)[k])²    ← LM 최소화      │
+// │                                                                          │
+// │   θ = (Kp, Ti, Td),   M(s) = exp(-s·τM) / (1 + s·0.2·Ts)^nM             │
+// │                                                                          │
+// │   가중치 w[k] = w_sat[k] · w_huber[k]                                    │
+// │     - w_sat:   포화 + IIR transient tail 에서 ε ≈ 1e-3                   │
+// │     - w_huber: IRLS 갱신, 이상치는 δ/|r| 로 감쇠                          │
+// └─────────────────────────────────────────────────────────────────────────┘
+//
+// ┌─────────────────────────────────────────────────────────────────────────┐
+// │ 🌊 파이프라인                                                            │
+// │                                                                          │
+// │   [Auto Tune] → 멀티사인 + square wave 주입                              │
+// │              → 폐루프 (u, y, Saturated) 연속 수집                         │
+// │              → EffectiveValidCount ≥ MinSamples (60s 안전 상한)          │
+// │              → Ts 자동 스캔 (10단계 0.1~1.0초)                            │
+// │              → 각 Ts: IRLS (3 iter) × LM (30 iter) + CRLB                │
+// │              → 파라미터 안정성 기반 best Ts 선택                          │
+// │              → [Apply] 로 게임 PID 에 기록                                │
+// └─────────────────────────────────────────────────────────────────────────┘
 //
 // ============================================================================
-// ■ 메서드/타입 출처 레퍼런스 (코드 읽을 때 참고)
+// 📚 메서드 / 타입 색인
+// ============================================================================
 //
 // ── 출처 범례 ──
-//   [C#]     = C# / .NET 기본 라이브러리
-//   [FTD]    = FTD 게임 DLL (BrilliantSkies.*)
-//   [Unity]  = Unity 엔진 (UnityEngine.*)
-//   [MathNet]= MathNet.Numerics 라이브러리
-//   [자체]   = 이 모드에서 직접 만든 코드
+//   [자체]    이 모드에서 직접 만든 코드
+//   [C#]      C# / .NET 기본
+//   [FTD]     FTD 게임 DLL (BrilliantSkies.*)
+//   [Unity]   Unity 엔진
+//   [MathNet] MathNet.Numerics 라이브러리
 //
-// ── 이 파일의 메서드들 ──
+// ── 라이프사이클 / 상태 머신 ──
+//   [자체] FritTuningTab(window, focus)        생성자 (FTD SuperScreen 상속)
+//   [자체] Build()                             override. UI 요소 배치 (FTD가 호출)
+//   [자체] OnUiFixed()                         매 물리 틱 호출. 데이터 수집의 심장
+//   [자체] enum AutoTuneState                  Idle/Recording/Computing/Done/Failed/Validating
 //
-//   [자체] FritTuningTab(window, focus)     생성자. FTD SuperScreen 상속
-//   [자체] Build()                          override. UI 요소 배치 (FTD가 호출)
-//   [자체] OnUiFixed()                      매 물리 틱 호출. 데이터 수집/적응형 진폭
-//   [자체] BuildStatus()                    UI: 상태 표시 영역 생성
-//   [자체] BuildSettingsSliders()            UI: 설정 슬라이더들 생성
-//   [자체] BuildExcitationControls()         UI: 가진 설정 영역 생성
-//   [자체] BuildActionButtons()              UI: 버튼들 (자동튜닝/녹화/계산/적용)
-//   [자체] BuildResult()                    UI: 결과 표시 영역
-//   [자체] StartRecording()                 녹화 시작 (세션 초기화)
-//   [자체] StopRecording()                  녹화 중지 (SP 복원)
-//   [자체] AutoTuneNow()                    [자동 튜닝] 버튼 → 가진 설정 + 녹화 시작
-//   [자체] AutoTuneCompute()                녹화 완료 후 → 추정 + FRIT 계산
-//   [자체] CaptureSetPointAdjustBase()      현재 SP 백업
-//   [자체] RestoreSetPointAdjustIfNeeded()   SP를 원래 값으로 복원
-//   [자체] ApplyExcitation(dt)              매 틱 SP에 가진 신호 더하기
-//   [자체] ComputeNow()                     [계산] 버튼 → FRIT 계산 (수동)
-//   [자체] ApplyToPid()                     [적용] 버튼 → 결과를 게임 PID에 쓰기
-//   [자체] ComputeFritPid(u,y,dt,s)         ★ FRIT 핵심 계산 (static)
-//   [자체] MakeButton(...)                  UI 헬퍼: 버튼 생성
-//   [자체] MakeToggle(...)                  UI 헬퍼: 토글 생성
-//   [자체] MakeCycleButton(...)             UI 헬퍼: 순환 버튼 생성
-//   [자체] MakeSliderFloat(...)             UI 헬퍼: float 슬라이더 생성
-//   [자체] MakeSliderInt(...)               UI 헬퍼: int 슬라이더 생성
-//   [자체] WaveToKo(w)                      WaveType → 한국어 문자열
-//   [자체] Clamp(v,lo,hi)                   값 범위 제한 (float)
-//   [자체] ClampInt(v,lo,hi)                값 범위 제한 (int)
-//   [자체] RoundToStep(v,step)              step 단위로 반올림
-//   [자체] NextPow2(n)                      2의 거듭제곱으로 올림
-//   [자체] Detrend(x)                       DC+선형추세 제거 (in-place)
-//   [자체] StdDev(data)                     표준편차 계산
-//   [자체] EstimateDelay(u,y,dt)            임펄스 응답 기반 지연 추정
-//   [자체] EstimateSettlingTime(y,dt)       자기상관 기반 정착시간 추정
+// ── UI 빌더 (Build() 가 호출) ──
+//   [자체] BuildStatus()                       상태 표시 영역
+//   [자체] BuildSettingsSliders()              Ts/τ/MinSamples 슬라이더
+//   [자체] BuildExcitationControls()           가진 토글/축 타입/기타
+//   [자체] BuildActionButtons()                AutoTune/Record/Reset/Compute/Apply/Validate
+//   [자체] BuildResult()                       결과 패널 (Kp ± SE, Dual PID 분해)
+//   [자체] MakeButton/MakeToggle/MakeCycleButton/MakeSliderFloat/MakeSliderInt
+//                                              FTD UI 컴포넌트 헬퍼
 //
-// ── 사용하는 외부 타입/메서드 ──
+// ── 자동 튜닝 진입 / 종료 ──
+//   [자체] AutoTuneNow()                       [자동 튜닝] 클릭 핸들러
+//   [자체] StartAutoTuneRecording()            가진 설정 + StartRecording
+//   [자체] StartRecording() / StopRecording()  세션 초기화 / SP 복원
+//   [자체] AutoTuneCompute()                   녹화 완료 → Ts 스캔 → FRIT 결정
 //
-//   [FTD]    SuperScreen<T>                 UI 탭 기본 클래스 (상속)
-//   [FTD]    VariableControllerMaster       PID 제어기 객체 (this._focus)
-//   [FTD]    IVariableController            개별 제어 채널 인터페이스
-//     .GetCurrentController()               [FTD] 현재 활성 컨트롤러 반환
-//     .LastControlVariable                  [FTD] 마지막 제어 출력 (u)
-//     .LastProcessVariable                  [FTD] 마지막 프로세스 변수 (y)
-//   [FTD]    this._focus.SetPointAdjust.Us  SetPoint 오프셋 (읽기/쓰기)
-//   [FTD]    this._focus.Pid.kP.Us          PID의 Kp 값 (읽기/쓰기)
-//   [FTD]    this._focus.Pid.kI.Us          PID의 Ti 값 (읽기/쓰기)
-//   [FTD]    this._focus.Pid.kD.Us          PID의 Td 값 (읽기/쓰기)
-//   [FTD]    ConsoleWindow                  UI 창 객체
-//   [FTD]    ScreenSegmentStandard          UI 구획 (세로)
-//   [FTD]    ScreenSegmentTable             UI 구획 (테이블)
-//   [FTD]    ScreenSegmentStandardHorizontal UI 구획 (가로)
-//   [FTD]    SubjectiveDisplay<T>           읽기 전용 텍스트 표시
-//   [FTD]    SubjectiveButton<T>            클릭 버튼
-//   [FTD]    SubjectiveToggle<T>            ON/OFF 토글
-//   [FTD]    SubjectiveFloatClampedWithBar<T> 슬라이더 (범위 제한 float)
-//   [FTD]    M.m<T>(값)                     매 프레임 값을 갱신하는 래퍼 (UI용)
-//   [FTD]    Content(텍스트, 툴팁, 태그)    탭/UI 이름 + 설명 묶음
-//   [FTD]    ToolTip(텍스트, 폭)            마우스 올리면 나오는 설명
-//   [FTD]    InsertPosition.OnCursor        UI 요소 삽입 위치
-//   [FTD]    ConsoleStyles.Instance          UI 스타일 싱글톤
-//   [FTD]    base.CreateStandardSegment()   부모(SuperScreen)의 UI 구획 생성
-//   [FTD]    base.CreateTableSegment(열,행) 부모(SuperScreen)의 테이블 생성
-//   [FTD]    base.CreateStandardHorizontalSegment() 가로 구획 생성
-//   [FTD]    seg.AddInterpretter(...)       구획에 UI 요소 추가
+// ── 가진 신호 (ApplyExcitation) ──
+//   [자체] ApplyExcitation(dt)                 멀티사인 + square + step prelude 합성
+//   [자체] CaptureSetPointAdjustBase()         원래 SP 백업
+//   [자체] RestoreSetPointAdjustIfNeeded()     SP 복원
+//   [자체] enum WaveType                       Off/Sine/Chirp/MultiSine
 //
-//   [Unity]  Time.fixedDeltaTime            물리 틱 간격 (보통 0.02초)
+// ── 축 분리 (Axis Fixture) ──
+//   [자체] CaptureOtherAxesFixture()           튜닝 중 다른 축 SP 고정 + 고도 유지 활성
+//   [자체] ApplyOtherAxesFixture()             매 틱 피치 고도 보정 offset 주입
+//   [자체] ReleaseOtherAxesFixture()           튜닝 후 FakeSetPoint 해제
+//   [자체] DiscoverSiblingAxes()               리플렉션으로 형제 축 자동 발견
+//   [자체] FindSiblingControllers/ExtractVcmsFromObject  리플렉션 헬퍼
+//   [자체] enum AxisType                       Unspecified/Yaw/Roll/Pitch/Hover/Forward/Strafe
 //
-//   [MathNet] Fourier.Forward(data, opt)    FFT (시간→주파수)
-//   [MathNet] Fourier.Inverse(data, opt)    IFFT (주파수→시간)
-//   [MathNet] FourierOptions.Matlab         FFT 스케일링 옵션 (MATLAB 호환)
-//   [MathNet] Matrix<double>.Build.Dense()  행렬 생성
-//   [MathNet] Vector<double>.Build.DenseOfArray() 벡터 생성
-//   [MathNet] matrix.Svd()                  특이값 분해 (SVD)
-//   [MathNet] matrix.QR().Solve(b)          QR 분해 → 최소자승 풀기
-//   [MathNet] svd.S                         특이값 벡터
-//   [MathNet] svd.VT                        V 전치 행렬
+// ── 검증 (Validate) ──
+//   [자체] ValidateAxes()                      전 축 y 5~15초 수집 시작
+//   [자체] OnValidateTick(dt)                  검증 매 틱 + 결과 집계
+//   [자체] GetValidateDuration()               축 타입별 검증 시간
 //
-//   [C#]     Math.Sin/Cos/Sqrt/Abs/...      기본 수학 함수
-//   [C#]     Math.Clamp(v,min,max)          범위 제한
-//   [C#]     Complex                        복소수 (실수부 + 허수부)
-//   [C#]     Complex.Exp/Pow/Conjugate      복소수 연산
-//   [C#]     Array.Copy(src,dst,len)        배열 복사
-//   [C#]     List<T>.Add/Clear/Count/CopyTo 리스트 조작
-//   [C#]     string.IsNullOrEmpty(s)        null 또는 빈 문자열 체크
-//   [C#]     $"...{변수}..."                문자열 보간 (f-string과 동일)
-//   [C#]     () => 표현식                   람다 (Python의 lambda와 동일)
-//   [C#]     Action<T> / Func<T>            함수를 변수로 전달하는 타입
-//   [C#]     try/catch                      예외 처리
-//   [C#]     double.IsNaN/IsInfinity        숫자 유효성 체크
+// ── 결과 적용 ──
+//   [자체] ComputeNow()                        [계산] 클릭: 수동 FRIT 실행
+//   [자체] ApplyToPid()                        [적용] 클릭: 게임 PID 에 쓰기
+//
+// ── ★ FRIT 핵심 (이 파일의 알고리즘 본체) ──
+//   [자체] ComputeFritPid(u, y, sat, dt, s, kp0, ti0, td0)
+//                                              시간 영역 FRIT + IRLS + CRLB
+//                                              return FritResult
+//   [자체] struct FritResult                    Kp/Ti/Td + SE + Iter + Converged
+//   [자체] Invert3x3(matrix)                    CRLB 용 3×3 역행렬 (cofactor)
+//
+// ── 신호 처리 유틸 ──
+//   [자체] Detrend(x)                          DC + 선형 추세 제거 (in-place)
+//   [자체] StdDev(data)                        표준편차
+//   [자체] NextPow2(n)                         2의 거듭제곱 (FFT 용 — 현재 미사용)
+//   [자체] RoundToStep(v, step)                step 단위 반올림
+//   [자체] Clamp / ClampInt                    범위 제한
+//   [자체] WaveToKo(w)                         WaveType → 한국어
+//   [자체] EstimateDelay / EstimateSettlingTime  자동 추정 (대부분 미사용)
+//
+// ── 외부 의존성 ──
+//   [FTD]     SuperScreen<T> / VariableControllerMaster / IVariableController
+//   [FTD]     ConsoleWindow, ScreenSegment*, SubjectiveDisplay/Button/Toggle
+//   [FTD]     SetPointAdjust, FakeSetPoint, Pid.kP/kI/kD
+//   [Unity]   Time.fixedDeltaTime
+//   [MathNet] Optimization.LevenbergMarquardtMinimizer  비선형 LS
+//   [MathNet] Optimization.ObjectiveFunction.NonlinearModel  LM 모델 래퍼
+//   [MathNet] LinearAlgebra.Vector<double>.Build (VB) / Matrix<double>.Build (MB)
+//   [MathNet] IntegralTransforms.Fourier  FFT (현재 미사용)
+//   [C#]      System.Numerics.Complex  FFT 시절 잔재
+//
 // ============================================================================
 
 using System;                          // 기본 타입 (Math, Array, Exception 등)
@@ -380,18 +392,58 @@ namespace PIDAutoTuner
             BuildResult();              // 결과 표시 (Kp, Ti, Td, RMSE)
         }
 
-        // ============================================================
-        // FixedUpdate tick — 매 물리 프레임(보통 0.02초=50Hz)마다 호출됨.
-        // VariableControllerUiFixedUpdatePatch가 Harmony로 FTD 코드에 끼어들어서
-        // 이 메서드를 호출해 줌. 이게 이 모드의 "심장박동".
+        // ════════════════════════════════════════════════════════════════════════
+        // OnUiFixed — 매 물리 틱 (50Hz) 호출되는 "심장박동"
+        // ════════════════════════════════════════════════════════════════════════
         //
-        // 하는 일:
-        // 1) 가진 신호를 SetPoint에 더함
-        // 2) u(제어 출력), y(프로세스 변수) 읽어서 저장
-        // 3) 적응형 진폭 조절
-        // 4) 포화 샘플 처리
-        // 5) 자동 튜닝: 충분히 모이면 계산 단계로 전환
-        // ============================================================
+        // Harmony 패치 (VariableControllerUiFixedUpdatePatch) 가 FTD 의
+        // FixedUpdateWhenActive 직후에 이 메서드를 호출.
+        //
+        // ─────────────────────────────────────────────────────────────────────
+        // 흐름 (Recording 상태 기준)
+        // ─────────────────────────────────────────────────────────────────────
+        //
+        //   1) State 분기:
+        //      Computing  → AutoTuneCompute() 한 번 실행 후 return
+        //      Validating → OnValidateTick() 호출 후 return
+        //      !Recording → 자연 변동 모음 (idle 노이즈 floor) 후 return
+        //      Recording  → 아래 본 흐름 진행
+        //
+        //   2) ApplyExcitation(dt):
+        //      SetPoint 에 멀티사인 + square wave 주입.
+        //      |u| 가 포화 임계 근처면 가진 진폭 자동 축소.
+        //
+        //   3) ApplyOtherAxesFixture():
+        //      다른 축 SP 고정 + 피치 고도 유지 offset.
+        //
+        //   4) u, y 읽기:
+        //      c.LastControlVariable / c.LastProcessVariable
+        //
+        //   5) 포화 추적:
+        //      saturated = |u| ≥ SaturationThreshold
+        //      SamplesSinceLastSat 카운터 갱신 (포화 시 0, 그 외 ++)
+        //
+        //   6) 적응형 진폭 (saturation 기반 binary):
+        //      윈도우 (60샘플 ≈ 1.2초) 통계 누적.
+        //      쿨다운 (3초) 지나면:
+        //         satRate > 2% OR uPeak > 0.85  →  amp ÷ 1.5
+        //         그 외                          →  amp × 1.5
+        //
+        //   7) 데이터 저장:
+        //      U.Add(u), Y.Add(y), Saturated.Add(saturated)
+        //      SamplesSinceLastSat > TransientTailSamples 면 EffectiveValidCount++
+        //
+        //   8) 종료 판정:
+        //      EffectiveValidCount ≥ MinSamples  →  Computing 전환
+        //      T > MaxRecordingSec               →  최소 256 이상이면 진행 / 아니면 Fail
+        //
+        // ─────────────────────────────────────────────────────────────────────
+        // 핵심 컨셉: "수집 vs 활용" 분리
+        // ─────────────────────────────────────────────────────────────────────
+        //   - 수집: 모든 샘플 저장 (블록 분리 / 드롭 없음)
+        //   - 활용: ComputeFritPid 에서 effSat (포화 + transient tail) 가중치로 분리
+        //   - 적응형 amp 가 saturation boundary 주위로 자연 수렴 → 정보 최대화
+        // ════════════════════════════════════════════════════════════════════════
         public void OnUiFixed()
         {
             try
@@ -1784,30 +1836,70 @@ namespace PIDAutoTuner
             }
         }
 
-        /// <summary>
-        /// ★ FRIT (Fictitious Reference Iterative Tuning) 핵심 계산 — 시간 영역 ★
-        ///
-        /// 입력: u[](제어 출력), y[](프로세스 변수), sat[](포화 플래그), dt, s, (Kp0,Ti0,Td0) 초기값
-        /// 출력: FritResult {Kp, Ti, Td, Rmse, Warning, Iterations, Converged}
-        ///
-        /// 비용:
-        ///   r̃(θ)[k] = y[k] + (1/C(θ)) · u[k]    가상 레퍼런스 (시간 영역 IIR 역필터)
-        ///   ŷ(θ)[k] = M(z) · r̃(θ)[k-delay]      이산화된 참조 모델 (Tustin)
-        ///   J(θ)    = Σ w[k] · (y[k] - ŷ(θ)[k])²    가중 LS  (포화 인덱스: w=ε)
-        ///   → Levenberg-Marquardt 로 (Kp, Ti, Td) 최적화.
-        ///
-        /// 주파수 영역 대비 장점:
-        ///   1. FFT 없음 → LM 반복당 비용 ↓
-        ///   2. spectral contamination (포화로 인한 비선형 leakage) 없음 → per-sample 가중치 100% 유효
-        ///   3. circular convolution wrap-around 없음 (causal)
-        ///   4. 순수 지연을 정수 틱으로 정확히 처리
-        ///
-        /// 가중치 구현: sqrt-스케일링 트릭
-        ///   ||√w·y - √w·ŷ||² = Σ w·(y-ŷ)²
-        ///   → observedY = √w·y, model 출력에 √w 곱해서 LM 에 던지면 가중 LS 와 등가.
-        ///
-        /// 안정성: 1/C(z) 의 pole 은 C(z) 분자의 zero. 단위원 밖이면 역필터 발산 → soft barrier.
-        /// </summary>
+        // ════════════════════════════════════════════════════════════════════════
+        // ★ FRIT 핵심 계산 ★
+        // ════════════════════════════════════════════════════════════════════════
+        //
+        // 입력:
+        //   u, y        폐루프 수집 데이터 (sample N개)
+        //   sat         포화 플래그 (true = |u| ≥ 0.98 일 때)
+        //   dt          샘플 간격 (초)
+        //   s           Settings (Ts, nM, τM, TransientTailSamples 등)
+        //   Kp0,Ti0,Td0 LM 초기 시드 (보통 현재 PID 값)
+        //
+        // 출력: FritResult { Kp, Ti, Td, KpSE, TiSE, TdSE, Rmse, Iterations, ... }
+        //
+        // ─────────────────────────────────────────────────────────────────────
+        // 알고리즘 흐름 (10 단계)
+        // ─────────────────────────────────────────────────────────────────────
+        //   1) Detrend       : u, y 에서 DC + 선형 추세 제거
+        //   2) M(z) precomp  : 참조 모델 Tustin 이산화 계수 미리 계산 (θ 무관)
+        //   3) effSat 확장   : 포화 + IIR transient tail 영역 마킹 → w_sat 초기화
+        //   4) LM model fn   : (Kp, Ti, Td) → √w · ŷ  ( 가상레퍼런스 + M 캐스케이드)
+        //   5) 초기값 sanity : Kp0/Ti0/Td0 가 비정상이면 안전 기본값
+        //   6) IRLS × LM     : 3 회 반복 (각 iter 마다 잔차로 Huber 가중치 갱신)
+        //   7) RMSE          : effSat / IRLS-downweighted 제외 raw 잔차
+        //   8) CRLB          : FD 자코비안 + 3×3 cov 역행렬 → SE(Kp/Ti/Td)
+        //   9) 경계 클램프    : Kp∈[0,1], Ti∈[0.1,250], Td∈[0,10], NaN/Inf 처리
+        //  10) FritResult 반환
+        //
+        // ─────────────────────────────────────────────────────────────────────
+        // 핵심 수식
+        // ─────────────────────────────────────────────────────────────────────
+        //   PID 이산화 (backward Euler 적분/미분):
+        //     C(z) = Kp · (a₀ + a₁z⁻¹ + a₂z⁻²) / (1 - z⁻¹)
+        //       a₀ = 1 + dt/Ti + Td/dt
+        //       a₁ = -(1 + 2·Td/dt)
+        //       a₂ = Td/dt
+        //
+        //   가상 레퍼런스 (시간 영역 IIR 역필터, 1/C(z) · u):
+        //     e[k] = (u[k] - u[k-1] - Kp·a₁·e[k-1] - Kp·a₂·e[k-2]) / (Kp·a₀)
+        //     r̃[k] = y[k] + e[k]
+        //
+        //   참조 모델 M(z) (Tustin, nM 차 캐스케이드):
+        //     β₀ = 1 + 2·aM/dt,  β₁ = 1 - 2·aM/dt,  aM = 0.2·Ts
+        //     H₁(z) · x[k] = (x[k] + x[k-1] - β₁·prev) / β₀
+        //     순수 지연 τM/dt 정수 틱 shift
+        //
+        //   비용 (가중 LS via sqrt-스케일링):
+        //     observedY[k] = √w[k] · y[k]
+        //     model output = √w[k] · ŷ[k]
+        //     LM 이 ||observedY - model||² = Σ w·(y-ŷ)² 를 자동 최소화
+        //
+        //   가중치 w[k] = w_sat[k] · w_huber[k]:
+        //     w_sat:   포화 또는 transient tail 이면 1e-3, 아니면 1
+        //     w_huber: |r| ≤ δ 면 1, 아니면 δ/|r|.  δ = 1.5·1.4826·MAD(r)
+        //
+        // ─────────────────────────────────────────────────────────────────────
+        // 안정성: 1/C(z) 의 pole = C(z) 분자 zero. 단위원 밖이면 역필터 발산.
+        //         → LM 모델 함수 시작에 zero 위치 체크, 불안정 시 큰 residual 반환 (soft barrier).
+        //
+        // 왜 시간 영역? (이전 주파수 영역 구현 대비)
+        //   1. FFT 없음 → LM 반복당 빠름
+        //   2. 포화로 인한 spectral leakage 없음 → 가중치 100% 유효
+        //   3. circular convolution wrap-around 없음 (causal IIR)
+        //   4. 순수 지연을 정수 틱으로 정확히 처리
+        // ════════════════════════════════════════════════════════════════════════
         private static FritResult ComputeFritPid(double[] u, double[] y, bool[] sat, double dt, Settings s,
                                                   double Kp0, double Ti0, double Td0)
         {
