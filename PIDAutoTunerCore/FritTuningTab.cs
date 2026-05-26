@@ -233,9 +233,8 @@ namespace PIDAutoTuner
             public float SquareFreqHz   = 0.1f;     // square 주파수 (주기 10초)
 
             // ===== 적응형 진폭: PID가 가진을 다 눌러버릴 때 자동으로 키움 =====
-            public bool AdaptiveAmp = true;         // 적응형 켤지
-            public float AdaptiveAmpMax = 10.0f;    // 최대 허용 진폭
-            public float AdaptiveSnrTarget = 0.15f; // stddev(y)/amp가 이보다 작으면 진폭 증가
+            public bool  AdaptiveAmp = true;        // 적응형 켤지
+            public float AdaptiveAmpMax = 10.0f;    // 최대 허용 진폭 (안전 상한)
 
             // ===== 축 분리 (Axis Fixture) =====
             public bool FixOtherAxes = true;        // 튜닝 중 다른 축 SP 고정
@@ -265,18 +264,16 @@ namespace PIDAutoTuner
             public int SamplesSinceLastSat;   // 마지막 포화 이후 경과 샘플 수
             public int EffectiveValidCount;   // transient tail 밖에 있는 깨끗한 샘플 누적
 
-            // 적응형 진폭 상태
-            public double AdaptiveCurrentAmp;    // 현재 실제 적용 진폭
-            public double AdaptiveYSum;          // y 합 (평균 계산용)
-            public double AdaptiveYSqSum;        // y² 합 (분산 계산용)
-            public double AdaptiveUSum;          // u 합 (제어 활동도 측정)
-            public double AdaptiveUSqSum;        // u² 합
-            public int AdaptiveCount;            // 누적 횟수
-            public int AdaptiveCheckInterval = 60; // 몇 샘플마다 체크 (약 1~1.5초)
-            public int AdaptiveBoostCount;       // 진폭 증가 횟수
-            public double AdaptiveLastChangeT;   // 마지막 진폭 변경 시각 (chatter 방지 쿨다운)
-            public double LastU;                 // 마지막 제어 출력 (포화 회피용)
-            public double NaturalYStd;           // 가진 전 자연 변동 (y의 std)
+            // 적응형 진폭 상태 (saturation 기반 — u 만 봄)
+            public double AdaptiveCurrentAmp;       // 현재 실제 적용 진폭
+            public int    AdaptiveWindowSat;        // 윈도우 내 포화 카운트
+            public double AdaptiveWindowUPeak;      // 윈도우 내 max |u|
+            public int    AdaptiveWindowCount;      // 윈도우 누적 샘플 수
+            public int    AdaptiveCheckInterval = 60;  // 윈도우 크기 (≈1.2초)
+            public int    AdaptiveBoostCount;       // 진폭 ↑ 횟수 (표시용)
+            public double AdaptiveLastChangeT;      // 마지막 변경 시각 (쿨다운)
+            public double LastU;                    // 마지막 제어 출력 (가진 회피용)
+            public double NaturalYStd;              // 가진 전 자연 변동 (시작 진폭 결정)
 
             public bool HasResult;
             public double Kp, Ti, Td;
@@ -299,11 +296,9 @@ namespace PIDAutoTuner
                 SamplesSinceLastSat = int.MaxValue / 2;   // 시작 시 "이미 충분히 오래 깨끗" 상태
                 EffectiveValidCount = 0;
                 AdaptiveCurrentAmp = 0;
-                AdaptiveYSum = 0;
-                AdaptiveYSqSum = 0;
-                AdaptiveUSum = 0;
-                AdaptiveUSqSum = 0;
-                AdaptiveCount = 0;
+                AdaptiveWindowSat = 0;
+                AdaptiveWindowUPeak = 0;
+                AdaptiveWindowCount = 0;
                 AdaptiveBoostCount = 0;
                 AdaptiveLastChangeT = 0;
                 LastU = 0;
@@ -457,88 +452,7 @@ namespace PIDAutoTuner
                 double y = c.LastProcessVariable;
                 _sess.LastU = u;
 
-                // ── 적응형 진폭: 정보량 부족 시 진폭 증가 ──
-                // 정보량 판단: y 변동 (yStd/amp) AND u 제어 활동 (uStd) 둘 다 고려.
-                //   기존 yStd/amp 만 보면 강한 PID / 고주파 컷오프 상황에서 u가 활발해도 boost 됨
-                //   → 불필요한 포화 유발. u 가 이미 움직이면 FRIT 입장에서도 정보 충분.
-                // 현재 포화 중이면 통계 수집 자체 skip (포화 데이터는 std 왜곡).
-                if (_s.AdaptiveAmp && _s.ExciteEnabled && _autoState == AutoTuneState.Recording
-                    && Math.Abs(u) < _s.SaturationThreshold)
-                {
-                    _sess.AdaptiveYSum += y;
-                    _sess.AdaptiveYSqSum += y * y;
-                    _sess.AdaptiveUSum += u;
-                    _sess.AdaptiveUSqSum += u * u;
-                    _sess.AdaptiveCount++;
-
-                    if (_sess.AdaptiveCount >= _sess.AdaptiveCheckInterval)
-                    {
-                        double yMean = _sess.AdaptiveYSum / _sess.AdaptiveCount;
-                        double yVar = (_sess.AdaptiveYSqSum / _sess.AdaptiveCount) - yMean * yMean;
-                        double yStd = yVar > 0 ? Math.Sqrt(yVar) : 0;
-                        double uMean = _sess.AdaptiveUSum / _sess.AdaptiveCount;
-                        double uVar = (_sess.AdaptiveUSqSum / _sess.AdaptiveCount) - uMean * uMean;
-                        double uStd = uVar > 0 ? Math.Sqrt(uVar) : 0;
-                        double amp = Math.Max(0.01, _sess.AdaptiveCurrentAmp);
-
-                        double yRatio = yStd / amp;          // 폐루프 민감도 근사
-                        const double U_INFO_THRESHOLD = 0.1; // u 변동이 이 이상이면 정보 충분
-                        bool yLow = yRatio < _s.AdaptiveSnrTarget;
-                        bool uLow = uStd < U_INFO_THRESHOLD;
-
-                        // ── 양방향 적응 (chatter 방지: 쿨다운 3초 + dead zone) ──
-                        // 올림: 정보 부족 (y, u 둘 다 약함)
-                        // 내림: 응답 과대 (u 포화 근접 또는 y 과응답)
-                        const double U_SAT_NEAR = 0.7;     // u 포화 경계 (포화 = 0.98)
-                        const double U_SAT_DEAD_LO = 0.65; // dead zone 하한 (이 아래면 내림 안 함)
-                        const double Y_OVER_RATIO = 1.5;   // yStd/amp 이 이 이상이면 과응답
-                        const double AMP_COOLDOWN = 3.0;   // 진폭 변경 후 최소 대기 시간 (초)
-
-                        bool cooledDown = (_sess.T - _sess.AdaptiveLastChangeT) >= AMP_COOLDOWN;
-
-                        // 적응형 진폭 변경 시 블록 분리는 더 이상 안 함.
-                        // 변경 직후의 transient 가 포화로 이어지면 포화 인덱스가 자동으로 down-weight 됨.
-                        // 포화 안 일으키면 그냥 정상 데이터 (FRIT 는 가진 신호 형태 변화에 무관).
-                        if (cooledDown && yLow && uLow && amp < _s.AdaptiveAmpMax)
-                        {
-                            double newAmp = Math.Min(amp * 2.0, _s.AdaptiveAmpMax);
-                            _sess.AdaptiveCurrentAmp = newAmp;
-                            _s.ExciteAmp = (float)newAmp;
-                            _sess.AdaptiveBoostCount++;
-                            _sess.AdaptiveLastChangeT = _sess.T;
-                            _sess.LastMessage = $"Adaptive ↑ amp {amp:0.00}→{newAmp:0.00} (yR={yRatio:0.00}, uStd={uStd:0.00} 둘 다 낮음)";
-                        }
-                        else if (cooledDown && uStd > U_SAT_NEAR && amp > 0.05)
-                        {
-                            double newAmp = Math.Max(0.05, amp * 0.5);
-                            _sess.AdaptiveCurrentAmp = newAmp;
-                            _s.ExciteAmp = (float)newAmp;
-                            _sess.AdaptiveLastChangeT = _sess.T;
-                            _sess.LastMessage = $"Adaptive ↓ amp {amp:0.00}→{newAmp:0.00} (uStd={uStd:0.00} > {U_SAT_NEAR} 포화 근접)";
-                        }
-                        else if (cooledDown && yRatio > Y_OVER_RATIO && amp > 0.05)
-                        {
-                            double newAmp = Math.Max(0.05, amp * 0.5);
-                            _sess.AdaptiveCurrentAmp = newAmp;
-                            _s.ExciteAmp = (float)newAmp;
-                            _sess.AdaptiveLastChangeT = _sess.T;
-                            _sess.LastMessage = $"Adaptive ↓ amp {amp:0.00}→{newAmp:0.00} (yStd/amp={yRatio:0.00} > {Y_OVER_RATIO} 과응답)";
-                        }
-                        else if (yLow && !uLow)
-                        {
-                            _sess.LastMessage = $"Info OK (uStd={uStd:0.00}) / 정보 충분 (yR={yRatio:0.00})";
-                        }
-
-                        _sess.AdaptiveYSum = 0;
-                        _sess.AdaptiveYSqSum = 0;
-                        _sess.AdaptiveUSum = 0;
-                        _sess.AdaptiveUSqSum = 0;
-                        _sess.AdaptiveCount = 0;
-                    }
-                }
-
                 // 포화 추적 + transient tail 카운터
-                // (블록 분리 + RejectSaturated 제거 — 모든 샘플 보존, 포화/회복 구간은 FRIT 가중치에서 down-weight)
                 bool saturated = Math.Abs(u) >= _s.SaturationThreshold;
                 if (saturated)
                 {
@@ -548,6 +462,60 @@ namespace PIDAutoTuner
                 else
                 {
                     _sess.SamplesSinceLastSat++;
+                }
+
+                // ── 적응형 진폭 — saturation 기반 binary 규칙 ──
+                // 윈도우 통계 (uPeak, satCount) 만 보고 ↑/↓ 결정. y 는 안 봄 (FRIT 이론적으로 y info 는 amp ↑ 하면 자연 증가).
+                // 규칙: satRate > 2% 또는 uPeak > 0.85 → amp ÷ 1.5. 그 외 → amp × 1.5. 쿨다운 3초.
+                if (_s.AdaptiveAmp && _s.ExciteEnabled && _autoState == AutoTuneState.Recording)
+                {
+                    if (saturated) _sess.AdaptiveWindowSat++;
+                    double absU = Math.Abs(u);
+                    if (absU > _sess.AdaptiveWindowUPeak) _sess.AdaptiveWindowUPeak = absU;
+                    _sess.AdaptiveWindowCount++;
+
+                    if (_sess.AdaptiveWindowCount >= _sess.AdaptiveCheckInterval)
+                    {
+                        const double SAT_RATE_THRESHOLD = 0.02;   // 2%
+                        const double U_PEAK_THRESHOLD = 0.85;
+                        const double AMP_UP = 1.5;
+                        const double AMP_DOWN = 1.0 / 1.5;        // ≈ 0.667
+                        const double AMP_COOLDOWN = 3.0;
+                        const double AMP_FLOOR = 0.05;
+
+                        double satRate = (double)_sess.AdaptiveWindowSat / _sess.AdaptiveWindowCount;
+                        double uPeak = _sess.AdaptiveWindowUPeak;
+                        double amp = Math.Max(AMP_FLOOR, _sess.AdaptiveCurrentAmp);
+                        bool cooledDown = (_sess.T - _sess.AdaptiveLastChangeT) >= AMP_COOLDOWN;
+
+                        bool tooHigh = (satRate > SAT_RATE_THRESHOLD) || (uPeak > U_PEAK_THRESHOLD);
+
+                        if (cooledDown)
+                        {
+                            if (tooHigh && amp > AMP_FLOOR)
+                            {
+                                double newAmp = Math.Max(AMP_FLOOR, amp * AMP_DOWN);
+                                _sess.AdaptiveCurrentAmp = newAmp;
+                                _s.ExciteAmp = (float)newAmp;
+                                _sess.AdaptiveLastChangeT = _sess.T;
+                                _sess.LastMessage = $"Adaptive ↓ amp {amp:0.00}→{newAmp:0.00} (uPeak={uPeak:0.00}, satRate={satRate:P0})";
+                            }
+                            else if (!tooHigh && amp < _s.AdaptiveAmpMax)
+                            {
+                                double newAmp = Math.Min(_s.AdaptiveAmpMax, amp * AMP_UP);
+                                _sess.AdaptiveCurrentAmp = newAmp;
+                                _s.ExciteAmp = (float)newAmp;
+                                _sess.AdaptiveBoostCount++;
+                                _sess.AdaptiveLastChangeT = _sess.T;
+                                _sess.LastMessage = $"Adaptive ↑ amp {amp:0.00}→{newAmp:0.00} (uPeak={uPeak:0.00}, sat 없음)";
+                            }
+                            // else: 경계에 도달 (위 cap 또는 아래 floor). 유지.
+                        }
+
+                        _sess.AdaptiveWindowSat = 0;
+                        _sess.AdaptiveWindowUPeak = 0;
+                        _sess.AdaptiveWindowCount = 0;
+                    }
                 }
 
                 _sess.U.Add(u);

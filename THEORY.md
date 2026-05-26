@@ -277,11 +277,25 @@ $$x(t) = x_\text{ms}(t) + x_\text{sq}(t)$$
 ### 7.3 Step Prelude (초기 DC kick)
 첫 0.5초는 가진 대신 `x = A` 일정 (full magnitude DC pulse). 이후 multisine + square 정상 사이클. FRIT 는 정상성 가정이 없으므로 **이 transient 도 식별 데이터에 그대로 포함** (구 PEM 시절 step skip 제거됨).
 
-### 7.4 적응형 진폭
-- `yStd/amp < 0.15` AND `uStd < 0.1` → 진폭 2배 증가 (정보 부족)
-- `uStd > 0.7` → 진폭 절반 (포화 근접)
-- `yStd/amp > 1.5` → 진폭 절반 (과응답)
-- 변경 후 3초 쿨다운 (chatter 방지)
+### 7.4 적응형 진폭 (saturation 기반 binary)
+
+식별 이론적으로 amp 가 클수록 SNR ↑ → 식별 정확도 ↑. 진짜 cap 은 saturation 뿐 (y info 는 부산물). 그래서 단순 binary 규칙:
+
+```
+윈도우 (60샘플 ≈ 1.2초) 통계:
+  satRate = (포화 카운트) / 윈도우
+  uPeak   = max |u| in 윈도우
+
+규칙 (3초 쿨다운):
+  satRate > 2%  OR  uPeak > 0.85   → amp × 0.667   (포화 위험 → 후퇴)
+  그 외                              → amp × 1.5     (margin 있음 → 밀어붙임)
+```
+
+자연스럽게 amp 가 saturation 경계 주위 (uPeak ≈ 0.85) 로 수렴 → 항상 max 가능 amp 에서 식별.
+
+**비대칭 (↑ ×1.5, ↓ ×0.667)** 이유: 사이클당 `1.5 × 0.667 = 1.0` 균형 — 정확히 boundary 주위에서 oscillation. ↓ 가 살짝 더 강하면 안전 마진 ↑.
+
+**y 기준 없음**: 이전 코드는 `yStd/amp < 0.15` 또는 `uStd < 0.1` 로 "정보 충분" 판단했으나, FRIT 입장에서 이건 PEM 잔재. FRIT 비용은 출력 매칭 `||y - ŷ||²` 이라 y info 가 본질적이고 amp 늘리면 y 도 자동으로 늘어남. 그래서 별도 y 기준 불필요.
 
 ---
 
