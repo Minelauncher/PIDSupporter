@@ -4,987 +4,338 @@
 
 ## 1. 개요
 
-이 모드는 **폐루프 무편향** PID 튜닝 파이프라인을 제공합니다:
-
-1. **PEM (주방법)** — PBSID-opt + Gauss-Newton. 폐루프 **무편향**(consistency) + **Cramér-Rao bound** 점근적 도달. 시간 도메인 상태공간 `(A,B,C,D,K)` 추정 후 PSO 스텝 시뮬.
-2. **BLA (보완)** — Welch-IV 주파수 응답 추정. **비선형 강건** + 멀티사인 직접 활용. 주파수 도메인 PSO 매칭.
-3. **VRFT (안전망)** — 모델 없이 직접 회귀. 3 파라미터만 → 최저 분산. 극한 폴백.
-
-세 방법 모두 **폐루프 데이터에서 무편향** (또는 편향 미해당). N4SID (폐루프 편향) 와 OpenLoop Step ID (PID 우회 비현실적) 는 제거됨.
+이 모드는 **FRIT (Fictitious Reference Iterative Tuning)** 기반 PID 자동 튜닝 파이프라인을 제공합니다. 구현은 **시간 영역** + **가중 LS** + **Levenberg-Marquardt**.
 
 **식별 체인:**
 ```
-[Auto Tune] → 가진 데이터 수집 (u, y, r)
-→ PEM (시간 도메인, CRLB)     ─┐
-→ BLA (주파수 도메인, 강건)    ├→ 교차검증 RMSE 정렬 → Active + Alternative
-→ VRFT (직접 회귀, 안전망)    ─┘
-→ UI 에서 Swap 가능 → Apply
+[Auto Tune]
+  → 가진 신호 (멀티사인) 를 SetPoint 에 주입
+  → 현재 PID C₀ 로 폐루프 데이터 (u, y) + 포화 플래그 수집
+  → 최장 비-드롭 블록 추출 (긴 연속 포화는 데이터 자체 드롭, 블록 분리)
+  → Ts 자동 스캔 (10단계)
+  → 각 Ts 마다 FRIT (시간 영역 IIR + 가중 LS + LM)
+       · 짧은 포화 인덱스는 w = ε 로 down-weight
+       · 1/C(z) 안정성 미충족 시 soft barrier
+  → 인접 Ts 간 파라미터 안정성 기반 best Ts 선택
+  → Apply
 ```
+
+기존에 있던 PEM (PBSID + Gauss-Newton 시간도메인 식별), BLA (Welch-IV 주파수도메인 식별), VRFT (선형 회귀), 그리고 FRIT 의 초기 주파수 영역 구현은 모두 제거됐고, 시간 영역 FRIT 한 가지로 통일했습니다.
 
 ---
 
-## 2. PID 제어기란?
+## 2. PID 제어기
 
 PID 제어기는 **오차** (목표와 현재의 차이)를 보고 보정 출력을 냅니다.
 
 $$e(t) = \mathrm{setpoint} - \mathrm{current\ value}$$
 
-| 항 | 수식 | 비유 |
-|------|---------|---------------|
-| **P** (비례) | `K_p · e` | 목표로 조향 |
-| **I** (적분) | `(K_p / T_i) ∫e dt` | "너무 오래 벗어나 있었다" |
-| **D** (미분) | `K_p · T_d · de/dt` | 도착 전 브레이크 |
-
-결합:
-
 $$u(t) = K_p \left[ e(t) + \frac{1}{T_i} \int_0^t e(\tau)\,d\tau + T_d \frac{de(t)}{dt} \right]$$
 
-**ISA 형식의 핵심 성질:** `K_p`가 세 항 모두에 곱해짐. `K_p`를 줄이면 P, I, D가 동시에 약해짐. 포화 해소에서 이 성질을 이용.
+**ISA 형식의 핵심 성질:** `K_p`가 세 항 모두에 곱해짐. `K_p`를 줄이면 P, I, D가 동시에 약해짐.
 
 ### FTD 값 범위
 
-| 파라미터 | 범위 | 기본값 | 비고 |
-|-----------|------|---------|------|
-| `K_p` (게인) | 0 ~ 1 | 0.05 | 높을수록 반응적 |
-| `T_i` (적분 시간) | 0 ~ 250 | 250 (=off) | 낮을수록 강한 적분 |
-| `T_d` (미분 시간) | 0 ~ 100 | 0.3 | 높을수록 감쇠 |
+| 파라미터 | 범위 | 기본값 |
+|-----------|------|---------|
+| `K_p` | 0 ~ 1 | 0.05 |
+| `T_i` | 0 ~ 250 | 250 (=off) |
+| `T_d` | 0 ~ 100 | 0.3 |
+
+### 이산 PID — backward Euler
+
+코드에서 사용하는 이산화 (적분/미분 모두 backward Euler, `s ↔ (1 - z⁻¹)/dt`):
+
+$$C(z) = K_p \cdot \frac{a_0 + a_1 z^{-1} + a_2 z^{-2}}{1 - z^{-1}}$$
+
+$$a_0 = 1 + \frac{dt}{T_i} + \frac{T_d}{dt}, \quad a_1 = -\left(1 + \frac{2 T_d}{dt}\right), \quad a_2 = \frac{T_d}{dt}$$
+
+**중요 성질:** `C(z)` 는 분모에 적분기 `(1 - z⁻¹)` 한 개와 분자에 quadratic 한 개. **역필터 `1/C(z)` 는 분자가 `(1 - z⁻¹)`, 분모가 quadratic** — 안정성은 `a₀ z² + a₁ z + a₂ = 0` 의 zero 가 단위원 내부인지에 달림.
 
 ---
 
-## 3. 주파수 영역 — 왜 필요한가
+## 3. FRIT 이론
 
-### 3.1 신호는 사인파의 합
+### 3.1 목표
 
-모든 신호는 다른 주파수의 사인파로 분해할 수 있습니다. 이것이 **FFT**가 하는 일.
-
-예: 기체가 0.5Hz로 흔들리면서 0.1Hz로 천천히 드리프트 → FFT는 0.5Hz와 0.1Hz에 피크를 보여줌.
-
-### 3.2 전달함수
-
-시간에 따른 신호 대신, 각 주파수에 시스템이 무엇을 하는지로 기술합니다.
-
-$$H(j\omega) = \frac{Y(j\omega)}{U(j\omega)}$$
-
-"주파수 `ω`의 사인파를 넣으면, 출력 진폭이 `|H|`배가 되고 위상이 `∠H`만큼 이동."
-
-### 3.3 주파수 영역의 PID
-
-$$C(s) = K_p + \frac{K_p}{T_i s} + K_p T_d s = \underbrace{\rho_1}_{K_p} + \underbrace{\rho_2}_{K_p/T_i} \cdot \frac{1}{s} + \underbrace{\rho_3}_{K_p T_d} \cdot s$$
-
-여기서 `s = jω` (허수 주파수 변수).
-
-PID가 세 "기저함수"의 선형 결합이 됨. 최적 PID 찾기 = 최적 `ρ` 찾기 = **한 번에 풀 수 있는 회귀 문제**.
-
----
-
-## 4. VRFT 이론
-
-### 4.1 목표
-
-폐루프가 **참조 모델** `M(s)`처럼 동작하길 원합니다:
+폐루프가 **참조 모델** `M(s)` 처럼 동작하길 원합니다:
 
 $$\frac{Y(s)}{R(s)} = \frac{C(s)P(s)}{1 + C(s)P(s)} \approx M(s)$$
 
-여기서 `P(s)`는 플랜트 (기체의 물리), `C(s)`는 PID.
+`P(s)` 는 플랜트 (기체 물리), `C(s)` 는 PID. 플랜트 모델은 모릅니다.
 
-보통은 `P(s)`를 먼저 알아야 합니다. **VRFT는 이걸 완전히 건너뜁니다.**
+### 3.2 가상 레퍼런스 (Fictitious Reference)
 
-### 4.2 이상적 제어기
+데이터 `(u, y)` 가 초기 컨트롤러 `C₀` 의 폐루프에서 수집되었다고 가정. 새로운 컨트롤러 `C(θ)` 에 대해, "**이 (u, y) 가 C(θ) 의 폐루프 응답이 되려면 레퍼런스는 무엇이어야 했을까?**"
 
-`P(s)`를 알 수 있다면, 완벽한 제어기는:
+PID 식 `u = C(θ) · (r - y)` 에서 `r` 에 대해 풀면:
 
-$$C^*(s) = \frac{1}{P(s)} \cdot \frac{M(s)}{1 - M(s)}$$
+$$\tilde{r}(\theta) = y + C(\theta)^{-1} u$$
 
-**유도:** `M = CP/(1+CP)`에서 시작. `C`에 대해 풀기:
+이것이 **가상 레퍼런스** `r̃(θ)`. 데이터로부터 직접 계산 가능 (플랜트 모델 필요 없음).
 
-$$M(1+CP) = CP \implies M = CP - MCP = CP(1-M) \implies C = \frac{M}{P(1-M)}$$
+**시간 영역 구현 — IIR 역필터.** `e[k] = C(θ)⁻¹ u[k]` 는 다음 재귀로:
 
-`P(s)`를 모르니까 직접 못 씀. 여기서 트릭이 등장.
+$$e[k] = \frac{u[k] - u[k-1] - K_p a_1 e[k-1] - K_p a_2 e[k-2]}{K_p a_0}$$
 
-### 4.3 가상 레퍼런스 — 핵심 통찰
+그러면 `r̃[k] = y[k] + e[k]`.
 
-시스템에서 데이터 `(u, y)`를 수집했습니다. 이제 상상: **폐루프가 정확히 `M`이었다면, 이 `y`를 만든 레퍼런스는 무엇이었을까?**
+### 3.3 가중 비용 함수
 
-`Y = M · R`이므로:
+가상 레퍼런스를 참조 모델에 통과시킨 응답이 실제 출력에 가까워야 함:
 
-$$r_v = M^{-1} \cdot y \quad \text{(가상 레퍼런스)}$$
+$$\hat{y}(\theta) = M(z) \cdot \tilde{r}(\theta)$$
 
-대응하는 오차:
+$$J(\theta) = \sum_{k=1}^{N} w[k] \cdot \left[ y[k] - \hat{y}(\theta)[k] \right]^2$$
 
-$$e_v = r_v - y = (M^{-1} - 1) \cdot y \quad \text{(가상 에러)}$$
+**가중치 `w[k]`** :
+- 비-포화 샘플: `w[k] = 1`
+- 짧은 포화 샘플: `w[k] = ε ≈ 10⁻³` (down-weight)
+- 긴 연속 포화 샘플: 데이터 자체에서 드롭 + 블록 분리 (앞 단계에서 처리)
 
-`e_v`는 `y`와 `M`만으로 계산. `P`도 필요 없고 어떤 제어기가 데이터를 만들었는지도 불필요.
+`θ = (Kp, Ti, Td)` 3개 파라미터 → **Levenberg-Marquardt** (MathNet `LevenbergMarquardtMinimizer`, finite-difference Jacobian).
 
-### 4.4 최적화
+### 3.4 가중 LS — sqrt-스케일링 트릭
 
-제어기가 `C*`라면 `u = C* · e_v`가 정확히 성립. 따라서 최소화:
+MathNet LM 은 unweighted `||observedY - model(θ)||²` 을 최소화. 가중 LS 를 만들려면:
 
-$$J(\theta) = \sum_{t=1}^{N} \left[ u(t) - C(\theta) \cdot e_v(t) \right]^2$$
+$$\sum_k w_k \cdot (y_k - \hat{y}_k)^2 = \sum_k (\sqrt{w_k}\, y_k - \sqrt{w_k}\, \hat{y}_k)^2$$
 
-"`e_v`를 관측된 `u`로 가장 잘 변환하는 파라미터 `θ`를 찾아라."
+`observedY' = √w · y`, `model 출력' = √w · ŷ` 로 LM 에 던지면 가중 LS 와 등가. 구현 한 줄로 끝.
 
-### 4.5 왜 올바른 답이 나오나?
+### 3.5 시간 영역 vs 주파수 영역
 
-핵심 메커니즘: 실제 데이터에서 `y = P · u` (플랜트가 입력을 출력으로 매핑). 따라서:
+이전 (지금은 제거된) 주파수 영역 구현은:
+- FFT → `R̃(jω) = Y + U/C(jω)` → IFFT → residual
 
-$$e_v = (M^{-1} - 1) \cdot y = (M^{-1} - 1) \cdot P \cdot u$$
+문제: 포화 샘플의 비선형 클리핑이 FFT 후 **모든 주파수에 broadband leakage** 를 만들어 `U(jω)`, `Y(jω)` 가 오염 → 시간 영역으로 IFFT 하면 *비포화* 인덱스의 `ŷ` 도 오염됨. 잔차 가중치만으로는 부분적 보정밖에 안 됨.
 
-`u = C · e_v`에 대입하면 `u = C · (M⁻¹ - 1) · P · u`. 양변을 `u`로 나누면:
+**시간 영역 구현은 spectral contamination 자체가 없음** — `1/C(z)` 역필터는 causal IIR, `M(z)` 도 causal IIR, 가중치는 잔차에 직접 작용. 또한:
+- FFT 제거 → LM 반복당 비용 ↓
+- circular convolution wrap-around 없음
+- 순수 지연을 정수 틱 shift 로 정확히 처리
 
-$$1 = C(M^{-1}-1)P$$
+### 3.6 VRFT 와의 차이
 
-정리하면 `C = M/[P(1-M)]` — §4.2의 이상적 제어기 `C*`와 정확히 동일. `P`는 데이터에 "인코딩"되어 있어 회귀가 `P`를 명시적으로 식별하지 않고 `C*`를 복원.
+VRFT 는 선형 회귀로 풉니다:
 
-엄밀한 증명은 `N → ∞`에서 `argmin J(θ) → C*`를 보이는 것. Campi et al. (2002) Theorem 1 참조.
+$$J_\text{VRFT}(\theta) = \sum_k \left[ u[k] - C(\theta) \cdot (M^{-1} y - y)[k] \right]^2$$
 
-### 4.6 PID의 경우 — 선형 회귀
+선형 LS 로 단번에 풀리지만, 노이즈가 `r_v = M⁻¹y` 와 `y` 양쪽에 들어가 **상관 노이즈로 회귀 계수가 편향**됨 (Instrumental Variable 필요).
 
-PID 형태 `C = ρ₁ + ρ₂/s + ρ₃s` 대입:
+FRIT 는 출력 매칭 비용 (비선형) 이라 회귀 구조가 없고 상관 노이즈 편향이 없음 (Soma/Kaneko 2004). 측정 노이즈에 더 강건.
 
-$$J = \sum_t \left[ u(t) - \rho_1 \cdot e_v(t) - \rho_2 \cdot \int e_v(t) - \rho_3 \cdot \dot{e}_v(t) \right]^2$$
+### 3.7 왜 올바른 답이 나오나
 
-`ρ`에 대해 **선형**. 정의:
+`y = P · u` (플랜트가 입력을 출력으로 매핑). `θ = θ*` 에서 폐루프가 `M` 과 정확히 일치한다면:
 
-$$\text{target: } b = u, \quad \text{regressors: } \phi_1 = e_v, \quad \phi_2 = \int e_v, \quad \phi_3 = \dot{e}_v$$
+$$y = M \cdot \tilde{r}(\theta^*) \implies J(\theta^*) = 0$$
 
-$$J = \| b - \rho_1 \phi_1 - \rho_2 \phi_2 - \rho_3 \phi_3 \|^2$$
-
-### 4.7 선형 회귀 풀기 — 직관
-
-`ρ₁, ρ₂, ρ₃`를 찾아서:
-
-$$b \approx \rho_1 \phi_1 + \rho_2 \phi_2 + \rho_3 \phi_3$$
-
-"`φ₁, φ₂, φ₃`를 어떤 비율로 섞으면 `b`에 가장 가까운가?"
-
-**행렬 형태:** 모든 샘플을 행렬로 쌓기:
-
-$$\underbrace{\begin{bmatrix} \phi_1(1) & \phi_2(1) & \phi_3(1) \\ \vdots & \vdots & \vdots \\ \phi_1(N) & \phi_2(N) & \phi_3(N) \end{bmatrix}}_{\Phi} \underbrace{\begin{bmatrix} \rho_1 \\ \rho_2 \\ \rho_3 \end{bmatrix}}_{\rho} \approx \underbrace{\begin{bmatrix} b(1) \\ \vdots \\ b(N) \end{bmatrix}}_{b}$$
-
-**OLS (최소자승법) 해:**
-
-$$\rho = (\Phi^T \Phi)^{-1} \Phi^T b$$
-
-`Φᵀb`는 "각 `φ`가 `b`와 얼마나 상관있는가". `(ΦᵀΦ)⁻¹`은 `φ`들 사이의 상관을 보정.
-
-### 4.7.1 QR 분해 — 실제 구현 방법
-
-OLS 공식 `ρ = (ΦᵀΦ)⁻¹Φᵀb`를 직접 계산하면, `ΦᵀΦ`의 역행렬을 구해야 합니다. 데이터가 나쁘면 (조건수가 크면) 이 역행렬이 부정확 → 결과가 틀림.
-
-**QR 분해**는 이 문제를 피하는 방법:
-
-행렬 `Φ`를 두 행렬의 곱으로 분해:
-
-$$\Phi = Q \cdot R$$
-
-- `Q` = **직교 행렬** (열벡터들이 서로 수직이고 길이가 1)
-- `R` = **상삼각 행렬** (대각선 아래가 전부 0)
-
-직교 행렬의 핵심 성질: `QᵀQ = I` (단위행렬). 즉 `Qᵀ`를 곱하면 바로 역행렬 효과.
-
-**풀이 과정:**
-
-원래 문제:
-
-$$\Phi \rho = b$$
-
-QR 대입:
-
-$$QR\rho = b$$
-
-양변에 `Qᵀ` 곱하기 (`QᵀQ = I`이므로):
-
-$$R\rho = Q^T b$$
-
-`R`이 상삼각이라 아래에서 위로 한 줄씩 풀면 끝 (**역대입**, back-substitution). 역행렬을 구할 필요가 없음.
-
-**왜 더 정확한가:** `ΦᵀΦ`를 만들면 조건수가 제곱됨 (`κ(ΦᵀΦ) = κ(Φ)²`). QR은 `Φ`를 직접 분해하니까 조건수가 그대로 유지. 예: `κ(Φ) = 1000`이면 OLS는 `κ = 10⁶`으로 악화되지만 QR은 `1000` 그대로.
-
-실제 코드: `A.QR().Solve(b)` (MathNet 라이브러리)
-
-### 4.8 컬럼 스케일링 — 왜 필요한가
-
-세 회귀변수의 크기가 매우 다름:
-- `φ₁ = e_v` : 보통 O(1)
-- `φ₂ = ∫e_v` : 시간에 따라 누적 → O(10) 이상
-- `φ₃ = ė_v` : 변화를 증폭 → O(50) (대략 `1/Δt`)
-
-문제: 한 열이 50배 크면 회귀가 그 열에 집중하고 나머지를 무시.
-
-**해결:** 각 열을 RMS로 정규화:
-
-$$s_j = \sqrt{\frac{1}{L}\sum_{i=1}^{L} \phi_j[i]^2}, \quad \tilde{\phi}_j = \phi_j / s_j$$
-
-정규화된 열에서 회귀 후 역스케일:
-
-$$\rho_1 = \tilde{\rho}_1 \cdot s_b / s_1, \quad \rho_2 = \tilde{\rho}_2 \cdot s_b / s_2, \quad \rho_3 = \tilde{\rho}_3 \cdot s_b / s_3$$
-
-(코드에서 `ρ₂`, `ρ₃`를 각각 `a_I`, `a_D`로 표기합니다.)
-
-### 4.9 SVD와 조건수 — 데이터 품질 체크
-
-**SVD (Singular Value Decomposition, 특이값 분해)란?**
-
-모든 행렬 `Φ`를 세 행렬의 곱으로 분해하는 것:
-
-$$\Phi = U \cdot S \cdot V^T$$
-
-- `U` : 왼쪽 직교 행렬 (데이터의 "출력 방향")
-- `S` : 대각 행렬 — 대각선에 **특이값** `σ₁ ≥ σ₂ ≥ σ₃` (각 방향의 "크기")
-- `V` : 오른쪽 직교 행렬 (데이터의 "입력 방향")
-
-**직관:** 데이터 점들이 3차원 공간에 타원체(럭비공 모양)로 분포해 있다고 상상. 특이값은 이 타원체의 **세 축 길이**:
-- `σ₁` = 가장 긴 축 (데이터가 가장 많이 펼쳐진 방향)
-- `σ₃` = 가장 짧은 축 (데이터가 가장 적게 펼쳐진 방향)
-
-만약 `σ₃ ≈ 0`이면 타원체가 납작해서 한 방향 정보가 없음 = 그 방향의 파라미터를 구분할 수 없음.
-
-**조건수:**
-
-$$\kappa = \sigma_{max} / \sigma_{min} = \sigma_1 / \sigma_3$$
-
-- `κ` 작음 (< 10³): 타원체가 동그란 편 → 모든 방향 정보 충분 → 좋은 회귀
-- `κ` 큼 (> 10⁶): 타원체가 극도로 납작 → P, I, D 기여를 구분 불가 → 신뢰 불가
-
-`κ`가 크면 **가진이 부족** — 충분히 다양한 주파수로 흔들지 않았다는 뜻. 단일 주파수에서는 적분항과 미분항이 같은 방향이 되어 타원체가 납작해짐 (§11.1에서 설명).
-
-**실제 코드:**
-```csharp
-var svdA = A.Svd();
-double sMax = svdA.S[0];           // σ₁ (최대)
-double sMin = svdA.S[svdA.S.Count - 1]; // σ₃ (최소)
-double condNum = sMax / sMin;      // κ
-```
+`N → ∞` 에서 `argmin J(θ) → θ*` (Campi-Savaresi 2006).
 
 ---
 
-## 5. 프리필터 F — 왜, 어떻게
+## 4. 참조 모델 M
 
-### 5.1 F 없이의 문제
+### 4.1 형태
 
-F 없이는 회귀가 모든 주파수에 동일 가중. 하지만 저주파는 드리프트, 고주파는 노이즈가 지배. PID는 **중간 주파수**에서 주로 동작.
+$$M(s) = \frac{e^{-s \tau_M}}{(1 + s \cdot 0.2 T_s)^{n_M}}$$
 
-### 5.2 최적 선택
+- `T_s` : 목표 정착시간 (Ts 자동 스캔 0.1~1.0초)
+- `n_M` : 모델 차수 (FTD 제어 대상 대부분 2차 → `n_M = 2` 고정)
+- `τ_M` : 지연 (FTD 순수 지연 ≈ 1틱 → `τ_M = dt` 고정)
 
-Campi et al. (2002)이 보인 최적 프리필터:
+### 4.2 이산화 — Tustin (bilinear)
 
-$$F(s) = M(s)(1 - M(s))W(s)$$
+`s = (2/dt)·(1-z⁻¹)/(1+z⁻¹)` 대입. 1차 LP 부분 `1/(1 + s · aM)` (단, `aM = 0.2 Ts`) 은:
 
-**왜 이 형태?**
+$$H_1(z) = \frac{1 + z^{-1}}{\beta_0 + \beta_1 z^{-1}}, \quad \beta_0 = 1 + \frac{2 a_M}{dt}, \quad \beta_1 = 1 - \frac{2 a_M}{dt}$$
 
-- `M(s)`: 저역통과 (DC 통과, 고주파 억제)
-- `(1-M(s))`: DC에서 0, 중간 주파수에서 피크 → **감도함수** (오차가 남는 정도). 제어기가 가장 효과적인 주파수를 강조
-- `W(s)`: 추가 저역통과 → 측정 노이즈 억제
+**재귀식:**
 
-**밴드패스 결과:** `F`는 DC에서 0, 중간에서 피크, 고주파에서 감소. 회귀가 PID가 가장 중요한 곳에 집중.
+$$y[k] = \frac{x[k] + x[k-1] - \beta_1 y[k-1]}{\beta_0}$$
 
-> **주의:** `F(0) = 0` 은 DC 정보를 제거하므로 **`T_i` 추정의 분산이 구조적으로 큼** — §8 참조. VRFT 의 Ti 가 불안정할 때 IMC 규칙 또는 PEM/BLA 결과 사용 권장.
+`n_M` 차는 이 1차 LP 를 **`n_M` 번 캐스케이드** (n=2 면 두 번 적용). 순수 지연은 `delayN = round(τ_M / dt)` 만큼 인덱스 shift.
 
-### 5.3 가중 필터 W
+### 4.3 0.2 는 어디서?
 
-$$W(s) = \frac{\omega_W}{s + \omega_W}, \quad \omega_W = 2\pi f_W, \quad f_W = f_s / 8$$
+`n_M = 2` 인 시스템의 4% 정착시간 (4·시정수) 이 `T_s` 가 되려면 시정수 = `T_s / 4 = 0.25 T_s`. 약간 보수적으로 `0.2 T_s` 사용 → 5% 정착시간 기준.
 
-1차 저역통과 필터. 컷오프 주파수 `f_W`에서 게인 -3dB (약 70%). `f_W` 위에서 10배 주파수당 -20dB 감쇠.
+### 4.4 Ts 자동 스캔
 
----
+작은 Ts 는 공격적인 제어기를 요구 → Kp 가 큼. 큰 Ts 는 보수적. "물리적으로 달성 가능한" Ts 영역에서는 파라미터가 안정.
 
-## 6. 참조 모델 M
-
-### 6.1 M이 뜻하는 것
-
-`M(s)`은 **폐루프가 어떻게 응답하길 원하는지** 기술. 스텝 입력 시:
-- 얼마나 빨리 목표에 도달? → `T_s` (정착시간)
-- 오버슈트? → 차수 `n_M`으로 조절
-- 반응 전 지연? → `τ` (순수 지연)
-
-### 6.2 수식
-
-$$M(s) = \frac{e^{-\tau s}}{(1 + 0.2 T_s \cdot s)^2}$$
-
-`M`에 지연이 없는데 실제 플랜트에 있으면, VRFT가 "즉시 반응하라"를 요구 → 물리적으로 불가능 → 비현실적 게인. `τ`를 넣으면 "`τ`초 대기 후 반응해도 됨"이라고 알려주는 것.
-
-### 6.3 0.2는 어디서?
-
-2차 시스템 `G(s) = 1/(1 + τ_m·s)²`의 스텝 응답이 최종값의 95%에 도달하는 시간:
-
-$$t_{95} \approx 5 \tau_m$$
-
-정착 시간 `T_s`이므로:
-
-$$T_s = 5\tau_m \implies \tau_m = T_s / 5 = 0.2 \cdot T_s$$
-
-`(1/(1+τ_m·s))²`의 스텝 응답은 `1 - (1 + t/τ_m)e^(-t/τ_m)`. 0.95로 놓고 풀면 `t ≈ 5τ_m`.
-
-### 6.4 왜 `n_M = 2`?
-
-FTD 기체는 **관성** (회전에 저항)과 **감쇠** (공기저항이 회전을 늦춤)를 가진 물리 객체 → 2차 시스템:
-
-$$P(s) \approx \frac{K}{s(\tau_p s + 1)}$$
-
-`τ_p`는 플랜트의 시정수 (§6.2의 순수 지연 `τ`와 다름).
-
-### 6.5 τ (순수 지연)이란?
-
-명령을 주고 **아무 반응도 없는** 시간. "느린 응답"이 아니라 `τ`초 동안 문자 그대로 무반응.
-
-예: 명령 후 추력 생산까지 0.1초 걸리는 추력기. 그 0.1초 동안 출력이 정확히 0.
+전략: 0.1 ~ 1.0초를 로그 간격 10단계로 스캔, 각 Ts 에서 LM 한 번 돌림, 인접 Ts 간 `max(|ΔKp/Kp|, |ΔTi/Ti|, |ΔTd/Td|) < 0.3` 인 가장 작은 Ts 선택.
 
 ---
 
-## 7. 계산 파이프라인
+## 5. 계산 파이프라인 (FRIT 시간 영역)
 
 ### 단계 1: 디트렌드
+DC + 선형 추세 제거 (전체 데이터 기준). 짧은 포화 샘플 영향은 미미.
 
-`u`, `y`에서 평균값(DC)과 선형 드리프트를 제거.
+### 단계 2: 참조 모델 계수 사전 계산
+`β₀, β₁, delayN, nM` 은 `θ` 와 무관 → LM 외부에서 한 번만 계산.
 
-FFT는 신호가 무한 반복한다고 가정. 0에서 시작해서 5로 끝나면 5→0 "점프"를 보고 가짜 고주파를 만듦 (**스펙트럴 리키지**).
-
-### 단계 2: 제로패딩 FFT
-
-길이 `N_FFT = 2^⌈log₂(2N)⌉`이 되도록 0을 추가.
-
-FFT 필터링은 **순환 합성곱**을 만듦 (신호가 감김). 0을 추가하면 **선형 합성곱**으로 변환 (감김 없음).
-
-2의 거듭제곱일 때 FFT가 가장 빠름.
-
-### 단계 3: 주파수 영역에서 M, W, F 적용
-
-*표기: 대문자 (`U, Y, R_v, E_v`) = 주파수 영역; 소문자 (`u, y, r_v, e_v`) = 시간 영역.*
-
-각 주파수 빈 `k`에 대해:
-
-1. `M(jω_k)`, `W(jω_k)`, `F(jω_k) = M(1-M)W` 계산
-2. 가상 레퍼런스: `R_v = Y / M`
-3. 가상 에러: `E_v = R_v - Y = (1/M - 1) · Y`
-4. 양측 필터링: `U_F = F · U`, `E_F = F · E_v`
-
-주파수 영역에서 곱셈 = 시간 영역 필터링이지만 훨씬 빠름. 또한 `M⁻¹`은 **미래를 봐야 함** (비인과적), 시간 영역에서 불가능하지만 주파수 영역에서는 복소수 곱셈 하나.
-
-### 단계 4: 역FFT → 시간 영역
-
-`U_F`와 `E_F`를 시간 신호로 변환. 처음 `N`개 샘플만 사용 (나머지는 제로패딩 부산물).
-
-### 단계 5: 회귀 벡터 구성
-
-필터링된 가상 에러 `e_F`로부터:
-
-**P항 (비례):**
-$$\phi_1[i] = e_F[i]$$
-
-**I항 (적분) — 사다리꼴 규칙:**
-$$\phi_2[i] = \phi_2[i-1] + \frac{e_F[i-1] + e_F[i]}{2} \Delta t$$
-
-*사다리꼴 규칙: 곡선 아래 면적을 사다리꼴로 근사. 직사각형보다 정확 (O(Δt²) vs O(Δt)).*
-
-**D항 (미분) — 중심 차분:**
-$$\phi_3[i] = \frac{e_F[i+1] - e_F[i-1]}{2\Delta t}$$
-
-*중심 차분: 양쪽 점으로 기울기 추정. 한쪽 차분보다 정확.*
-
-**목표:**
-$$b[i] = u_F[i]$$
-
-### 단계 6–9: 스케일, 검사, 풀기, 추출
-
-6. 열을 RMS로 **스케일** (§4.8 참조)
-7. 조건수 **검사** (§4.9 참조)
-8. QR로 $\tilde{b} \approx \tilde{\rho}_1 \tilde{\phi}_1 + \tilde{\rho}_2 \tilde{\phi}_2 + \tilde{\rho}_3 \tilde{\phi}_3$ **풀기**
-9. **추출:** `K_p = ρ₁`, `T_i = K_p / a_I`, `T_d = a_D / K_p`
-
----
-
-## 8. Ti 한계
-
-### VRFT가 Ti를 잘 못 구하는 이유
-
-$$F(0) = M(0) \cdot (1 - M(0)) \cdot W(0) = 1 \times 0 \times W(0) = 0$$
-
-프리필터 `F`가 **DC에서 정확히 0**. 정상상태(일정 오프셋) 정보가 회귀 시작 전에 완전히 제거.
-
-`T_i`는 정상상태 오차 보정을 제어하는 파라미터. DC 정보 없이 `a_I`는 사실상 노이즈를 피팅.
-
-**이것은 버그가 아니라 VRFT 설계에 내재된 것.** `M(0) = 1`은 "정상상태 오차 0"을 의미하며 좋은 것. 하지만 `1 - M(0) = 0`이 프리필터에서 DC를 제거. 둘 다 가질 수는 없음.
-
-### 대체: IMC 규칙
-
-VRFT의 `T_i`가 신뢰 불가일 때 (< 0.1 또는 > 100), **IMC (Internal Model Control)** 규칙을 사용:
-
-$$T_i = \tau_m \times n_M = 0.2 T_s \times 2 = 0.4 T_s$$
-
-**유도:** IMC에서 적분 시간 = 플랜트의 시정수. 참조모델 M의 시정수가 `τ_m = 0.2Ts`이고 2차(`nM=2`)이므로 등가 시정수는 `0.4Ts`. 출처가 명확한 이론 기반 규칙.
-
-릴레이 피드백의 `Ti = 2.2Tu`도 대안 — DC=0 문제 없이 진동 데이터에서 직접 산출.
-
----
-
-## 9. 폐루프 편향 — 왜 일부 방법이 제거되었나
-
-### 폐루프 편향 (Closed-Loop Bias)
-
-폐루프 데이터에서 `u` 와 측정 노이즈 `v` 가 상관됨 (제어기가 noise 에 반응 → u 에 noise 침투):
-
-$$\hat{G}_{LS} \to G - \frac{K \cdot \sigma_v^2}{(1+GK) \cdot \sigma_u^2} \neq G$$
-
-데이터 아무리 많아도 (N→∞) 이 편향은 사라지지 않음. **"정확히" 틀린 값에 수렴.**
-
-### 제거된 방법들
-
-| 방법 | 제거 이유 |
-|------|----------|
-| **N4SID** | 경사투영이 개루프 가정. 폐루프에서 편향 발생 → PEM/BLA 대비 이론적 열등. 코드에서 제거 (git: 50a3dd7). |
-| **OpenLoop Step ID** | PID 우회 = 기체 즉시 불안정. FTD 환경에서 1초 이상 수집 비현실적. 코드에서 제거. |
-
-### 남은 방법의 폐루프 무편향 원리
-
-| 방법 | 편향 제거 방식 |
-|------|---------------|
-| **PEM** | noise 모델 `K` 가 `v` 흡수 → 플랜트 `(A,B,C,D)` 만 깨끗 추출. 혁신 형식. |
-| **BLA** | 가진 `r` 을 도구변수로 사용 + Welch 평균 → `E[noise · r] = 0` 으로 상관 소거. |
-| **VRFT** | 플랜트 `G` 자체를 추정 안 함 → 편향 개념 미적용. 데이터 → PID 직접 회귀. |
-
-### 자동 선택 지표: 교차검증 RMSE
-
-세 방법 모두 실행 후, **교차검증 (cross-validation) RMSE** 로 정렬하여 가장 신뢰도 높은 결과를 Active (주력), 2순위를 Alternative (대안) 으로 표시. 사용자는 Swap 버튼으로 교체 가능.
-
-#### 왜 교차검증인가?
-
-이전 방식 (`PEM: innovRms/stdY`, `BLA: 1-γ²`) 은 시간/주파수 도메인의 서로 다른 메트릭이라 **직접 크기 비교가 통계적으로 부당**. 예: 강한 노이즈 축에서 PEM innovation 이 크게 나와도 BLA Welch 평균이 노이즈를 상쇄해 γ² 양호 → BLA 편향 선택. 실제론 PEM 이 더 정확할 수 있음.
-
-**해결:** 데이터를 80% 식별 / 20% 검증으로 분할. 각 방법의 모델로 검증 데이터에서 예측 오차를 계산:
-
-| 방법 | 교차검증 방식 | 단위 |
-|------|-------------|------|
-| **PEM** | 혁신 형식 one-step-ahead 예측 → RMSE(ŷ, y_val) / std(y_val) | 무차원 |
-| **BLA** | FRF × Goertzel(u_val) → 시간 도메인 재구성 → RMSE(ŷ, y_val) / std(y_val) | 무차원 |
-| **VRFT** | 고정 0.99 (모델 없어 교차검증 불가) | — |
-
-**동일 단위, 동일 데이터** → 공정 비교.
-
-선택 규칙:
-- 교차검증 RMSE < 0.5 인 후보만 참가
-- PSO cost ≥ 1e100 (발산) 이면 해당 후보 탈락
-- 교차검증 데이터 부족 시 (블록 < 250샘플) 기존 방식 폴백
-- 가장 낮은 점수 = Active
-
-예: PEM cv=0.10, BLA cv=0.18 → Active=PEM, Alt=BLA.
-
----
-
-## 10. PEM — 폐루프 무편향 최적 식별 (주방법)
-
-### 10.1 왜 PEM?
-
-§9의 N4SID는 경사투영이 **개루프** 가정에서 유도됨. 폐루프에선 `U_f` 가 과거 측정 노이즈와 상관 → 점근적으로도 편향.
-
-**PEM (Prediction Error Method, Ljung 1999)** 는 예측 오차(혁신)를 직접 최소화:
-
-$$\theta^* = \arg\min_\theta \; V(\theta) = \frac{1}{N} \sum_{k=1}^N e(k; \theta)^2$$
-
-- 폐루프에서도 **점근적 무편향** (consistency 보장)
-- Gaussian 혁신 가정 시 **Cramér-Rao bound 도달** (통계적으로 최적)
-- 단점: 비선형 최적화 → 좋은 초기값 필요, local minima 리스크
-
-해결: 서브스페이스 식별 (PBSID-opt) 로 먼저 초기화 후 GN 정련. 표준 산업 파이프라인 (MATLAB `n4sid` + `ssest`).
-
-### 10.2 혁신 형식 (Innovation form)
-
-데이터 생성 모델:
-
-$$x(k+1) = A x(k) + B u(k) + K e(k)$$
-$$y(k)   = C x(k) + D u(k) + e(k)$$
-
-- `e(k) ~ WN(0, σ²)`: 혁신 (innovation)
-- `K`: Kalman gain (노이즈가 상태를 통해 들어오는 경로)
-- `(A - KC)` 항상 안정 (Kalman 예측기 성질)
-
-**이점:**
-- 프로세스 노이즈 + 측정 노이즈를 **하나의** `e(k)` 로 통합
-- 예측기가 깔끔:
-
-$$\hat x(k+1|k) = (A - KC) \hat x(k|k-1) + (B - KD) u(k) + K y(k)$$
-
-$$\hat y(k|k-1) = C \hat x(k|k-1) + D u(k)$$
-
-$$e(k) = y(k) - \hat y(k|k-1)$$
-
-### 10.3 PBSID-opt 1단계: 고차 VAR 회귀
-
-예측기 방정식을 `p` 샘플만큼 재귀 전개:
-
-$$y(k) = D u(k) + \sum_{j=1}^p \xi_j \, u(k-j) + \sum_{j=1}^p \eta_j \, y(k-j) + e(k)$$
-
-계수는 *예측기 Markov 파라미터*:
-
-$$\xi_j = C \, A_K^{j-1} \, B_K, \qquad \eta_j = C \, A_K^{j-1} \, K$$
-
-(여기 `A_K = A - KC`, `B_K = B - KD`.)
-
-**폐루프 일관성 핵심:** 제어기가 1-tick 지연을 갖는 한 (FTD 물리 틱 기반 제어 → 항상 성립), 회귀자 `{u(k), u(k-1..p), y(k-1..p)}` 는 현재 혁신 `e(k)` 와 무상관. 따라서 OLS가 무편향.
-
-회귀자 벡터 `z(k) = [u(k); u(k-1); ...; u(k-p); y(k-1); ...; y(k-p)]` (차원 `2p+1`), LS:
-
-$$\hat\theta = (Z Z^T)^{-1} Z y \qquad \hat\theta = [D; \, \xi_1, ..., \xi_p; \, \eta_1, ..., \eta_p]$$
-
-### 10.4 PBSID-opt 2단계: Markov Hankel + SVD
-
-블록 `M_j = [\xi_j, \eta_j]` (1×2) 로부터 Hankel:
-
-$$H = \begin{bmatrix} M_1 & M_2 & \cdots & M_{p_p} \\ M_2 & M_3 & \cdots & M_{p_p+1} \\ \vdots & & & \vdots \\ M_{p_f} & M_{p_f+1} & \cdots & M_{p_f+p_p-1} \end{bmatrix} \in \mathbb{R}^{p_f \times 2p_p}$$
-
-구조적 분해:
-
-$$H = \Gamma_{p_f} \cdot \Delta_{p_p}$$
-
-- `Γ_{p_f} = [C; C A_K; ...; C A_K^{p_f-1}]`: `(A_K, C)` 확장 관측성
-- `Δ_{p_p} = [[B_K, K],\; [A_K B_K, A_K K],\; ...]`: `(A_K, [B_K\ K])` 확장 제어성
-
-**SVD + Gavish-Donoho** 로 차수 `n` 결정 (Gavish & Donoho 2014, §17 정리표 참조).
-
-### 10.4.1 차수 n ≤ 3 (조건부)
-
-이전: n=2 하드 캡. **개선:** n=3 까지 조건부 허용.
-
-**n=3 이 필요한 이유:** Hover 축은 실질 3차 시스템 (추력기 1차 응답 + 관성 적분 1/s + 감쇠). n=2 강제 시 feature 하나를 버림 → A 의 pole 이 복소 쌍이 되어 허위 공진 피크 가능.
-
-**n=4 가 위험한 이유:** DC 게인 = -13 또는 +9987 사례 확인. 파라미터 수 29 ← 500샘플 대비 과잉 → 노이즈 피팅.
-
-**조건부 허용 로직:**
-1. `orderCap=3` 으로 PBSID + PEM 실행
-2. Gavish-Donoho 가 n≥3 을 제안한 경우에만 n=3 실제 사용
-3. **Sanity check** (n=3 일 때):
-   - `|dcGain| ∈ [0.01, 100]` — 비현실적 DC 배제
-   - `max|eig(A)| < 0.99` — 불안정/경계 극점 배제
-4. Sanity check 실패 → n=2 폴백 (orderCap=2 로 재실행)
-
-$$\Gamma_{p_f} = U_n \cdot \Sigma_n^{1/2}, \qquad \Delta_{p_p} = \Sigma_n^{1/2} \cdot V_n^T$$
-
-### 10.5 PBSID-opt 3단계: `(A, B, C, D, K)` 추출
-
-- `C` = `Γ` 첫 행
-- `A_K`: shift trick — `Γ_{\text{lower}} = \Gamma_{\text{upper}} \cdot A_K` 의 LS
-- `[B_K, K]`: `Δ` 첫 두 열 (첫 Markov 블록)
-- **복원**: `A = A_K + K C`, `B = B_K + K D`
-
-### 10.6 PEM 정련: 혁신 비용 + 관측 정준형
-
-PBSID 초기값 `θ_0 = (A_0, B_0, C_0, D_0, K_0)` 에서 출발, `V(θ)` 최소화.
-
-#### 파라미터화: 관측 정준형 (n=2)
-
-n=2 일 때 관측성 행렬 `O = [C; CA]` (2×2) 가 비특이면, 변환 `T = O` 로 정준형 전환:
-
-$$A_{\text{can}} = T A T^{-1} = \begin{bmatrix} 0 & 1 \\ -a_2 & -a_1 \end{bmatrix}, \quad C_{\text{can}} = C T^{-1} = \begin{bmatrix} 1 & 0 \end{bmatrix}$$
-
-$$B_{\text{can}} = T B, \quad K_{\text{can}} = T K$$
-
-`C` 가 고정 `[1, 0]` 이라 θ 에서 제외:
-
-$$\theta = [a_1, a_2, b_1, b_2, d, k_1, k_2] \quad (7 \text{개, 기존 } n^2+3n+1=11 \text{에서 36% 감소})$$
-
-**이점:**
-- `J^T J` 가 full rank (중복 방향 제거) → LM 수렴 빠름, local minima 감소
-- FD Jacobian 비용 36% 감소 (7회 vs 11회 per-param 시뮬)
-- 최소 파라미터화 → 유일해 (similarity 변환 모호성 제거)
-
-**폴백:** `cond(O) > 10³` 또는 `n ≠ 2` → 완전 파라미터화 `vec(A), vec(B), vec(C), D, vec(K)` 사용. LM `λ·diag(J^TJ)` 정규화가 중복 흡수. (이전 기준 `det(O) < 10⁻⁸` 은 2×2에서 cond~10⁴ 허용 → 수치 오염. SVD 기반 조건수가 더 안전.)
-
-### 10.7 Levenberg-Marquardt + FD Jacobian
-
-**잔차** `e(k; θ) = y(k) - \hat y(k|k-1; θ)` 를 예측기 시뮬로 얻음.
-
-**야코비안 `J[k, i] = ∂e(k)/∂θ_i`**: 파라미터별 상대 스케일 유한차분
-
-$$J[k, i] \approx \frac{e(k; \theta + h_i e_i) - e(k; \theta - h_i e_i)}{2h_i}, \quad h_i = 10^{-5} \cdot \max(|\theta_i|, 10^{-3})$$
-
-파라미터별 `h_i` 로 vec(A) (~O(1)) 와 D (~O(0.01)) 스케일 차이 보정.
-
-**LM 업데이트**:
-
-$$(J^T J + \lambda \cdot \text{diag}(J^T J)) \Delta\theta = -J^T e$$
-
-- `λ` 는 iter 간 **지속** (표준 Marquardt adaptation):
-  - 성공 시 `λ /= 10` (GN 방향 신뢰 ↑)
-  - 실패 시 `λ *= 10` (경사하강 방향 ↑)
-- 클램프 `[10⁻¹⁰, 10¹⁰]`
-- 최대 15회 iter, 수렴 판정 `|ΔV| < 10⁻⁶ · V`
-
-**왜 LM?** Gauss-Newton 은 이차수렴하나 `J^T J` 가 특이/병태일 때 발산. LM의 `λ·diag` 정규화는 경사하강법에 점근하여 안정. 정준형 사용 시 `J^TJ` full rank → λ 빠르게 감소 → GN 수렴 속도 회복.
-
-**왜 FD?** 해석적 sensitivity 방정식은 파라미터 유형별로 따로 유도 필요. FD 는 `O(n_{\text{params}} · N)` 추가 시뮬만 비용 — 정준형 7 파라미터, N~500 → 한 iter 당 ~5ms.
-
-### 10.8 안정성 제약
-
-PEM 수렴 과정에서 `A_K = A - KC` 가 불안정해질 수 있음 → 예측기 발산 → cost 무의미.
-
-매 LM trial 후:
-
-$$\text{Reject if } \; \exists \lambda \in \sigma(A_K): \;|\lambda| \geq 1 - 10^{-8}$$
-
-불안정 시 해당 step 거부, `λ *= 10` 으로 damping 증가. **이것은 *원 시스템* `A` 가 안정이어야 한다는 뜻이 아님** — 플랜트 자체가 적분 모드를 가져도 `A_K` 는 Kalman 성질에 의해 안정해야. 이 제약이 물리적 식별을 보장.
-
-### 10.9 왜 K는 PSO 시뮬에 안 쓰이나
-
-PSO는 **결정론적 스텝 응답** 을 추적 (→ `y_ref(k) = 2차 ref model`). `K` 는 순전히 노이즈 모델의 일부:
-
-$$\underbrace{x(k+1) = A x(k) + B u(k)}_{\text{결정론적 (PSO 시뮬)}} + \underbrace{K e(k)}_{\text{노이즈 (PSO에 무관)}}$$
-
-노이즈 부분을 빼면 `(A, B, C, D)` 만 남고, 이것이 진짜 플랜트 동특성. K는 *식별 단계* 에서 편향 제거에 기여했지만, *제어 설계 단계* 에선 역할 끝.
-
-### 10.10 계산 복잡도 + 로버스트성
-
-| 항목 | 스케일 | 우리 케이스 (n=3, N=500, p=30) |
-|------|--------|-------------------------------|
-| VAR 회귀 | `O(N·p²)` | ~450k ops |
-| Markov Hankel SVD | `O(p³)` | ~27k ops |
-| PEM 1회 iter | `O(N·n_{\text{params}}²)` | ~1.2M ops |
-| PEM 15회 수렴 | `O(15·N·n_{\text{params}}²)` | ~18M ops (~50ms) |
-
-**실패 모드:**
-
-| 단계 | 실패 원인 | 처리 |
-|------|----------|------|
-| VAR LS `ZZ^T` | 가진 부족 → 특이 | 예외 → N4SID fallback |
-| Hankel SVD | 모든 σ ≈ 0 | order = 1 기본값 |
-| `A_K` shift LS | `Γ_u^T Γ_u` 특이 | 예외 → fallback |
-| PEM 발산 | 불안정 궤적 | 모든 trial 실패 → 초기값 유지 |
-| PSO NaN | 식별 모델 잘못 | `cost = MaxValue` |
-
-### 10.11 DC 게인 보정 (음수 플립 + 스텝 스케일링)
-
-PSO 시뮬 전 두 가지 보정 적용 (PEM, N4SID 폴백 공통):
-
-**음수 DC 게인 플립**: 식별된 `dcGain < 0` 이면 `B, D` 부호 반전 → 양수 DC 확보. FTD 의 축별 부호 규약 (예: Roll 의 `-현재각도`) 이나 추정 오차로 DC 음수 가능. 양의 `Kp` + 음의 `G` = 양의 피드백 → 전 particle 발산. 반전으로 해소.
-
-**스텝 스케일링 (refScale)**: `dcGain` 이 매우 크거나 작으면 단위 스텝 (y→1.0) 이 비현실적:
-- `dcGain = 0.1` → `u=1` 로 달성 가능 `y_max = 0.1`. 목표 1.0 도달 불가 → 모든 PID 의 ITAE 거대.
-- `dcGain = 10` → 미세 `u` 필요. 포화 불가피.
-
-$$\text{refScale} = \min(1,\; |dcGain| \times 0.8)$$
-
-`yTarget`, 스텝 입력 `r`, 오버슈트 임계 모두 `refScale` 로 스케일. 모델의 달성 가능 범위 안에서 ITAE 비용 계산.
-
-**저DC 경고:** `dcGain < 0.3` 이면 UI 에 경고 표시. refScale 이 PSO 수렴을 보장하지만, 결과 Kp 가 실제 스텝 (r=1.0) 에 부족할 수 있음 — 액추에이터 권한 제한 의미.
-
----
-
-## 11. BLA — 주파수 도메인 식별 (보완)
-
-### 11.1 왜 BLA?
-
-PEM 이 시간 도메인에서 파라미터 모델 `(A,B,C,D)` 를 피팅한다면, BLA (Best Linear Approximation) 는 주파수 도메인에서 **비파라미터** FRF 를 직접 측정. 서로 다른 관점 → 서로 다른 강/약점.
-
-| PEM | BLA |
-|-----|-----|
-| 파라미터 모델 (차수 선택 필요) | 비파라미터 (12개 주파수 점) |
-| 과적합 가능 | 과적합 불가 |
-| 시뮬 가능 (스텝 응답) | 시뮬 불가 (주파수 매칭만) |
-| DC 이론상 추출 가능 (단 가진에 DC 없으면 외삽 → 큰 분산) | DC 빈 없음 (최저 0.05Hz) |
-
-**참고:** PEM 의 `dcGain = C(I-A)⁻¹B + D` 는 가진에 DC 성분이 없으면 Fisher information matrix 의 DC 방향 특이값이 작아 큰 분산을 가짐. 이를 완화하기 위해 **step prelude** (§13.2.1) 도입.
-
-### 11.2 BLA 정의
-
-비선형 시스템의 **최선의 선형 근사** (Pintelon-Schoukens 2012):
-
-$$G_{BLA}(j\omega) = \frac{S_{yu}(\omega)}{S_{uu}(\omega)} = \arg\min_G \; \mathbb{E}[\|y - g*u\|^2]$$
-
-입력 분포 (진폭, 주파수) 에 종속 — "이 가진 영역에서의" 선형 모델.
-
-### 11.3 Welch-IV 추정
-
-Hann 윈도우, 50% 오버랩, M=3~4 세그먼트:
-
-$$\hat{G}(f_k) = \frac{\sum_m Y_m(f_k) \cdot R_m^*(f_k)}{\sum_m U_m(f_k) \cdot R_m^*(f_k)}$$
-
-- `r` 을 도구변수로 사용 → 폐루프 노이즈 편향 제거 (r ⊥ noise)
-- Welch 평균으로 분산 감소
-- Goertzel 알고리즘으로 12개 멀티사인 빈에서만 계산 — O(N) per bin
-
-### 11.4 Coherence γ²
-
-$$\gamma^2(f_k) = \frac{|\sum Y_m R_m^*|^2}{\sum |Y_m|^2 \cdot \sum |R_m|^2} \in [0, 1]$$
-
-- 1 = y 가 r 에 완전 선형 종속 (깨끗한 FRF)
-- 0 = 무상관 (노이즈/비선형 지배)
-- PSO 비용에 가중 → 신뢰 빈 집중
-
-구현에서 γ² < 0.3 인 빈은 PSO 비용에서 제외됨 (`COH_MIN = 0.3`). 이 임계값 이하에서는 FRF 추정의 노이즈가 신호보다 커 신뢰 불가.
-
-### 11.5 주파수 도메인 PID 탐색
-
-참조 모델 `M(jω) = 1/(1+τ_M jω)² · e^{-jωτ}` 에 폐루프 매칭:
-
-$$\min_{K_p, T_i, T_d} \sum_k \gamma^2_k \cdot \left| \frac{G(f_k) K(f_k)}{1 + G(f_k) K(f_k)} - M(f_k) \right|^2$$
-
-PID 주파수 응답: `K(jω) = K_p(1 + 1/(jωT_i) + jωT_d)`.
-
-### 11.6 BLA 의 진폭 종속성
-
-같은 시스템이라도 **가진 진폭** 에 따라 BLA 다름 — 비선형성이 있으면 서로 다른 동작 영역에서 다른 선형 근사. 포화가 가장 큰 영향. 포화 없으면 매끄러운 비선형의 차이는 10~30% 수준으로 실용적으로 수용 가능.
-
----
-
-## 12. 자동 파라미터 추정
-
-### 12.1 지연 τ — dt 고정
-
-FTD에서 순수 지연(명령 → 첫 반응)은 게임 물리 틱 1개 = `dt` ≈ 0.02초.
-
-$$\tau = dt \approx 0.02\mathrm{s}$$
-
-폐루프 데이터에서 위상 기울기로 추정하면 PID의 위상 기여가 포함되어 **항상 과대추정**됨. 모델 프리 방법으로는 폐루프에서 순수 플랜트 지연만 분리 불가. `dt` 고정이 FTD 환경에서 가장 정확.
-
-### 12.2 정착 시간 `T_s` — 파라미터 안정성
-
-`T_s`를 0.1~1.0 스캔 (로그 스케일, 40단계). 각 지점에서 PID 산출. 인접 결과가 30% 이상 변하지 않는 최소 `T_s` 찾기:
-
-$$\max\left(\frac{|\Delta K_p|}{|K_p|}, \frac{|\Delta T_i|}{|T_i|}, \frac{|\Delta T_d|}{|T_d|}\right) < 0.3$$
-
-경계 근처에서 `T_s`를 살짝 바꿔도 파라미터가 크게 변동 → 수치적으로 신뢰 불가. 첫 안정점이 데이터가 지원하는 가장 빠른 응답.
-
-30% PID 파라미터 변화는 대부분의 시스템에서 실제 제어 성능 차이가 거의 체감 불가. 이 이하면 `T_s`가 약간 변해도 "실질적으로 같은" 해. 경험적이지만 보수적 — 더 엄격한 임계값(예: 10%)은 더 큰 `T_s`(느린 응답)를 선택.
-
----
-
-## 13. 가진 — 멀티사인
-
-### 13.1 왜 가진이 필요한가
-
-회귀 행렬 `Φ`의 세 열이 **선형 독립**이어야 함 — 서로 다른 정보를 담고 있어야.
-
-단일 주파수에서는 `∫e_v`와 `ė_v`가 **같은 형태** (스케일만 다름) → 행렬이 거의 특이(singular) → P, I, D 분리 불가.
-
-다양한 주파수는 적분·미분 응답을 다르게 만듦 → 선형 독립 → 신뢰할 수 있는 회귀.
-
-### 13.2 멀티사인 수식
-
-$$x(t) = \sum_{k=0}^{11} \frac{A}{\sqrt{12}} \sin(2\pi f_k t + \phi_k)$$
-
-**12개 주파수, 로그 간격:**
-
-$$f_k = f_{\text{base}} \times (f_{\text{max}}/f_{\text{base}})^{k/11} \quad \mathrm{Hz}$$
-
-**기본값:** `f_base = 0.05 Hz`, `f_max = 2.0 Hz`. UI 슬라이더로 축별 조정 가능:
-
-| 축 특성 | 권장 설정 | 이유 |
-|---------|-----------|------|
-| 빠른 축 (Roll) | base=0.1, max=3.0 | 고주파 응답이 주 정보원 |
-| 느린 축 (Yaw) | base=0.02, max=0.5 | 저주파에 빈 집중 필요 |
-| 일반 (Pitch, Hover) | base=0.05, max=2.0 (기본) | 균형 |
-
-PID는 주로 저주파에서 동작. 로그 간격이 저주파에 더 많은 성분을 배치. 축별 `f_base/f_max` 조정으로 BLA 12빈이 해당 축 대역폭에 집중됨.
-
-**fBase 하한 자동 조정:** 계산 시점에 `fBase ≥ 2 / T_block` 으로 강제. 블록 10초 → fBase ≥ 0.2Hz (최소 2주기 보장). 0.05Hz (주기 20초) 로 10초 녹화하면 BLA coherence 저하.
-
-### 13.2.1 Step Prelude — DC 정보 주입
-
-멀티사인은 DC (0Hz) 성분이 없음 → PEM, BLA 모두 DC 게인 추정이 외삽. 이를 완화하기 위해 **가진 최초 0.5초를 일정 SP offset** (step) 으로 유지:
-
+### 단계 3: per-sample 가중치
 ```
-t=0 ~ 0.5s: x(t) = amp (일정 양의 offset)
-t=0.5s ~  : x(t) = 멀티사인 (기존)
+w[k] = ε (≈ 1e-3)  if sat[k]
+       1.0         otherwise
+sqrtW[k] = √w[k]
 ```
 
-짧은 step 은 DC 방향 Fisher information 을 보강 → `C(I-A)⁻¹B + D` 추정 분산 감소. PEM, BLA, VRFT 모두 이 구간의 데이터를 활용.
+### 단계 4: LM 모델 함수 (`θ → √w · ŷ`)
 
-### 13.3 슈뢰더 위상 — 피크 진폭 감소
+매 LM 평가마다:
 
-$$\phi_k = -\frac{\pi k(k+1)}{12}$$
+```
+1. PID 계수 (a₀, a₁, a₂) ← (Kp, Ti, Td)
+2. 1/C(z) 안정성 체크 (단위원 내부 zero?)
+     불안정: soft barrier (큰 residual 반환)
+3. e[k] = (u[k] - u[k-1] - Kp·a₁·e[k-1] - Kp·a₂·e[k-2]) / (Kp·a₀)   (역필터)
+4. r̃[k] = y[k] + e[k]                                                (가상 ref)
+5. r̃_d[k] = r̃[k - delayN]                                           (순수 지연)
+6. ŷ ← H₁ 캐스케이드 nM 번 적용 to r̃_d                              (참조 모델)
+7. NaN/Inf 검사 → 발견 시 soft barrier
+8. return √w · ŷ
+```
 
-12개 사인파를 더하면 가끔 동시에 피크가 올 수 있음 → 큰 스파이크 → 포화.
+### 단계 5: LM 최적화
+- 초기값: 현재 PID `(kP, kI, kD)` (sanity check 후 사용)
+- MathNet `LevenbergMarquardtMinimizer`, `maxIter = 30`
+- FD Jacobian (3 파라미터 × 1 = 3 추가 평가 / iter)
 
-이 특정 위상 배치가 피크/RMS 비(**크레스트 팩터**)를 최소화함을 증명 (Schroeder, 1970). 랜덤 위상 대비 **피크 ~40% 감소**.
+### 단계 6: RMSE 계산
+포화 인덱스 제외, unweighted 잔차:
 
-직관: 다른 성분들이 다른 시간에 피크가 오도록 위상을 배치 → 에너지가 시간에 걸쳐 균등 분산.
+$$\mathrm{RMSE} = \sqrt{\frac{1}{N_\mathrm{valid}} \sum_{k:\,\neg\mathrm{sat}[k]} (y_k - \hat{y}_k)^2}$$
 
-### 13.4 왜 Chirp이 아닌가?
+### 단계 7: 경계 클램프
+- `Kp ∈ [0, 1]`
+- `Ti ∈ [0.1, 250]`
+- `Td ∈ [0, 10]`
+- NaN/Inf 처리
 
-Chirp는 주파수를 순차적으로 스윕. 고주파에서 D항이 급변을 증폭 → 포화. 멀티사인은 모든 주파수를 동시에 → 특정 주파수에서 축적 없음.
-
----
-
-## 14. 포화 처리
-
-### 14.1 포화가 모든 걸 망치는 이유
-
-`|u| = 1`일 때 PID는 더 내보내고 싶었지만 (예: `u = 3`) 구동기가 한계. 기록된 `u = 1`이 의도를 반영 못 함 → "작은 입력, 큰 응답" → 플랜트 게인 과대추정 → `K_p` 과소추정.
-
-### 14.2 포화 해소 (수집 전)
-
-1. 1초간 포화율 측정
-2. 10% 이상이면: `K_p` 반감, 적분 상태 리셋, 재측정
-3. 10% 미만이 될 때까지 반복. `K_p` < 0.001이면 최선의 데이터로 녹화 진행
-
-적분은 시간에 따라 오차를 누적 (와인드업). `K_p`를 줄여도 누적된 적분이 `u`를 포화로 계속 밀 수 있음. 리셋으로 해소.
-
-### 14.3 수집 중
-
-- 연속 포화 ≥ 10 틱 → 블록 분할
-- ≥ 3 분할 → 중지, `K_p` 반감 + 적분 리셋, 재시작
-
-### 14.4 실시간 회피
-
-$$\mathrm{amp\_scale} = \mathrm{clamp}\left(\frac{0.98 - |u|}{0.3},\ 0.1,\ 1.0\right)$$
-
-`|u|`가 0.98에 접근하면 가진 진폭을 부드럽게 감소. 급격한 차단이 아닌 부드러운 감소.
-
-### 14.5 양방향 적응형 진폭
-
-기존: 신호 약할 때 진폭 올리기만. 개선: **올리기 + 내리기** 양방향 + **chatter 방지**.
-
-매 60샘플 (~1.2초) 마다 판단:
-
-| 조건 | 조치 | 이유 |
-|------|------|------|
-| `yStd/amp < 0.15` AND `uStd < 0.1` | amp × 2 ↑ | 정보 부족 (y, u 둘 다 약) |
-| `uStd > 0.7` | amp × 0.5 ↓ | u 포화 근접 → 데이터 오염 방지 |
-| `yStd/amp > 1.5` | amp × 0.5 ↓ | 플랜트 과응답 → 비선형 영역 진입 방지 |
-| 그 외 | 유지 | 적정 |
-
-진폭 하한: 0.05 (완전 무가진 방지). 진폭 변경 시 블록 분리 (다른 진폭 데이터 격리).
-
-#### Chatter 방지
-
-경계값 근처에서 ×2/×0.5 반복 (chatter) 하면 블록이 전부 짧아져 PBSID VAR 회귀 품질 저하. 대책:
-
-- **쿨다운 3초**: 진폭 변경 후 최소 3초 경과해야 다음 변경 가능
-- **Dead zone**: `uStd ∈ (0.65, 0.70)` 범위에서는 내림 조건 미적용 (hysteresis 효과)
-
-`uStd` 체크의 핵심: 강한 PID 또는 고주파 D 항이 u 를 증폭시키는 경우, `yStd/amp` 는 작지만 `u` 는 활발 → 기존 "올리기만" 로직이 불필요하게 부스트. `uStd` 조건이 이를 방지.
+### 단계 8: 게임 PID 에 적용
+`RoundToStep` 으로 game UI 호환 단위 (Kp 0.001, Ti/Td 0.1) 로 양자화 후 `_focus.Pid.kP/kI/kD` 에 기록.
 
 ---
 
-## 15. FTD 특이사항
+## 6. 1/C(z) 안정성 — soft barrier
+
+PID 의 분자 quadratic `a₀ z² + a₁ z + a₂` 의 zero 가 **단위원 외부** 면 역필터 `1/C(z)` 가 발산. LM 이 탐색 도중 이런 `θ` 를 던질 수 있음.
+
+**판별:**
+```
+disc = a₁² - 4 a₀ a₂
+disc ≥ 0: 실근
+  z₁,₂ = (-a₁ ± √disc) / (2 a₀)
+  stable ⇔ |z₁| < 1 AND |z₂| < 1
+disc < 0:  복소 conjugate 한 쌍
+  |z|² = a₂ / a₀
+  stable ⇔ a₂/a₀ < 1
+```
+
+**처리:** 모든 LM 모델 평가 시작에서 체크. 불안정이면 `result = 1e6 · √w` 반환 → 큰 cost 로 LM 이 후퇴.
+
+실전 PID 값 (`dt=0.02`, `Kp~0.05`, `Ti~5`, `Td~0.05`) 에서 zero 가 0.71, 0.99 정도 → 모두 내부 안전. Td 가 매우 크거나 Ti 가 매우 작을 때만 경계 근접.
+
+---
+
+## 7. 가진 (Excitation)
+
+### 7.1 왜 필요한가
+PID 가 안정적으로 잘 작동하면 `u/y` 가 거의 일정 → 플랜트 정보 없음. 외부 가진으로 SP 를 흔들어 정보를 만듭니다.
+
+### 7.2 멀티사인 (기본)
+12 성분, 로그 간격 (`fBase` ~ `fMax`), 슈뢰더 위상.
+
+$$x(t) = \sum_{i=0}^{11} \frac{A}{\sqrt{12}} \sin(2\pi f_i t + \phi_i), \quad \phi_i = -\frac{\pi i (i+1)}{12}$$
+
+슈뢰더 위상 → 피크 팩터 ≈ √2 (균일 사인). 같은 RMS 진폭으로 가장 큰 SNR 확보.
+
+### 7.3 Step Prelude (DC 정보 주입)
+멀티사인은 DC 성분 없음 → FRIT 의 DC 동작 매칭이 외삽 영역. 첫 0.5초 일정 SP offset (= amp) → DC 보강.
+
+### 7.4 적응형 진폭
+- `yStd/amp < 0.15` AND `uStd < 0.1` → 진폭 2배 증가 (정보 부족)
+- `uStd > 0.7` → 진폭 절반 (포화 근접)
+- `yStd/amp > 1.5` → 진폭 절반 (과응답)
+- 변경 후 3초 쿨다운 (chatter 방지)
+
+---
+
+## 8. 포화 처리 — 다층 방어
+
+`|u| ≥ 0.98` 이면 비선형 영역 → FRIT 의 선형 LTI 가정 위반. 5층으로 대응:
+
+### 8.1 실시간 가진 회피 (`ApplyExcitation`)
+가진 적용 시 `|u|` 가 0.98 근처면 가진 진폭을 자동 축소 (스케일 0.1 ~ 1.0). 포화를 사전 차단.
+
+### 8.2 양방향 적응형 진폭
+위 §7.4 — `uStd > 0.7` 이면 진폭 절반.
+
+### 8.3 짧은 포화: 가중치로 처리 (NEW)
+`ConsecutiveSaturated < 10` (≈0.2초) 인 짧은 blip 은 데이터에 저장 + `Saturated[k] = true` 플래그. FRIT 비용에서 `w[k] = 1e-3` 으로 down-weight → 식별에 거의 영향 없음.
+
+이 방식의 장점:
+- 데이터 시간적 연속성 보존 (블록 분리 불필요)
+- 비포화 인접 샘플은 정상 가중치로 활용
+- 시간 영역 FRIT 라 spectral contamination 없음
+
+### 8.4 긴 포화: 블록 분리 + 드롭
+`ConsecutiveSaturated ≥ 10` 이면 그 틱 데이터를 저장 자체에서 드롭, `BlockStarts` 에 분기점 추가. **LTI 가정이 깊게 깨진 구간은 가중치만으로 부족** 하므로 보수적으로 데이터에서 완전 배제.
+
+### 8.5 최장 블록 선택 + fail-fast
+`PickLongestBlock` 으로 y 변동 충분한 가장 긴 블록만 식별에 사용. 전체 `satRatio > 50%` 면 자동 튜닝 실패 (가진 진폭이 과함).
+
+---
+
+## 9. FTD 특이사항
 
 ### 축별 SP/PV 구조
-
-| 축 | SP | PV | VRFT 가능? |
-|------|----|----|----------|
-| Pitch | 목표 각도 | 현재 각도 | ✅ |
-| Roll | 목표 각도 | -현재 각도 | ✅ (부호 반전) |
-| Yaw | 보통 0 | 각도 오차 | ✅ (오차 = -실제) |
-| Hover | 목표 고도 | 현재 고도 | ✅ |
-| Forward | 0 | 거리/속도 | ✅ |
-| Strafe | 0 | 횡방향 오프셋 | ✅ |
-
-VRFT는 `u`와 `y`만 사용 — SP 구조는 무관.
-
-### 튜닝 순서
-
-Roll → Pitch → Yaw → Hover/Forward/Strafe. 빠른 축 먼저, 내부 축이 안정되면 커플링 감소.
-
-### 환경
-
-저고도에서 튜닝 (짙은 대기). 공기저항 증가 = 감쇠 증가 = 안정성 여유 증가. 짙은 공기에서 튜닝된 PID는 희박한 공기에서도 작동하지만, 반대는 불가.
+- `SetPointAdjust` : 외부에서 SP 에 offset 주입 (가진용)
+- `FakeSetPoint` + `FakeSetPointInUse` : AI 의 SP 를 외부 값으로 강제 (축 고정용)
 
 ### 축 분리 (Axis Fixture)
+튜닝 중 다른 축은 `FakeSetPoint = 현재 PV` 로 고정 → 기존 PID 가 자세/고도 유지. 튜닝이 끝나면 복원.
 
-튜닝 중 다른 축의 SP 를 **현재 값으로 freeze** → 기존 PID 가 자세/고도 유지 → SISO 가정 강화.
+### 피치 고도 유지
+비행기형 기체는 피치로 고도 제어 → 피치 SP 고정하면 고도 드리프트. Hover 축의 PV 로 고도 오차를 측정, 피치 SP 에 실시간 offset 주입.
 
-- 리플렉션으로 형제 축 자동 발견 (1회, `DiscoverSiblingAxes`)
-- Recording 중 매 틱 재적용 (`ApplyOtherAxesFixture`)
-- **피치 고도 유지**: Hover 축 PV 로 고도 읽기 → Pitch SP 에 `K_alt · (h₀ - h)` offset 주입. 대역폭 ~0.01Hz (가진 0.05~2Hz 와 2 decade 분리).
-- 축 타입 태그: 사용자가 Pitch/Hover 표시 (UI cycle 버튼) → 고도 유지 활성 조건.
+### 튜닝 순서
+권장: Roll → Pitch → Yaw (속도 → 자세 → 항법) → Hover/Forward (있다면 마지막).
 
-### 교차 검증 (Validate)
+각 PID UI 를 한 번씩 열어 축 타입 (Yaw/Roll/Pitch/Hover/Forward/Strafe) 을 지정해야 자동발견 + 고도 보정이 작동.
 
-전 축 튜닝 완료 후 **Validate** 버튼:
-
-1. 축별 검증 시간 동안 전 축 `y` 수집 (가진 없음, 자연 변동만)
-   - **빠른 축** (Pitch, Roll, Unspecified): 5초
-   - **느린 축** (Yaw, Hover, Forward, Strafe): 15초
-   - Yaw 0.05Hz = 주기 20초. 5초로는 1/4 주기 → drift/oscillation 구분 불가 → 연장 필요.
-2. 축별 `std(y)` 계산
-3. **이중 기준** 검사:
-   - **상대 기준**: 중간값 대비 2배 초과 → **"HIGH"**
-   - **절대 기준**: `std(y) > 0.3` → **"HIGH-ABS"** (전 축이 나쁠 때 상대 기준이 못 잡는 시나리오 대응)
-4. 결과: `"Pitch: 0.05, Yaw: 0.12, Roll: 0.45 HIGH-ABS"`
-
-순차 튜닝 후 한 축 PID 변경이 다른 축 안정성에 미치는 영향 감지. 경고 축은 재튜닝 권장.
+### 환경
+- `dt = Time.fixedDeltaTime ≈ 0.02s` (50Hz)
+- Nyquist = 25Hz
+- 멀티사인 대역 ~0.05Hz (저주파) ~ `min(fs/4, ChirpEndHz)`
 
 ---
 
-## 16. 알려진 한계
+## 10. 알려진 한계
 
-| 한계 | 원인 | 완화 |
-|-----------|-------|------------|
-| **PEM local minima** | 비볼록 비용 `V(θ)` | PBSID-opt 초기화, LM 정규화, 멀티시드 PSO |
-| PEM 불안정 수렴 | `A_K` 고유값 ≥ 1 | step halving + 안정성 제약 거부 |
-| PEM 차수 n≤3 | Hover 3차 가능, n=4+ 과적합 | 조건부 n=3 허용 + sanity check |
-| **BLA DC 빈 없음** | 최저 주파수 ~ fBase | Step prelude (0.5s) 로 DC 보강 |
-| **BLA 진폭 종속** | 비선형 → 다른 진폭에서 다른 BLA | 포화 방지가 핵심, 의도 운전 영역 가진 |
-| VRFT `T_i` 분산 큼 | `F(0) = 0` (DC 감쇠) | IMC 대체 또는 PEM/BLA 사용 |
-| 음수 DC 게인 | 축 부호 규약 / 식별 오차 | B, D 부호 반전 + refScale (구현됨) |
-| PSO 스텝 포화 | 저게인 플랜트에서 목표 도달 불가 | refScale = min(1, |dcGain|·0.8) (구현됨) |
-| 가진 부족 → LS 특이 | PE 조건 미충족 | 멀티사인 + 적응형 진폭 (u+y 이중 체크) |
-| 기동 시 보수적 `K_p` | 선형 가정 위반 | 안정 비행 중 튜닝 + 축 분리 모드 |
-| 교차축 커플링 | SISO 모델 | 축 분리 (SP freeze) + 순차 튜닝 |
-| PSO 수렴 변동 | 확률적 탐색 | 시드 고정 × 3 앙상블 |
+1. **초기 컨트롤러 안정성 가정.** FRIT 는 폐루프 데이터를 전제. 초기 PID 가 발산 직전이면 데이터 자체가 비선형 transient 라 결과 신뢰도 ↓.
+
+2. **DC 정보 부족 시 Ti 부정확.** 멀티사인에 DC 가 없으므로 step prelude 가 있어도 적분 모드 가진은 약함. Ti 가 250 (=off) 에 가까이 수렴하면 수동 조정 필요.
+
+3. **비선형성.** 큰 진폭에서는 LTI 근사가 깨짐. 적응형 진폭이 자동 축소하지만, 본질적으로 비선형이 강한 경우 (예: 고기동 영역) 는 한계.
+
+4. **LM local minima.** 비선형 최적화의 본질적 한계. 초기 시드 (현재 PID) 가 멀리 떨어져 있으면 다른 minimum 에 수렴 가능. Ts 스캔이 부분적인 안전망.
+
+5. **1/C(z) 안정성 제약.** 매우 큰 Td 나 매우 작은 Ti 에서 역필터 zero 가 단위원 밖으로 → soft barrier 가 작동해서 LM 이 그 영역을 못 들어감. 가끔 합리적이지만 "이상한" PID 값 (예: 매우 빠른 inner loop) 이 그 경계 근처면 도달 못 함.
+
+6. **계산 비용.** Ts 10단계 × LM 30 iter × (역필터 + M 캐스케이드) ≈ N · 30 · 10 · (~4 cost evals) flop. 주파수 영역보다 빠르지만 (FFT 없음) 여전히 블록 길이에 선형 비례.
 
 ---
 
-## 17. 정리표
+## 11. 참고문헌
 
-| 구성요소 | 논문 출처? | 근거 |
-|-----------|-------------|-------|
-| **PBSID-opt (VAR → Markov → SVD)** | ✅ | Chiuso 2007, Houtzager-van Wingerden 2009 |
-| **PEM (혁신 cost, LM-FD)** | ✅ | Ljung 1999 (System ID 정전) |
-| **LM + FD Jacobian** | ✅ | Levenberg 1944, Marquardt 1963 |
-| **안정성 제약 (A_K Schur)** | ✅ | PEM 표준 관행 |
-| **BLA (Best Linear Approximation)** | ✅ | Pintelon-Schoukens 2012 |
-| **Welch-IV FRF 추정** | ✅ | Welch 1967, Pintelon 2012 |
-| **Goertzel 단일 주파수 DFT** | ✅ | Goertzel 1958 |
-| **Coherence γ² 가중** | ✅ | 신호처리 표준 |
-| **DC 게인 부호 보정** | ⚠️ | 폐루프 식별 실무 관행 |
-| **PSO refScale (포화 방지)** | ⚠️ | 엔지니어링 판단 |
-| **Gavish-Donoho `ω(β)` 임계값** | ✅ | Gavish & Donoho 2014 |
-| **PSO (로그 공간, 멀티시드)** | ✅ | Kennedy & Eberhart 1995 |
-| **1-샘플 지연 측정 (D 처리)** | ⚠️ | 디지털 제어 표준 관행 |
-| `M, W, F` VRFT 필터 | ✅ | Campi et al. 2002 |
-| 가상 레퍼런스 `r_v = M⁻¹y` | ✅ | Core VRFT |
-| OLS 회귀 | ✅ | Core VRFT |
-| `T_i` IMC 대체 `0.4×Ts` | ⚠️ | IMC 규칙에서 유도 |
-| **관측 정준형 (n=2, cond(O)<10³)** | ✅ | 최소 파라미터화 표준 (Ljung 1999). cond 기반 폴백 |
-| **교차검증 RMSE (80/20 분할)** | ✅ | PEM/BLA 공정 비교. 동일 스케일 메트릭 |
-| **n=3 조건부 허용 (sanity check)** | ⚠️ | |dcGain|∈[0.01,100], |eig(A)|<0.99. 실패→n=2 |
-| **Step prelude (0.5s DC 주입)** | ⚠️ | DC Fisher information 보강. 엔지니어링 판단 |
-| **fBase 하한 (2/T_block)** | ⚠️ | 최소 2주기 보장. 주파수 해상도 기반 |
-| **적응 진폭 chatter 방지** | ⚠️ | 쿨다운 3초 + dead zone. 실무 안정화 |
-| **Validate 절대 기준** | ⚠️ | std>0.3 경고. 전축 나쁠 때 상대 기준 보완 |
-| **Validate 축별 시간** | ⚠️ | 느린 축 15초, 빠른 축 5초. Nyquist 기반 |
-| **저DC 경고** | ⚠️ | dcGain<0.3 UI 표시. refScale 은폐 방지 |
-| `τ` = dt 고정 | ❌ | FTD 물리 틱 기반 (전 축 동일) |
-| `T_s` 파라미터 안정성 탐색 | ❌ | 강건 최적화 개념 |
-| 멀티사인 (슈뢰더 위상) | ❌ | Schroeder 1970, 산업 표준 |
-| **축별 주파수 대역 조정** | ❌ | 사용자 수동 (fBase, fMax 슬라이더) |
-| **양방향 적응형 진폭** | ❌ | SNR + 포화 근접 + 과응답 기반 |
-| **축 분리 (SP freeze)** | ❌ | SISO 가정 강화, 리플렉션 축 발견 |
-| **피치 고도 유지 (Hover PV 기반)** | ❌ | 비행기형 고도 드리프트 방지 |
-| **교차 검증 (Validate)** | ❌ | 축간 커플링 악화 감지 |
-| 포화 해소 + 적분 리셋 | ❌ | ISA PID 성질 |
-| 포화 회피 스케일링 | ❌ | 제약 인식 가진 |
-
----
-
-## 참고문헌
-
-**식별 (System Identification):**
-- Ljung, L. (1999). *System Identification: Theory for the User* (2nd ed.). Prentice Hall. — PEM 표준 교과서.
-- Chiuso, A. (2007). *The role of vector autoregressive modeling in predictor-based subspace identification*. Automatica, 43(6), 1034-1048. — PBSID-opt 정립.
-- Houtzager, I., van Wingerden, J. W., & Verhaegen, M. (2009). *VARMAX-based closed-loop subspace model identification*. IEEE CDC 2009. — PBSID 구현.
-- Van Overschee, P. & De Moor, B. (1994). *N4SID: Subspace algorithms for the identification of combined deterministic-stochastic systems*. Automatica, 30(1), 75-93.
-- Van Overschee, P. & De Moor, B. (1996). *Subspace Identification for Linear Systems: Theory, Implementation, Applications*. Kluwer Academic Publishers.
-- Gavish, M. & Donoho, D. L. (2014). *The Optimal Hard Threshold for Singular Values is `4/√3`*. IEEE Transactions on Information Theory, 60(8), 5040-5053.
-- Forssell, U. & Ljung, L. (1999). *Closed-loop identification revisited*. Automatica, 35(7), 1215-1241.
-
-**최적화:**
-- Levenberg, K. (1944). *A method for the solution of certain non-linear problems in least squares*. Quarterly of Applied Mathematics, 2(2), 164-168.
-- Marquardt, D. W. (1963). *An algorithm for least-squares estimation of nonlinear parameters*. SIAM Journal on Applied Mathematics, 11(2), 431-441.
-- Kennedy, J. & Eberhart, R. (1995). *Particle Swarm Optimization*. Proceedings of IEEE International Conference on Neural Networks, IV, 1942-1948.
-
-**제어:**
-- Campi, M. C., Lecchini, A., & Savaresi, S. M. (2002). *Virtual reference feedback tuning: a direct method for the design of feedback controllers*. Automatica, 38(8), 1337-1346.
-- Rivera, D. E., Morari, M., & Skogestad, S. (1986). *Internal model control: PID controller design*. Industrial & Engineering Chemistry Process Design and Development, 25(1), 252-265.
-
-**가진:**
-- Schroeder, M. R. (1970). *Synthesis of low-peak-factor signals and binary sequences with low autocorrelation*. IEEE Transactions on Information Theory, 16(1), 85-89.
+- **FRIT 원본**: Soma, S., Kaneko, O., & Fujii, T. (2004). *A new method of controller parameter tuning based on input-output data — Fictitious Reference Iterative Tuning (FRIT)*. IFAC Workshop on Adaptation and Learning in Control and Signal Processing.
+- **FRIT 강건성 (vs VRFT)**: Kaneko, O. (2013). *Data-driven controller tuning: FRIT approach*. IFAC Proceedings Volumes 46(11).
+- **VRFT (참고용)**: Campi, M.C., Lecchini, A., & Savaresi, S.M. (2002). *Virtual reference feedback tuning: a direct method for the design of feedback controllers*. Automatica 38(8).
+- **Levenberg-Marquardt**: Moré, J.J. (1978). *The Levenberg-Marquardt algorithm: implementation and theory*. Numerical Analysis.
+- **Tustin bilinear transform**: Oppenheim, A.V. & Schafer, R.W. *Discrete-Time Signal Processing*, ch. 7.
+- **MathNet LM 구현**: `MathNet.Numerics.Optimization.LevenbergMarquardtMinimizer`

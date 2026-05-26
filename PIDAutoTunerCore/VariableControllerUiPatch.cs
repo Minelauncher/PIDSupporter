@@ -1,11 +1,11 @@
 ﻿// ============================================================================
-// VariableControllerUiPatch.cs — GP-PID 편집 UI에 VRFT 창을 끼워넣는 Harmony 패치
+// VariableControllerUiPatch.cs — GP-PID 편집 UI에 FRIT 창을 끼워넣는 Harmony 패치
 //
 // ■ 메서드/타입 출처
-//   [자체]    TryGetTab(instance, out tab)         UI인스턴스→VRFT탭 조회
+//   [자체]    TryGetTab(instance, out tab)         UI인스턴스→FRIT탭 조회
 //   [Harmony] TargetMethod()                       패치 대상 메서드 지정
 //   [Harmony] Postfix(__instance, __result)         원래 메서드 실행 후 호출
-//   [자체]    CreateVrftWindowViaNewWindow(...)     리플렉션으로 FTD 새 창 생성
+//   [자체]    CreateFritWindowViaNewWindow(...)     리플렉션으로 FTD 새 창 생성
 //   [자체]    GetMethodInHierarchy(type,name,sig)   상속 계층에서 메서드 찾기
 //   [자체]    GetFieldInHierarchy(type,obj,name)    상속 계층에서 필드 찾기
 //
@@ -30,7 +30,7 @@
 //
 // ■ 이 파일이 하는 일:
 //   FTD에서 GP-PID 블록의 편집 UI(VariableControllerUi.BuildInterface)가 호출될 때,
-//   그 직후(Postfix)에 VRFT 튜닝 창을 별도로 생성해서 띄움.
+//   그 직후(Postfix)에 FRIT 튜닝 창을 별도로 생성해서 띄움.
 //
 // ■ GP-PID vs AI-PID:
 //   GP-PID = 블록에 직접 붙는 PID (BrilliantSkies.Blocks.Ai.VariableControllerUi)
@@ -53,14 +53,14 @@ namespace PIDAutoTuner
     [HarmonyPatch]
     public static class VariableControllerUiPatch
     {
-        // UI 인스턴스 → VRFT 탭 매핑. PID 편집 창 하나당 VRFT 탭 하나.
+        // UI 인스턴스 → FRIT 탭 매핑. PID 편집 창 하나당 FRIT 탭 하나.
         // ConditionalWeakTable = key가 GC되면 엔트리도 자동 제거 → 메모리 누수 방지.
         // Dictionary는 key를 강참조해서 GC를 막지만, 이건 약참조라 UI 닫히면 정리됨.
-        private static readonly ConditionalWeakTable<object, VrftTuningTab> _tabsByUiInstance
-            = new ConditionalWeakTable<object, VrftTuningTab>();
+        private static readonly ConditionalWeakTable<object, FritTuningTab> _tabsByUiInstance
+            = new ConditionalWeakTable<object, FritTuningTab>();
 
-        // FixedUpdate 패치에서 "이 UI에 VRFT 탭이 있나?" 확인할 때 사용.
-        public static bool TryGetTab(object uiInstance, out VrftTuningTab tab)
+        // FixedUpdate 패치에서 "이 UI에 FRIT 탭이 있나?" 확인할 때 사용.
+        public static bool TryGetTab(object uiInstance, out FritTuningTab tab)
             => _tabsByUiInstance.TryGetValue(uiInstance, out tab);
 
         /// <summary>
@@ -82,8 +82,8 @@ namespace PIDAutoTuner
         ///
         /// 여기서 하는 일:
         /// 1) __instance에서 리플렉션으로 PID 제어기(VariableControllerMaster) 추출
-        /// 2) 새 ConsoleWindow(VRFT 전용 창) 생성
-        /// 3) VrftTuningTab을 만들어서 창에 넣기
+        /// 2) 새 ConsoleWindow(FRIT 전용 창) 생성
+        /// 3) FritTuningTab을 만들어서 창에 넣기
         /// </summary>
         static void Postfix(object __instance, ref ConsoleWindow __result)
         {
@@ -106,24 +106,24 @@ namespace PIDAutoTuner
                 VariableControllerMaster controller = controllerProp != null ? controllerProp.GetValue(focusObj, null) as VariableControllerMaster : null;
                 if (controller == null) return;
 
-                // VRFT 전용 별도 창 생성 (기존 PID 창에 탭으로 넣지 않고 새 창)
+                // FRIT 전용 별도 창 생성 (기존 PID 창에 탭으로 넣지 않고 새 창)
                 // 700, 10, 520, 720 = 화면상 x, y, 폭, 높이
-                ConsoleWindow vrftWindow = CreateVrftWindowViaNewWindow(__instance, "VRFT 튜닝", 700f, 10f, 520f, 720f);
-                if (vrftWindow == null) return;
+                ConsoleWindow fritWindow = CreateFritWindowViaNewWindow(__instance, "FRIT 튜닝", 700f, 10f, 520f, 720f);
+                if (fritWindow == null) return;
 
-                vrftWindow.MinimumWindowWidth = new ScaledSizing(420f, Dimension.Width);
-                vrftWindow.MinimumWindowHeight = new ScaledSizing(600f, Dimension.Height);
-                vrftWindow.BackgroundType = BackgroundType.Normal;
-                vrftWindow.DisplayTextPrompt = false;
+                fritWindow.MinimumWindowWidth = new ScaledSizing(420f, Dimension.Width);
+                fritWindow.MinimumWindowHeight = new ScaledSizing(600f, Dimension.Height);
+                fritWindow.BackgroundType = BackgroundType.Normal;
+                fritWindow.DisplayTextPrompt = false;
 
-                VrftTuningTab vrftTab = new VrftTuningTab(vrftWindow, controller);
-                GuideTab guideTab = new GuideTab(vrftWindow, controller);
+                FritTuningTab fritTab = new FritTuningTab(fritWindow, controller);
+                GuideTab guideTab = new GuideTab(fritWindow, controller);
 
-                vrftWindow.SetMultipleTabs(new SuperScreen[] { vrftTab, guideTab });
+                fritWindow.SetMultipleTabs(new SuperScreen[] { fritTab, guideTab });
 
-                _tabsByUiInstance.Add(__instance, vrftTab);
+                _tabsByUiInstance.Add(__instance, fritTab);
 
-                AdvLogger.LogInfo("[PIDAutoTuner] VRFT를 별도 창으로 열었습니다.", LogOptions.None);
+                AdvLogger.LogInfo("[PIDAutoTuner] FRIT를 별도 창으로 열었습니다.", LogOptions.None);
             }
             catch (Exception e)
             {
@@ -135,7 +135,7 @@ namespace PIDAutoTuner
         /// FTD UI 시스템의 NewWindow 메서드를 리플렉션으로 호출해서 새 창을 만듦.
         /// NewWindow는 protected(상속받은 클래스만 접근 가능)라서 직접 호출 불가 → 리플렉션 사용.
         /// </summary>
-        private static ConsoleWindow CreateVrftWindowViaNewWindow(object variableControllerUiInstance, string title, float x, float y, float w, float h)
+        private static ConsoleWindow CreateFritWindowViaNewWindow(object variableControllerUiInstance, string title, float x, float y, float w, float h)
         {
             try
             {
@@ -159,7 +159,7 @@ namespace PIDAutoTuner
             }
             catch (Exception e)
             {
-                AdvLogger.LogInfo("[PIDAutoTuner] CreateVrftWindow 실패: " + e, LogOptions.None);
+                AdvLogger.LogInfo("[PIDAutoTuner] CreateFritWindow 실패: " + e, LogOptions.None);
                 return null;
             }
         }

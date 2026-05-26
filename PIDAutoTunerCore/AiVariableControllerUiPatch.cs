@@ -6,7 +6,7 @@
 //   AI-PID = 글로벌 VariableControllerUi (AI Mainframe에서 여는 PID)
 //
 // ■ 메서드/타입 출처 (VariableControllerUiPatch.cs와 동일 패턴)
-//   [자체]    TryGetTab / Postfix / CreateVrftWindowViaNewWindow
+//   [자체]    TryGetTab / Postfix / CreateFritWindowViaNewWindow
 //   [자체]    GetMethodInHierarchy / GetFieldInHierarchy
 //   [Harmony] TargetMethod / AccessTools.*
 //   [FTD]     ConsoleWindow / VariableControllerMaster / AdvLogger / ITimeStep
@@ -39,10 +39,10 @@ namespace PIDAutoTuner
     [HarmonyPatch]
     public static class AiVariableControllerUiPatch
     {
-        private static readonly ConditionalWeakTable<object, VrftTuningTab> _tabsByUiInstance
-            = new ConditionalWeakTable<object, VrftTuningTab>();
+        private static readonly ConditionalWeakTable<object, FritTuningTab> _tabsByUiInstance
+            = new ConditionalWeakTable<object, FritTuningTab>();
 
-        public static bool TryGetTab(object uiInstance, out VrftTuningTab tab)
+        public static bool TryGetTab(object uiInstance, out FritTuningTab tab)
             => _tabsByUiInstance.TryGetValue(uiInstance, out tab);
 
         static MethodBase TargetMethod()
@@ -65,21 +65,21 @@ namespace PIDAutoTuner
                 VariableControllerMaster controller = focusObj as VariableControllerMaster;
                 if (controller == null) return;
 
-                ConsoleWindow vrftWindow = CreateVrftWindowViaNewWindow(__instance, "VRFT 튜닝", 700f, 10f, 520f, 720f);
-                if (vrftWindow == null) return;
+                ConsoleWindow fritWindow = CreateFritWindowViaNewWindow(__instance, "FRIT 튜닝", 700f, 10f, 520f, 720f);
+                if (fritWindow == null) return;
 
-                vrftWindow.MinimumWindowWidth = new ScaledSizing(420f, Dimension.Width);
-                vrftWindow.MinimumWindowHeight = new ScaledSizing(600f, Dimension.Height);
-                vrftWindow.BackgroundType = BackgroundType.Normal;
-                vrftWindow.DisplayTextPrompt = false;
+                fritWindow.MinimumWindowWidth = new ScaledSizing(420f, Dimension.Width);
+                fritWindow.MinimumWindowHeight = new ScaledSizing(600f, Dimension.Height);
+                fritWindow.BackgroundType = BackgroundType.Normal;
+                fritWindow.DisplayTextPrompt = false;
 
-                VrftTuningTab vrftTab = new VrftTuningTab(vrftWindow, controller);
-                GuideTab guideTab = new GuideTab(vrftWindow, controller);
-                vrftWindow.SetMultipleTabs(new SuperScreen[] { vrftTab, guideTab });
+                FritTuningTab fritTab = new FritTuningTab(fritWindow, controller);
+                GuideTab guideTab = new GuideTab(fritWindow, controller);
+                fritWindow.SetMultipleTabs(new SuperScreen[] { fritTab, guideTab });
 
-                _tabsByUiInstance.Add(__instance, vrftTab);
+                _tabsByUiInstance.Add(__instance, fritTab);
 
-                AdvLogger.LogInfo("[PIDAutoTuner] AI-PID용 VRFT 창 생성됨.", LogOptions.None);
+                AdvLogger.LogInfo("[PIDAutoTuner] AI-PID용 FRIT 창 생성됨.", LogOptions.None);
             }
             catch (Exception e)
             {
@@ -87,7 +87,7 @@ namespace PIDAutoTuner
             }
         }
 
-        private static ConsoleWindow CreateVrftWindowViaNewWindow(object uiInstance, string title, float x, float y, float w, float h)
+        private static ConsoleWindow CreateFritWindowViaNewWindow(object uiInstance, string title, float x, float y, float w, float h)
         {
             try
             {
@@ -144,7 +144,7 @@ namespace PIDAutoTuner
             try
             {
                 if (__instance == null) return;
-                if (AiVariableControllerUiPatch.TryGetTab(__instance, out VrftTuningTab tab) && tab != null)
+                if (AiVariableControllerUiPatch.TryGetTab(__instance, out FritTuningTab tab) && tab != null)
                     tab.OnUiFixed();
             }
             catch (Exception e)

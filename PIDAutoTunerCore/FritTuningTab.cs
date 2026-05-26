@@ -1,5 +1,5 @@
 ﻿// ============================================================================
-// VrftTuningTab.cs — VRFT 기반 PID 자동 튜닝 UI 탭 (전체 핵심 로직)
+// FritTuningTab.cs — FRIT 기반 PID 자동 튜닝 UI 탭 (전체 핵심 로직)
 //
 // ■ using 설명 (C# 기본):
 //   using = "이 네임스페이스의 클래스를 쓰겠다"는 선언.
@@ -17,7 +17,7 @@
 //
 // ── 이 파일의 메서드들 ──
 //
-//   [자체] VrftTuningTab(window, focus)     생성자. FTD SuperScreen 상속
+//   [자체] FritTuningTab(window, focus)     생성자. FTD SuperScreen 상속
 //   [자체] Build()                          override. UI 요소 배치 (FTD가 호출)
 //   [자체] OnUiFixed()                      매 물리 틱 호출. 데이터 수집/적응형 진폭
 //   [자체] BuildStatus()                    UI: 상태 표시 영역 생성
@@ -28,13 +28,13 @@
 //   [자체] StartRecording()                 녹화 시작 (세션 초기화)
 //   [자체] StopRecording()                  녹화 중지 (SP 복원)
 //   [자체] AutoTuneNow()                    [자동 튜닝] 버튼 → 가진 설정 + 녹화 시작
-//   [자체] AutoTuneCompute()                녹화 완료 후 → 추정 + VRFT 계산
+//   [자체] AutoTuneCompute()                녹화 완료 후 → 추정 + FRIT 계산
 //   [자체] CaptureSetPointAdjustBase()      현재 SP 백업
 //   [자체] RestoreSetPointAdjustIfNeeded()   SP를 원래 값으로 복원
 //   [자체] ApplyExcitation(dt)              매 틱 SP에 가진 신호 더하기
-//   [자체] ComputeNow()                     [계산] 버튼 → VRFT 계산 (수동)
+//   [자체] ComputeNow()                     [계산] 버튼 → FRIT 계산 (수동)
 //   [자체] ApplyToPid()                     [적용] 버튼 → 결과를 게임 PID에 쓰기
-//   [자체] ComputeVrftPid(u,y,dt,s)         ★ VRFT 핵심 계산 (static)
+//   [자체] ComputeFritPid(u,y,dt,s)         ★ FRIT 핵심 계산 (static)
 //   [자체] MakeButton(...)                  UI 헬퍼: 버튼 생성
 //   [자체] MakeToggle(...)                  UI 헬퍼: 토글 생성
 //   [자체] MakeCycleButton(...)             UI 헬퍼: 순환 버튼 생성
@@ -129,24 +129,26 @@ using UnityEngine;                          // Time.fixedDeltaTime (Unity 물리
 namespace PIDAutoTuner
 {
     /// <summary>
-    /// VRFT(Virtual Reference Feedback Tuning) 기반 PID 자동 튜닝 UI 탭.
+    /// FRIT(Fictitious Reference Iterative Tuning) 기반 PID 자동 튜닝 UI 탭.
     ///
-    /// ■ VRFT가 뭔가?
-    ///   플랜트(제어 대상)의 수학적 모델 없이, 입출력 데이터(u, y)만으로
-    ///   "원하는 폐루프 응답 M"을 만족하는 PID 파라미터를 한 번에 계산하는 방법.
+    /// ■ FRIT가 뭔가?
+    ///   초기 PID C₀ 로 수집한 폐루프 데이터 (u, y) 만으로,
+    ///   원하는 폐루프 응답 M(s) 에 출력이 가장 가까워지는 새 PID 파라미터를 찾는 방법.
+    ///   플랜트 모델 식별 불필요. 측정 노이즈에 상대적으로 강건 (vs VRFT 선형 회귀).
     ///
-    /// ■ 핵심 수식 (논문 번호):
-    ///   (3.0.17) M(jw) = exp(-jw*tau_M) / (1 + jw*0.2*t_s)^n_M
-    ///            -> "이상적 폐루프"의 주파수 응답. tau_M=지연, t_s=정착시간, n_M=차수
-    ///   (3.0.18) W(jw) = wW / (jw + wW)
-    ///            -> 저역통과 가중 필터. 고주파 노이즈 억제용.
-    ///   (2.3.11) F(jw) = M(jw) * (1-M(jw)) * W(jw)
-    ///            -> 모델 매칭 필터. VRFT 회귀의 편향을 줄이는 역할.
+    /// ■ 핵심 수식:
+    ///   M(jw) = exp(-jw·τM) / (1 + jw·0.2·Ts)^nM
+    ///           → 목표 폐루프 응답. τM=지연, Ts=정착시간, nM=차수 (보통 2).
     ///
-    ///   rv = M^{-1}[y]   -> "M대로 작동했다면 레퍼런스는 뭐였을까?" (가상 레퍼런스)
-    ///   ev = rv - y       -> 가상 에러
-    ///   회귀: uF = rho1*eF + rho2*integral(eF) + rho3*d(eF)/dt
-    ///   -> rho1=Kp, rho2=Kp/Ti, rho3=Kp*Td
+    ///   가상 레퍼런스:  r̃(θ)[k] = y[k] + (1/C(θ)) · u[k]
+    ///   참조 모델 응답: ŷ(θ)[k] = M · r̃(θ)[k]
+    ///   비용:           J(θ) = Σ (y[k] - ŷ(θ)[k])²    ← Levenberg-Marquardt 최적화
+    ///
+    ///   θ = (Kp, Ti, Td) 3개 파라미터 비선형 최적화 (MathNet LM).
+    ///
+    /// ■ 주파수 영역 구현:
+    ///   C(z)^{-1} 시간 도메인 IIR 필터의 zero 안정성 문제 회피.
+    ///   제로패딩 (Nfft = 2N) 으로 circular convolution wrap-around 회피.
     ///
     /// ■ C# 클래스 구조:
     ///   SuperScreen{T} = FTD UI 시스템의 "탭 화면" 기본 클래스.
@@ -154,7 +156,7 @@ namespace PIDAutoTuner
     ///   이 클래스를 상속하면 FTD UI 창 안에 탭으로 들어갈 수 있다.
     ///   this._focus = 부모 클래스에서 물려받는 필드, 현재 편집 중인 PID 제어기.
     /// </summary>
-    public class VrftTuningTab : SuperScreen<VariableControllerMaster>
+    public class FritTuningTab : SuperScreen<VariableControllerMaster>
     {
         // ── MathNet 편의 팩토리 ──
         // C#에서 System.Numerics.Vector{T}와 MathNet의 Vector{T}가 이름이 겹쳐서
@@ -180,7 +182,7 @@ namespace PIDAutoTuner
         {
             Idle,       // 대기 중
             Recording,  // 데이터 수집 중 (폐루프)
-            Computing,  // 수집 끝, VRFT 계산 중
+            Computing,  // 수집 끝, FRIT 계산 중
             Done,       // 계산 완료 (결과 있음)
             Failed,     // 실패 (에러 메시지 있음)
             Validating, // 검증 모드: 전 축 y 수집 중 (5초)
@@ -194,10 +196,10 @@ namespace PIDAutoTuner
         }
 
         // ■ sealed class = 상속 불가 클래스. "이 클래스를 더 확장하지 않겠다"는 의미.
-        //   private = VrftTuningTab 안에서만 사용.
+        //   private = FritTuningTab 안에서만 사용.
         //   Settings는 UI 슬라이더와 연결되는 "설정값 묶음".
 
-        /// <summary>VRFT 튜닝에 사용되는 모든 설정값</summary>
+        /// <summary>FRIT 튜닝에 사용되는 모든 설정값</summary>
         private sealed class Settings
         {
             // ===== 참조모델 M: "폐루프가 이렇게 반응했으면 좋겠다" =====
@@ -246,12 +248,9 @@ namespace PIDAutoTuner
             public bool Recording;                   // 지금 녹화 중인지
             public double T;                          // 경과 시간 (초)
 
-            public readonly List<double> U = new List<double>();  // 제어 출력 기록
-            public readonly List<double> Y = new List<double>();  // 프로세스 변수 기록
-            public readonly List<double> R = new List<double>();  // 가진 신호 (외생) — BLA 폐루프 편향 제거용
-
-            // MISO N4SID용: 다른 축의 u 기록 (커플링 분리)
-            public readonly List<List<double>> OtherU = new List<List<double>>();
+            public readonly List<double> U = new List<double>();          // 제어 출력 기록
+            public readonly List<double> Y = new List<double>();          // 프로세스 변수 기록
+            public readonly List<bool>   Saturated = new List<bool>();    // 이 샘플이 포화 중인지 (가중치용)
 
             // ── 블록 관리 ──
             // 포화 샘플을 버리면 시계열에 "구멍"이 생김.
@@ -283,14 +282,6 @@ namespace PIDAutoTuner
             public bool HasResult;
             public double Kp, Ti, Td;
             public double FitRmse;
-            public string ActiveMethodName = "";     // 현재 활성 결과 ("PEM" / "VRFT" / ...)
-            public string ActiveMethodInfo = "";     // 상세 정보 문자열
-
-            // 대안 결과 (사용자가 스왑 가능). 사용 안 하면 HasAlt=false.
-            public bool HasAlt;
-            public double AltKp, AltTi, AltTd;
-            public string AltMethodName = "";
-            public string AltMethodInfo = "";
 
             public string LastMessage = "";
 
@@ -304,8 +295,7 @@ namespace PIDAutoTuner
                 T = 0;
                 U.Clear();
                 Y.Clear();
-                R.Clear();
-                OtherU.Clear();
+                Saturated.Clear();
                 BlockStarts.Clear();
                 BlockStarts.Add(0);
                 NeedNewBlock = false;
@@ -325,10 +315,6 @@ namespace PIDAutoTuner
                 NaturalYStd = 0;
                 HasResult = false;
                 Kp = Ti = Td = FitRmse = 0;
-                ActiveMethodName = ActiveMethodInfo = "";
-                HasAlt = false;
-                AltKp = AltTi = AltTd = 0;
-                AltMethodName = AltMethodInfo = "";
                 LastMessage = "";
                 ValidateStartT = 0;
                 ValidateY.Clear();
@@ -343,26 +329,13 @@ namespace PIDAutoTuner
         private readonly Session _sess = new Session();
         private AutoTuneState _autoState = AutoTuneState.Idle;
 
-        // 다른 축 Controller (MISO N4SID용 커플링 분석)
-        private readonly List<VariableControllerMaster> _otherAxes = new List<VariableControllerMaster>();
-
-        /// <summary>다른 축 Controller를 등록 (패치에서 호출)</summary>
-        public void SetOtherAxes(params VariableControllerMaster[] axes)
-        {
-            _otherAxes.Clear();
-            foreach (var ax in axes)
-            {
-                if (ax != null && ax != this._focus)
-                    _otherAxes.Add(ax);
-            }
-        }
 
         // ── 축 분리 모드 (Axis Fixture) ──
         // 방법 1: 리플렉션으로 _focus 의 부모 객체에서 형제 VariableControllerMaster 자동 발견.
         // 방법 2: 사용자가 각 축 PID UI 열면 자동 등록 (_tabsByAxis).
         // 두 방법 병합 — 리플렉션 성공하면 자동, 실패하면 수동 등록 폴백.
-        private static readonly Dictionary<VariableControllerMaster, VrftTuningTab> _tabsByAxis
-            = new Dictionary<VariableControllerMaster, VrftTuningTab>();
+        private static readonly Dictionary<VariableControllerMaster, FritTuningTab> _tabsByAxis
+            = new Dictionary<VariableControllerMaster, FritTuningTab>();
         private static bool _axisDiscoveryAttempted = false;
         private readonly Dictionary<VariableControllerMaster, float> _frozenOtherSPs
             = new Dictionary<VariableControllerMaster, float>();
@@ -393,10 +366,10 @@ namespace PIDAutoTuner
         /// : base(window, focus) = 부모 클래스(SuperScreen) 생성자에 window와 focus를 넘김.
         /// this._focus = focus (부모에서 설정됨) → 이후 this._focus로 PID 제어기에 접근.
         /// </summary>
-        public VrftTuningTab(ConsoleWindow window, VariableControllerMaster focus) : base(window, focus)
+        public FritTuningTab(ConsoleWindow window, VariableControllerMaster focus) : base(window, focus)
         {
             // Name = 탭 이름. Content(표시텍스트, 툴팁, 내부ID)
-            this.Name = new Content("VRFT Tuning / VRFT 튜닝", new ToolTip("Auto-estimate PID (Kp, Ti, Td) via VRFT.\n---\nVRFT로 PID(Kp, Ti, Td)를 자동 추정합니다.", 220f), "vrft");
+            this.Name = new Content("FRIT Tuning / FRIT 튜닝", new ToolTip("Auto-estimate PID (Kp, Ti, Td) via FRIT.\n---\nFRIT로 PID(Kp, Ti, Td)를 자동 추정합니다.", 220f), "frit");
 
             // 정적 registry 에 등록 — 다른 축 튜닝 시 이 축 SP 고정 대상으로 사용
             if (focus != null) _tabsByAxis[focus] = this;
@@ -492,7 +465,7 @@ namespace PIDAutoTuner
                 // ── 적응형 진폭: 정보량 부족 시 진폭 증가 ──
                 // 정보량 판단: y 변동 (yStd/amp) AND u 제어 활동 (uStd) 둘 다 고려.
                 //   기존 yStd/amp 만 보면 강한 PID / 고주파 컷오프 상황에서 u가 활발해도 boost 됨
-                //   → 불필요한 포화 유발. u 가 이미 움직이면 N4SID/PEM 식별에 정보 충분.
+                //   → 불필요한 포화 유발. u 가 이미 움직이면 FRIT 입장에서도 정보 충분.
                 if (_s.AdaptiveAmp && _s.ExciteEnabled && _autoState == AutoTuneState.Recording
                     && _sess.ConsecutiveSaturated < _sess.ConsecutiveSatThreshold)
                 {
@@ -618,16 +591,7 @@ namespace PIDAutoTuner
 
                 _sess.U.Add(u);
                 _sess.Y.Add(y);
-                _sess.R.Add(_lastExciteValue); // 외생 가진 신호 (BLA 무편향 식별용)
-
-                // 다른 축 u도 기록 (MISO N4SID용)
-                while (_sess.OtherU.Count < _otherAxes.Count)
-                    _sess.OtherU.Add(new List<double>());
-                for (int ai = 0; ai < _otherAxes.Count; ai++)
-                {
-                    IVariableController oc = _otherAxes[ai].GetCurrentController();
-                    _sess.OtherU[ai].Add(oc != null ? oc.LastControlVariable : 0);
-                }
+                _sess.Saturated.Add(saturated);  // 짧은 포화 샘플도 저장 (FRIT 에서 가중치로 down-weight)
 
                 _sess.T += dt;
 
@@ -707,8 +671,8 @@ namespace PIDAutoTuner
                         $"Msg: {_sess.LastMessage}";
                 }),
                 M.m<VariableControllerMaster>(new ToolTip(
-                    "Shows current VRFT recording status, sample count, and saturated/rejected samples.\nSamples accumulate every FixedUpdate during recording.\n---\n" +
-                    "현재 VRFT 기록 상태와 샘플 수, 포화/제외된 샘플 수를 표시합니다.\n" +
+                    "Shows current FRIT recording status, sample count, and saturated/rejected samples.\nSamples accumulate every FixedUpdate during recording.\n---\n" +
+                    "현재 FRIT 기록 상태와 샘플 수, 포화/제외된 샘플 수를 표시합니다.\n" +
                     "샘플은 녹화 중 FixedUpdate마다 누적됩니다.",
                     260f
                 ))
@@ -719,7 +683,7 @@ namespace PIDAutoTuner
         {
             ScreenSegmentTable table = base.CreateTableSegment(1, 10);
             table.BackgroundStyleWhereApplicable = ConsoleStyles.Instance.Styles.Segments.OptionalSegmentDarkBackgroundWithHeader.Style;
-            table.NameWhereApplicable = "VRFT Settings / VRFT 설정";
+            table.NameWhereApplicable = "FRIT Settings / FRIT 설정";
             table.SpaceAbove = 10f;
             table.SpaceBelow = 10f;
             table.SqueezeTable = false;
@@ -843,7 +807,7 @@ namespace PIDAutoTuner
                 this._focus,
                 M.m<VariableControllerMaster>(_ => _autoState == AutoTuneState.Recording ? "Auto-tuning... / 자동 튜닝 중..." : "Auto Tune / 자동 튜닝"),
                 M.m<VariableControllerMaster>(new ToolTip(
-                    "Closed-loop auto-tuning: excitation → record → PEM/BLA/VRFT → PID.\n---\n폐루프 자동 튜닝: 가진 → 녹화 → PEM/BLA/VRFT → PID.", 260f)),
+                    "Closed-loop auto-tuning: excitation → record → FRIT → PID.\n---\n폐루프 자동 튜닝: 가진 → 녹화 → FRIT → PID.", 260f)),
                 null,
                 _ => AutoTuneNow()
             ));
@@ -872,9 +836,11 @@ namespace PIDAutoTuner
             ));
 
             seg.AddInterpretter(MakeButton(
-                "Compute (VRFT) / 계산(VRFT)",
-                "Compute VRFT per paper structure.\nM,W,F → r_v,e_v → uF,eF → least-squares Kp/Ti/Td estimation.\n---\n논문 구조대로 VRFT를 계산합니다.\n" +
-                "M,W,F 구성 → r_v,e_v → uF,eF → 최소자승으로 Kp/Ti/Td 추정",
+                "Compute (FRIT) / 계산(FRIT)",
+                "Compute FRIT: minimize ||y - M·r̃(θ)||² over (Kp,Ti,Td) via Levenberg-Marquardt.\n" +
+                "Seeds from current PID values.\n---\n" +
+                "FRIT 계산: 현재 PID를 시드로 (Kp,Ti,Td)를 LM 으로 비선형 최적화.\n" +
+                "비용: ||y - M·r̃(θ)||² (r̃ = y + u/C(θ))",
                 _ => ComputeNow()
             ));
 
@@ -882,12 +848,6 @@ namespace PIDAutoTuner
                 "Apply / 적용",
                 "Apply Kp/Ti/Td to PID. (Kp: 0.001, Ti/Td: 0.1 step)\n---\nKp/Ti/Td를 PID에 적용. (Kp: 0.001, Ti/Td: 0.1 단위)",
                 _ => ApplyToPid()
-            ));
-
-            seg.AddInterpretter(MakeButton(
-                "Swap method / 방법 전환",
-                "Swap active result with alternative (PEM ↔ VRFT).\nAuto-selected based on PEM innovation RMS; override here.\n---\n주 결과와 대안 결과를 교체 (PEM ↔ VRFT).\n자동 선택을 수동으로 뒤집을 때 사용.",
-                _ => SwapPidMethod()
             ));
 
             seg.AddInterpretter(MakeButton(
@@ -915,23 +875,12 @@ namespace PIDAutoTuner
                     if (!_sess.HasResult)
                         return "No result yet. Press Compute. / 아직 결과가 없습니다.";
 
-                    string methodLine = string.IsNullOrEmpty(_sess.ActiveMethodName)
-                        ? ""
-                        : $"Active: {_sess.ActiveMethodName}\n{_sess.ActiveMethodInfo}\n\n";
-                    string altLine = _sess.HasAlt
-                        ? $"\n\n── Alternative ({_sess.AltMethodName}) ──\n" +
-                          $"Kp = {_sess.AltKp:0.0000},  Ti = {_sess.AltTi:0.00} s,  Td = {_sess.AltTd:0.0000} s\n" +
-                          $"({_sess.AltMethodInfo})\n" +
-                          $"→ 'Swap method' 버튼으로 전환 가능"
-                        : "";
-
-                    string result = methodLine +
+                    string result =
                         $"── Single PID ──\n" +
                         $"Kp = {_sess.Kp:0.0000}\n" +
                         $"Ti = {_sess.Ti:0.00} s\n" +
                         $"Td = {_sess.Td:0.0000} s\n" +
-                        $"Fit (RMSE) = {_sess.FitRmse:0.0000}" +
-                        altLine;
+                        $"Fit (RMSE) = {_sess.FitRmse:0.0000}";
 
                     // ── PI(외부) × PD(내부) 분해 ──
                     // Ti_o + Td_i = Ti,  Ti_o * Td_i = Ti * Td
@@ -968,12 +917,12 @@ namespace PIDAutoTuner
                     return result;
                 }),
                 M.m<VariableControllerMaster>(new ToolTip(
-                    "PID parameters estimated by VRFT regression.\n" +
-                    "RMSE = error between filtered output (uF) and regression model. Lower is better.\n" +
+                    "PID parameters estimated by FRIT (Fictitious Reference Iterative Tuning).\n" +
+                    "RMSE = ||y - M·r̃(θ)||² residual after LM convergence. Lower is better.\n" +
                     "Dual PID: PI(outer)×PD(inner) decomposition equivalent to single PID.\n" +
                     "α = inner/outer bandwidth ratio. Larger means inner is faster.\n---\n" +
-                    "VRFT 회귀로 추정된 PID 파라미터입니다.\n" +
-                    "RMSE는 uF(필터된 출력)와 회귀모델 출력의 오차 크기입니다. 작을수록 좋습니다.\n\n" +
+                    "FRIT (가상 레퍼런스 반복 튜닝) 으로 추정된 PID 파라미터입니다.\n" +
+                    "RMSE 는 LM 수렴 후 ||y - M·r̃(θ)|| 잔차 크기입니다. 작을수록 좋습니다.\n\n" +
                     "이중 PID: 단일 PID와 동치인 PI(외부)×PD(내부) 분해입니다.\n" +
                     "α = 내부/외부 대역폭 비율. 클수록 내부가 외부보다 빠릅니다.\n" +
                     "중간에 속도 클램프를 넣으면 캐스케이드 제어에 사용 가능합니다.",
@@ -1331,7 +1280,7 @@ namespace PIDAutoTuner
         }
 
         // ============================================================
-        // Auto Tune (VRFT)
+        // Auto Tune (FRIT)
         // ============================================================
 
         /// <summary>
@@ -1349,7 +1298,7 @@ namespace PIDAutoTuner
 
             RestoreSetPointAdjustIfNeeded();
 
-            // 바로 녹화 시작 (Desaturation 제거 — VRFT는 기존 제어기와 무관)
+            // 바로 녹화 시작 — 현재 PID C₀ 로 폐루프 데이터 수집 (FRIT seed 로도 사용)
             StartAutoTuneRecording();
         }
 
@@ -1400,11 +1349,11 @@ namespace PIDAutoTuner
         }
 
         /// <summary>
-        /// 녹화 완료 후 다음 틱에 호출. 전체 자동 튜닝 계산 파이프라인:
-        /// 1) 최장 연속 블록 선택 (포화 구멍 없는 구간)
+        /// 녹화 완료 후 다음 틱에 호출. 자동 튜닝 계산 파이프라인:
+        /// 1) 최장 연속 블록 선택 (포화 구멍 제외) + step prelude 제외
         /// 2) 데이터 품질 체크 (포화율, y 변화량)
-        /// 3) 지연시간 tau, 정착시간 Ts 자동 추정
-        /// 4) VRFT 계산 → Kp, Ti, Td 결과
+        /// 3) Ts 자동 스캔 (10단계) + FRIT (LM 비선형 최적화)
+        /// 4) 파라미터 안정성 기반 best Ts 선택
         /// </summary>
         private void AutoTuneCompute()
         {
@@ -1421,13 +1370,11 @@ namespace PIDAutoTuner
                 return;
             }
 
-            // Step prelude (첫 0.5초) 를 식별 데이터에서 제외.
-            // Step 은 DC 정보 주입용이지만 PBSID VAR 회귀의 정상성 가정 위반 → transient 오염.
-            // 블록 시작이 녹화 시작(step 구간)과 겹치면 잘라냄. 이후 블록이면 무관.
+            // Step prelude (첫 0.5초) 를 식별 데이터에서 제외 — DC 정보 주입용 transient
             int stepSkip = 0;
             if (blkStart == 0)
             {
-                stepSkip = Math.Min((int)(0.5 / dt) + 1, blkLen / 4); // 최대 블록의 1/4까지만
+                stepSkip = Math.Min((int)(0.5 / dt) + 1, blkLen / 4);
                 blkStart += stepSkip;
                 blkLen -= stepSkip;
             }
@@ -1440,20 +1387,10 @@ namespace PIDAutoTuner
 
             double[] u = new double[blkLen];
             double[] y = new double[blkLen];
+            bool[]   sat = new bool[blkLen];
             _sess.U.CopyTo(blkStart, u, 0, blkLen);
             _sess.Y.CopyTo(blkStart, y, 0, blkLen);
-
-            // BLA 용 r (가진 신호) — 같은 블록 구간 추출. R 가 부족하면 빈 배열
-            double[] r = (_sess.R.Count >= blkStart + blkLen) ? new double[blkLen] : Array.Empty<double>();
-            if (r.Length == blkLen) _sess.R.CopyTo(blkStart, r, 0, blkLen);
-
-            // fBase 하한 조정: 블록 길이에서 최소 2주기 관측 보장.
-            // fBase = 0.05Hz, 블록 = 10초 → 0.5주기만 관측 → BLA coherence 저하.
-            // fBase ≥ 2/T_block 으로 강제.
-            double T_block = blkLen * dt;
-            double fBaseLo = 2.0 / Math.Max(1.0, T_block);
-            if (_s.ExciteFreqHz < fBaseLo)
-                _s.ExciteFreqHz = (float)fBaseLo;
+            _sess.Saturated.CopyTo(blkStart, sat, 0, blkLen);
 
             // 데이터 품질 체크
             double satRatio = (double)_sess.SaturatedCount / Math.Max(1, _sess.SaturatedCount + _sess.U.Count);
@@ -1484,52 +1421,48 @@ namespace PIDAutoTuner
             }
             _sess.LastMessage = $"Data: u=[{uMin:0.000},{uMax:0.000}] y=[{yMin:0.0},{yMax:0.0}] yStd={yStd:0.000}";
 
-            // τ = dt 고정 (FTD 순수 지연 ≈ 1틱)
-            // 폐루프에서 위상 기울기 추정은 PID 위상을 포함해 과대추정하므로 사용하지 않음
+            // τ = dt 고정 (FTD 순수 지연 ≈ 1틱), nM=2 (FTD 제어 대상 대부분 2차)
             _s.ModelDelayTau = (float)dt;
-
-            // 고정 파라미터
             _s.CutoffHz = (float)(fs / 8.0);
-
-            // Ts 자동 탐색: 파라미터 안정성 기반 Ts 선택
-            // nM=2 고정 (FTD 제어 대상은 대부분 2차 시스템)
             _s.ModelOrderNm = 2;
-            VrftResult bestResult = default;
-            double bestTs = 1.0;
-            bool anyFound = false;
 
-            // 파라미터 안정성 기반 Ts 선택
-            // Ts를 스캔하면서 Kp, Ti, Td를 기록하고,
-            // 인접 Ts 간 파라미터 변화율이 작은(안정적인) 가장 작은 Ts를 선택
-            int tsSteps = 40;
+            // 현재 PID 값을 LM 초기 시드로 사용
+            double kp0 = this._focus.Pid.kP.Us;
+            double ti0 = this._focus.Pid.kI.Us;
+            double td0 = this._focus.Pid.kD.Us;
+
+            // ── Ts 자동 스캔 (10단계, 로그 간격 0.1 ~ 1.0초) ──
+            // FRIT 는 LM 비선형 최적화 → VRFT(선형 LS) 대비 비싸므로 40→10단계 축소.
+            // 인접 Ts 간 파라미터 변화율이 작은 가장 작은 Ts 선택 (안정 영역).
+            const int tsSteps = 10;
             double[] tsArr = new double[tsSteps + 1];
-            double[] kpArr = new double[tsSteps + 1];
-            double[] tiArr = new double[tsSteps + 1];
-            double[] tdArr = new double[tsSteps + 1];
+            FritResult[] results = new FritResult[tsSteps + 1];
             bool[] validArr = new bool[tsSteps + 1];
-            VrftResult[] results = new VrftResult[tsSteps + 1];
 
             for (int si = 0; si <= tsSteps; si++)
             {
                 tsArr[si] = 0.1 * Math.Pow(10.0, (double)si / tsSteps); // 0.1 ~ 1.0
                 _s.SettlingTimeTs = (float)tsArr[si];
-                results[si] = ComputeVrftPid(u, y, dt, _s);
-                kpArr[si] = results[si].Kp;
-                tiArr[si] = results[si].Ti;
-                tdArr[si] = results[si].Td;
-                validArr[si] = results[si].Kp > 0;
+                try
+                {
+                    results[si] = ComputeFritPid(u, y, sat, dt, _s, kp0, ti0, td0);
+                    validArr[si] = results[si].Kp > 0 && !double.IsNaN(results[si].Rmse);
+                }
+                catch { validArr[si] = false; }
             }
 
-            // 인접 점 간 상대 변화율 = |p[i+1]-p[i]| / max(|p[i]|, eps)
-            // Kp, Ti, Td 변화율의 최대값이 임계값 이하인 가장 작은 Ts
-            double stabilityThreshold = 0.3; // 30% 이하 변화면 안정
+            // 인접 Ts 간 max(|ΔKp/Kp|, |ΔTi/Ti|, |ΔTd/Td|) 가 임계값 이하인 가장 작은 Ts
+            const double stabilityThreshold = 0.3;
+            FritResult bestResult = default;
+            double bestTs = 1.0;
+            bool anyFound = false;
             for (int si = 0; si < tsSteps; si++)
             {
                 if (!validArr[si] || !validArr[si + 1]) continue;
 
-                double dKp = Math.Abs(kpArr[si + 1] - kpArr[si]) / Math.Max(Math.Abs(kpArr[si]), 1e-6);
-                double dTi = Math.Abs(tiArr[si + 1] - tiArr[si]) / Math.Max(Math.Abs(tiArr[si]), 1e-6);
-                double dTd = Math.Abs(tdArr[si + 1] - tdArr[si]) / Math.Max(Math.Abs(tdArr[si]), 1e-6);
+                double dKp = Math.Abs(results[si + 1].Kp - results[si].Kp) / Math.Max(Math.Abs(results[si].Kp), 1e-6);
+                double dTi = Math.Abs(results[si + 1].Ti - results[si].Ti) / Math.Max(Math.Abs(results[si].Ti), 1e-6);
+                double dTd = Math.Abs(results[si + 1].Td - results[si].Td) / Math.Max(Math.Abs(results[si].Td), 1e-6);
                 double maxChange = Math.Max(dKp, Math.Max(dTi, dTd));
 
                 if (maxChange < stabilityThreshold)
@@ -1541,120 +1474,41 @@ namespace PIDAutoTuner
                 }
             }
 
-            // 안정 영역 못 찾으면 Kp > 0인 가장 큰 Ts fallback
+            // 안정 영역 못 찾으면 RMSE 최소 Ts fallback
             if (!anyFound)
             {
-                for (int si = tsSteps; si >= 0; si--)
+                double bestRmse = double.MaxValue;
+                for (int si = 0; si <= tsSteps; si++)
                 {
-                    if (validArr[si])
+                    if (!validArr[si]) continue;
+                    if (results[si].Rmse < bestRmse)
                     {
+                        bestRmse = results[si].Rmse;
                         bestResult = results[si];
                         bestTs = tsArr[si];
                         anyFound = true;
-                        break;
                     }
                 }
             }
 
-            // 전체 실패 시 fallback
             if (!anyFound)
             {
-                _s.ModelOrderNm = 2;
-                _s.SettlingTimeTs = 1.0f;
-                bestResult = ComputeVrftPid(u, y, dt, _s);
-                bestTs = 1.0;
+                _autoState = AutoTuneState.Failed;
+                _sess.LastMessage = "Auto-tune failed: FRIT did not converge for any Ts / 모든 Ts 에서 FRIT 수렴 실패";
+                return;
             }
 
             _s.SettlingTimeTs = (float)bestTs;
-            VrftResult vrft = bestResult;
-
-            // 3-way 식별: PEM / BLA / VRFT 모두 계산 후 신뢰도로 정렬.
-            //   PEM identRatio = innovRms / std(y): 모델 예측 품질 (낮을수록 좋음)
-            //   BLA identRatio = 1 - mean(γ²): FRF 코히런스 (낮을수록 좋음)
-            //   VRFT: 항상 0.99 (안전망)
-            // 교차검증 RMSE 는 BLA 에 부적합 (12빈 비파라미터 → 시간도메인 재구성 불가).
-            // 데이터 분할도 식별 품질 저하 유발 → 전체 데이터로 식별.
-            const double IDENT_THRESHOLD = 0.5;
-
-            ModelPidResult pemResult = default;
-            ModelPidResult blaResult = default;
-            bool pemOk = false, blaOk = false;
-            string pemInfo = "", blaInfo = "";
-
-            try { pemResult = ComputePemPid(u, y, dt); pemOk = true; pemInfo = pemResult.ModelInfo; }
-            catch (Exception ex) { pemInfo = $"PEM failed: {ex.Message}"; }
-
-            // BLA 는 r 데이터 있을 때만
-            if (r.Length > 0)
-            {
-                try { blaResult = ComputeBlaPid(u, y, r, dt, _s); blaOk = true; blaInfo = blaResult.ModelInfo; }
-                catch (Exception ex) { blaInfo = $"BLA failed: {ex.Message}"; }
-            }
-            else
-            {
-                blaInfo = "BLA skipped: no excitation data";
-            }
-
-            string vrftInfo = $"VRFT Ts={bestTs:0.00} rmse={vrft.Rmse:0.00e0}";
-
-            // 후보들 점수 매김: (이름, CrossValRMSE 정규화, Result, Info)
-            var candidates = new List<(string name, double score, double Kp, double Ti, double Td, string info)>();
-            if (pemOk && pemResult.IdentRatio < IDENT_THRESHOLD)
-                candidates.Add(("PEM", pemResult.IdentRatio, pemResult.Kp, pemResult.Ti, pemResult.Td, pemInfo));
-            if (blaOk && blaResult.IdentRatio < IDENT_THRESHOLD)
-                candidates.Add(("BLA", blaResult.IdentRatio, blaResult.Kp, blaResult.Ti, blaResult.Td, blaInfo));
-            // VRFT 는 항상 후보 (낮은 우선순위로 score=0.99)
-            candidates.Add(("VRFT", 0.99, vrft.Kp, vrft.Ti, vrft.Td, vrftInfo));
-
-            candidates.Sort((a, b) => a.score.CompareTo(b.score));
-
-            // 주력 = 1순위, 대안 = 2순위 (있으면)
-            var primary = candidates[0];
-            string primaryName = primary.name;
-            string primaryInfo = primary.info;
-            double primaryKp = primary.Kp, primaryTi = primary.Ti, primaryTd = primary.Td;
-
-            string altName = "", altInfo = "";
-            double altKp = 0, altTi = 0, altTd = 0;
-            bool hasAlt = candidates.Count >= 2;
-            if (hasAlt)
-            {
-                var alt = candidates[1];
-                altName = alt.name; altInfo = alt.info;
-                altKp = alt.Kp; altTi = alt.Ti; altTd = alt.Td;
-            }
+            FritResult best = bestResult;
 
             _sess.HasResult = true;
-            _sess.Kp = primaryKp; _sess.Ti = primaryTi; _sess.Td = primaryTd;
-            _sess.ActiveMethodName = primaryName;
-            _sess.ActiveMethodInfo = primaryInfo;
-            _sess.HasAlt = hasAlt;
-            _sess.AltKp = altKp; _sess.AltTi = altTi; _sess.AltTd = altTd;
-            _sess.AltMethodName = altName; _sess.AltMethodInfo = altInfo;
-            _sess.FitRmse = vrft.Rmse;
+            _sess.Kp = best.Kp; _sess.Ti = best.Ti; _sess.Td = best.Td;
+            _sess.FitRmse = best.Rmse;
 
             _autoState = AutoTuneState.Done;
-            string swapHint = hasAlt ? $" | alt {altName}: Kp={altKp:0.000} Ti={altTi:0.1} Td={altTd:0.00}" : "";
-            // 진단: PEM/BLA 탈락 이유 표시
-            string diagParts = "";
-            if (!pemOk) diagParts += $" [{pemInfo}]";
-            else if (pemResult.IdentRatio >= IDENT_THRESHOLD) diagParts += $" [PEM cv={pemResult.IdentRatio:0.00}>thr]";
-            if (!blaOk) diagParts += $" [{blaInfo}]";
-            else if (blaResult.IdentRatio >= IDENT_THRESHOLD) diagParts += $" [BLA cv={blaResult.IdentRatio:0.00}>thr]";
-            _sess.LastMessage = $"Done | {primaryName}: Kp={primaryKp:0.000} Ti={primaryTi:0.1} Td={primaryTd:0.00}{swapHint}{diagParts}";
-        }
-
-        /// <summary>주 결과와 대안 결과를 swap (사용자가 다른 방법 결과를 보고 싶을 때).</summary>
-        private void SwapPidMethod()
-        {
-            if (!_sess.HasResult || !_sess.HasAlt) return;
-            double k = _sess.Kp, i = _sess.Ti, d = _sess.Td;
-            string n = _sess.ActiveMethodName, info = _sess.ActiveMethodInfo;
-            _sess.Kp = _sess.AltKp; _sess.Ti = _sess.AltTi; _sess.Td = _sess.AltTd;
-            _sess.ActiveMethodName = _sess.AltMethodName; _sess.ActiveMethodInfo = _sess.AltMethodInfo;
-            _sess.AltKp = k; _sess.AltTi = i; _sess.AltTd = d;
-            _sess.AltMethodName = n; _sess.AltMethodInfo = info;
-            _sess.LastMessage = $"Swapped → {_sess.ActiveMethodName}: Kp={_sess.Kp:0.000} Ti={_sess.Ti:0.1} Td={_sess.Td:0.00}";
+            string conv = best.Converged ? "converged" : "max-iter";
+            string warn = string.IsNullOrEmpty(best.Warning) ? "" : " [⚠ " + best.Warning + "]";
+            _sess.LastMessage = $"Done | FRIT Ts={bestTs:0.00} ({conv}, {best.Iterations} iter) Kp={best.Kp:0.000} Ti={best.Ti:0.1} Td={best.Td:0.00} rmse={best.Rmse:0.0000}{warn}";
         }
 
         private void ValidateAxes()
@@ -1811,7 +1665,7 @@ namespace PIDAutoTuner
         /// - PID가 안정적으로 잘 작동하면 u/y가 거의 일정 → 플랜트 정보 없음
         /// - 외부에서 SP를 흔들어야 PID가 반응하고, 그 반응에서 플랜트 특성이 드러남
         /// </summary>
-        /// <summary>현재 틱 가진값 (BLA 폐루프 식별용 외생 입력 r). 비활성/조건 미충족 시 0.</summary>
+        /// <summary>현재 틱 가진값 (피치 고도유지 offset 계산에 사용). 비활성/조건 미충족 시 0.</summary>
         private double _lastExciteValue = 0.0;
 
         private void ApplyExcitation(float dt)
@@ -1841,7 +1695,7 @@ namespace PIDAutoTuner
             double x = 0.0;
 
             // ── Step prelude: 최초 0.5초 동안 일정 SP offset 유지 (DC 정보 주입) ──
-            // 멀티사인은 DC 성분 없음 → PEM/BLA 모두 DC gain 추정이 외삽.
+            // 멀티사인은 DC 성분 없음 → FRIT 의 DC 동작 매칭이 외삽 영역이 됨.
             // 0.5초 step 은 DC 방향 Fisher information 보강 → 세 방법 모두 DC 분산 감소.
             const double STEP_PRELUDE_SEC = 0.5;
             if (_s.ExciteWave == WaveType.MultiSine && _sess.T < STEP_PRELUDE_SEC)
@@ -1915,10 +1769,12 @@ namespace PIDAutoTuner
         // Compute / Apply
         // ============================================================
 
-        private struct VrftResult
+        private struct FritResult
         {
             public double Kp, Ti, Td, Rmse;
             public string Warning;
+            public int Iterations;
+            public bool Converged;
         }
 
         private void ComputeNow()
@@ -1938,10 +1794,17 @@ namespace PIDAutoTuner
 
                 double[] u = new double[blkLen];
                 double[] y = new double[blkLen];
+                bool[]   sat = new bool[blkLen];
                 _sess.U.CopyTo(blkStart, u, 0, blkLen);
                 _sess.Y.CopyTo(blkStart, y, 0, blkLen);
+                _sess.Saturated.CopyTo(blkStart, sat, 0, blkLen);
 
-                VrftResult r = ComputeVrftPid(u, y, dt, _s);
+                // 현재 PID 값을 LM 초기 시드로 사용
+                double kp0 = this._focus.Pid.kP.Us;
+                double ti0 = this._focus.Pid.kI.Us;
+                double td0 = this._focus.Pid.kD.Us;
+
+                FritResult r = ComputeFritPid(u, y, sat, dt, _s, kp0, ti0, td0);
 
                 _sess.HasResult = true;
                 _sess.Kp = r.Kp;
@@ -1949,9 +1812,11 @@ namespace PIDAutoTuner
                 _sess.Td = r.Td;
                 _sess.FitRmse = r.Rmse;
 
+                string conv = r.Converged ? "converged" : "max-iter";
+                string body = $"FRIT {conv} ({r.Iterations} iter, rmse={r.Rmse:0.0000})";
                 _sess.LastMessage = string.IsNullOrEmpty(r.Warning)
-                    ? "Computation complete / 계산 완료"
-                    : "Computation complete (warning: " + r.Warning + ") / 계산 완료";
+                    ? "Computation complete / 계산 완료: " + body
+                    : "Computation complete (warning: " + r.Warning + ") / 계산 완료: " + body;
             }
             catch (Exception e)
             {
@@ -1991,769 +1856,216 @@ namespace PIDAutoTuner
         }
 
         /// <summary>
-        /// ★ VRFT 핵심 계산 함수 ★
+        /// ★ FRIT (Fictitious Reference Iterative Tuning) 핵심 계산 — 시간 영역 ★
         ///
-        /// 입력: u[](제어 출력), y[](프로세스 변수), dt(샘플 간격), s(설정)
-        /// 출력: VrftResult {Kp, Ti, Td, Rmse, Warning}
+        /// 입력: u[](제어 출력), y[](프로세스 변수), sat[](포화 플래그), dt, s, (Kp0,Ti0,Td0) 초기값
+        /// 출력: FritResult {Kp, Ti, Td, Rmse, Warning, Iterations, Converged}
         ///
-        /// static = 인스턴스 없이 호출 가능 (클래스 메서드). 외부 상태에 의존 안 함.
+        /// 비용:
+        ///   r̃(θ)[k] = y[k] + (1/C(θ)) · u[k]    가상 레퍼런스 (시간 영역 IIR 역필터)
+        ///   ŷ(θ)[k] = M(z) · r̃(θ)[k-delay]      이산화된 참조 모델 (Tustin)
+        ///   J(θ)    = Σ w[k] · (y[k] - ŷ(θ)[k])²    가중 LS  (포화 인덱스: w=ε)
+        ///   → Levenberg-Marquardt 로 (Kp, Ti, Td) 최적화.
         ///
-        /// 전체 흐름:
-        /// [u, y] → 디트렌드 → 제로패딩 FFT → M,W,F 필터 → 가상에러 ev
-        /// → IFFT → 사다리꼴적분/중심차분 → 컬럼스케일링 → TLS(SVD) → Kp, Ti, Td
+        /// 주파수 영역 대비 장점:
+        ///   1. FFT 없음 → LM 반복당 비용 ↓
+        ///   2. spectral contamination (포화로 인한 비선형 leakage) 없음 → per-sample 가중치 100% 유효
+        ///   3. circular convolution wrap-around 없음 (causal)
+        ///   4. 순수 지연을 정수 틱으로 정확히 처리
+        ///
+        /// 가중치 구현: sqrt-스케일링 트릭
+        ///   ||√w·y - √w·ŷ||² = Σ w·(y-ŷ)²
+        ///   → observedY = √w·y, model 출력에 √w 곱해서 LM 에 던지면 가중 LS 와 등가.
+        ///
+        /// 안정성: 1/C(z) 의 pole 은 C(z) 분자의 zero. 단위원 밖이면 역필터 발산 → soft barrier.
         /// </summary>
-        private static VrftResult ComputeVrftPid(double[] u, double[] y, double dt, Settings s)
+        private static FritResult ComputeFritPid(double[] u, double[] y, bool[] sat, double dt, Settings s,
+                                                  double Kp0, double Ti0, double Td0)
         {
             int N = Math.Min(u.Length, y.Length);
+            if (sat == null || sat.Length != N) throw new Exception("u/y/sat length mismatch / 길이 불일치");
             if (N < 64) throw new Exception("Too few samples / 샘플이 너무 적습니다.");
 
-            // ── 1단계: 전처리 ──
-            // 디트렌드 = DC(평균값) + 선형 추세를 빼는 것.
-            // 왜? FFT는 "주기적 신호"를 가정하는데, 데이터에 추세가 있으면
-            //      시작과 끝이 안 맞아서 모든 주파수에 노이즈가 퍼짐 (spectral leakage).
-            // Array.Copy = 원본을 보존하기 위해 복사본을 만들어서 처리.
+            // ── 1단계: 디트렌드 (DC + 선형 추세 제거) ──
             double[] ud = new double[N]; Array.Copy(u, ud, N); Detrend(ud);
             double[] yd = new double[N]; Array.Copy(y, yd, N); Detrend(yd);
 
-            // ── 2단계: FFT (시간→주파수 변환) ──
-            // 제로패딩: 데이터 뒤에 0을 붙여서 FFT 크기를 2N 이상으로.
-            // 왜? FFT로 필터링하면 "순환 합성곱"이 되는데, 제로패딩하면
-            //      "선형 합성곱"과 같아져서 시작/끝 아티팩트가 사라짐.
-            // NextPow2 = 2의 거듭제곱으로 올림 (FFT가 효율적으로 작동하는 크기)
-            int Nfft = NextPow2(2 * N);
-            Complex[] U = new Complex[Nfft];
-            Complex[] Y = new Complex[Nfft];
-            for (int i = 0; i < N; i++)
-            {
-                U[i] = new Complex(ud[i], 0);
-                Y[i] = new Complex(yd[i], 0);
-            }
-            // [N..Nfft) 은 0 → 제로패딩
-
-            Fourier.Forward(U, FourierOptions.Matlab);
-            Fourier.Forward(Y, FourierOptions.Matlab);
-
-            double fs = 1.0 / dt;
-
+            // ── 2단계: 참조 모델 M(z) 이산화 (Tustin, θ 와 무관 → LM 외부에서 한 번만) ──
+            // M(s) = exp(-s·τM) / (1 + s·aM)^nM,  aM = 0.2·Ts
+            // 1차 LP H₁(z) = (1 + z⁻¹) / (β₀ + β₁ z⁻¹)
+            //   β₀ = 1 + 2aM/dt,  β₁ = 1 - 2aM/dt
+            // nM 번 캐스케이드. 순수 지연은 정수 틱 shift 로 처리.
             double ts = Math.Max(0.05, s.SettlingTimeTs);
             int nM = ClampInt(s.ModelOrderNm, 1, 10);
             double tauM = Math.Max(0.0, s.ModelDelayTau);
+            double aM = 0.2 * ts;
+            double beta0 = 1.0 + 2.0 * aM / dt;
+            double beta1 = 1.0 - 2.0 * aM / dt;
+            int delayN = Math.Max(0, (int)Math.Round(tauM / dt));
 
-            double wW = 2.0 * Math.PI * Math.Max(0.01, s.CutoffHz); // rad/s
+            // ── 3단계: per-sample 가중치 (포화: SAT_WEIGHT, 나머지: 1) ──
+            const double SAT_WEIGHT = 1e-3;
+            double[] sqrtW = new double[N];
+            for (int i = 0; i < N; i++) sqrtW[i] = Math.Sqrt(sat[i] ? SAT_WEIGHT : 1.0);
 
-            Complex[] UF = new Complex[Nfft];
-            Complex[] EF = new Complex[Nfft];
-
-            // ── 3단계: 주파수 영역에서 VRFT 필터 적용 ──
-            // 각 주파수 빈(bin)마다 M, W, F를 계산하고, 가상 에러를 구함.
-            for (int k = 0; k < Nfft; k++)
+            // ── 4단계: LM 모델 함수 (θ → √w · ŷ) ──
+            Func<MathNet.Numerics.LinearAlgebra.Vector<double>,
+                 MathNet.Numerics.LinearAlgebra.Vector<double>,
+                 MathNet.Numerics.LinearAlgebra.Vector<double>> model = (theta, xUnused) =>
             {
-                // FFT 출력의 인덱스 → 실제 주파수 변환:
-                // k=0 → DC(0Hz), k=1 → fs/Nfft Hz, ..., k=Nfft/2 → Nyquist
-                // k > Nfft/2 → 음의 주파수 (대칭)
-                int ks = (k <= Nfft / 2) ? k : (k - Nfft);   // 부호 있는 인덱스
-                double f = (double)ks * fs / (double)Nfft;    // 주파수 (Hz)
-                double w = 2.0 * Math.PI * f;                 // 각주파수 (rad/s)
-                Complex jw = new Complex(0, w);               // jw = 허수 * w (라플라스 변환의 s=jw)
+                double kp = Math.Max(1e-6, theta[0]);
+                double ti = Math.Max(1e-3, theta[1]);
+                double td = Math.Max(0.0,  theta[2]);
 
-                // (3.0.17) 참조모델 M: "폐루프가 이렇게 반응했으면 좋겠다"
-                // 분자: exp(-jw*tau) = 순수 지연 (tau초 뒤에 반응 시작)
-                // 분모: (1 + jw*0.2*ts)^nM = nM차 저역통과 (부드럽게 감쇠)
-                Complex denom = Complex.Pow(Complex.One + jw * (0.2 * ts), nM);
-                Complex Mf = Complex.Exp(-jw * tauM) / denom;
+                // PID 이산화 (backward Euler for I and D):
+                //   C(z) = Kp · (a₀ + a₁z⁻¹ + a₂z⁻²) / (1 - z⁻¹)
+                //     a₀ = 1 + dt/Ti + Td/dt
+                //     a₁ = -(1 + 2·Td/dt)
+                //     a₂ = Td/dt
+                double a0 = 1.0 + dt/ti + td/dt;
+                double a1 = -(1.0 + 2.0*td/dt);
+                double a2 = td/dt;
 
-                // (3.0.18) 가중 필터 W: 1차 저역통과. 고주파 노이즈 억제.
-                Complex W = (wW) / (jw + wW);
+                // 1/C(z) 안정성: C 분자 polynomial (a₀ z² + a₁ z + a₂) 의 zero 가 단위원 내부?
+                double disc = a1*a1 - 4.0*a0*a2;
+                bool stable;
+                if (disc >= 0)
+                {
+                    double sqrtD = Math.Sqrt(disc);
+                    double z1 = (-a1 + sqrtD) / (2.0*a0);
+                    double z2 = (-a1 - sqrtD) / (2.0*a0);
+                    stable = (Math.Abs(z1) < 0.9999 && Math.Abs(z2) < 0.9999);
+                }
+                else
+                {
+                    // 복소 conjugate pair: |z|² = a₂/a₀
+                    stable = (a2/a0 < 0.9999);
+                }
 
-                // (2.3.11) 모델 매칭 필터 F = M*(1-M)*W
-                // 밴드패스 특성: DC에서 0 (M≈1이면 1-M≈0), 고주파에서 0 (W가 억제)
-                Complex F = Mf * (Complex.One - Mf) * W;
+                var result = VB.Dense(N);
+                if (!stable)
+                {
+                    // soft barrier: LM 이 unstable region 으로 가면 큰 residual 로 후퇴 유도
+                    for (int i = 0; i < N; i++) result[i] = 1e6 * sqrtW[i];
+                    return result;
+                }
 
-                // 가상 레퍼런스: "이 y가 M 폐루프에서 나왔다면, 입력은 뭐였을까?"
-                // rv = Y / M (M의 역) → 가상 에러 ev = rv - Y
-                Complex rv = (Mf.Magnitude < 1e-12) ? Complex.Zero : (Y[k] / Mf);
-                Complex ev = rv - Y[k];
+                // ── (a) e = (1/C) · u  ─ 시간 영역 IIR 역필터 ──
+                //   (1 - z⁻¹) · u[k] = Kp · (a₀ + a₁z⁻¹ + a₂z⁻²) · e[k]
+                //   e[k] = (u[k] - u[k-1] - Kp·a₁·e[k-1] - Kp·a₂·e[k-2]) / (Kp·a₀)
+                double[] e = new double[N];
+                for (int k = 0; k < N; k++)
+                {
+                    double uPrev = (k > 0) ? ud[k-1] : 0.0;
+                    double e1 = (k > 0) ? e[k-1] : 0.0;
+                    double e2 = (k > 1) ? e[k-2] : 0.0;
+                    e[k] = ((ud[k] - uPrev) - kp*a1*e1 - kp*a2*e2) / (kp*a0);
+                }
 
-                // F로 필터링: uF = F*U, eF = F*ev
-                UF[k] = F * U[k];
-                EF[k] = F * ev;
+                // ── (b) 가상 레퍼런스 r̃ = y + e ──
+                double[] rt = new double[N];
+                for (int k = 0; k < N; k++) rt[k] = yd[k] + e[k];
+
+                // ── (c) 순수 지연: r̃_d[k] = r̃[k - delayN] ──
+                double[] rtd = new double[N];
+                for (int k = 0; k < N; k++) rtd[k] = (k >= delayN) ? rt[k - delayN] : 0.0;
+
+                // ── (d) M(z) 캐스케이드: 1차 LP 를 nM 번 적용 ──
+                //   y[k] = (x[k] + x[k-1] - β₁·y[k-1]) / β₀
+                double[] cur = rtd;
+                for (int stage = 0; stage < nM; stage++)
+                {
+                    double[] next = new double[N];
+                    for (int k = 0; k < N; k++)
+                    {
+                        double xPrev = (k > 0) ? cur[k-1] : 0.0;
+                        double yPrev = (k > 0) ? next[k-1] : 0.0;
+                        next[k] = (cur[k] + xPrev - beta1*yPrev) / beta0;
+                    }
+                    cur = next;
+                }
+
+                // ── (e) √w 스케일 + NaN/Inf 검사 ──
+                for (int i = 0; i < N; i++)
+                {
+                    double v = sqrtW[i] * cur[i];
+                    if (double.IsNaN(v) || double.IsInfinity(v))
+                    {
+                        // 수치 발산 → soft barrier
+                        for (int j = 0; j < N; j++) result[j] = 1e6 * sqrtW[j];
+                        return result;
+                    }
+                    result[i] = v;
+                }
+                return result;
+            };
+
+            // ── 5단계: 관측값 (√w · y) + 초기값 sanity ──
+            var obsX = VB.Dense(N, i => (double)i);                       // dummy
+            var obsY = VB.Dense(N, i => sqrtW[i] * yd[i]);
+
+            if (Kp0 <= 1e-6 || double.IsNaN(Kp0) || Kp0 > 1.0) Kp0 = 0.1;
+            if (Ti0 <= 0.1 || Ti0 >= 250.0 || double.IsNaN(Ti0)) Ti0 = Math.Max(0.5, ts * 2.0);
+            if (Td0 < 0 || Td0 > 10.0 || double.IsNaN(Td0)) Td0 = 0.05;
+            var initial = VB.DenseOfArray(new[] { Kp0, Ti0, Td0 });
+
+            // ── 6단계: LM 최적화 ──
+            var objective = MathNet.Numerics.Optimization.ObjectiveFunction.NonlinearModel(model, obsX, obsY);
+            var lm = new MathNet.Numerics.Optimization.LevenbergMarquardtMinimizer(maximumIterations: 30);
+            MathNet.Numerics.Optimization.NonlinearMinimizationResult lmResult;
+            try
+            {
+                lmResult = lm.FindMinimum(objective, initial);
+            }
+            catch (Exception ex)
+            {
+                return new FritResult
+                {
+                    Kp = Kp0, Ti = Ti0, Td = Td0,
+                    Rmse = double.NaN,
+                    Warning = "LM failed / LM 실패: " + ex.Message,
+                    Iterations = 0,
+                    Converged = false
+                };
             }
 
-            // ── 4단계: IFFT (주파수→시간 복원) ──
-            Fourier.Inverse(UF, FourierOptions.Matlab);
-            Fourier.Inverse(EF, FourierOptions.Matlab);
+            double Kp = lmResult.MinimizingPoint[0];
+            double Ti = lmResult.MinimizingPoint[1];
+            double Td = lmResult.MinimizingPoint[2];
 
-            // 제로패딩했으므로 유효 구간은 원래 데이터 길이 [0, N)만 사용
-            double[] uF = new double[N];
-            double[] eF = new double[N];
+            // ── 7단계: RMSE (가중 제외, 포화 인덱스 제외, raw 잔차) ──
+            var finalWeighted = model(lmResult.MinimizingPoint, obsX);
+            double sse = 0;
+            int nValid = 0;
             for (int i = 0; i < N; i++)
             {
-                uF[i] = UF[i].Real;
-                eF[i] = EF[i].Real;
+                if (sat[i]) continue;
+                double pred = finalWeighted[i] / sqrtW[i];     // unweight
+                double err = yd[i] - pred;
+                sse += err * err;
+                nValid++;
             }
+            double rmse = (nValid > 0) ? Math.Sqrt(sse / nValid) : double.NaN;
 
-            int drop = ClampInt(s.DropEdgeSamples, 0, N / 3);
-            int i0 = drop;
-            int i1 = N - drop;
-            int L = i1 - i0;
-
-            if (L < 64) throw new Exception("Drop too large, insufficient valid samples / Drop이 너무 큼.");
-
-            // ── 5단계: PID 회귀 벡터 구성 ──
-            // 목표: uF ≈ Kp*eF + (Kp/Ti)*∫eF + Kp*Td*d(eF)/dt
-            // 즉:   bv  ≈ rho1*phi1 + rho2*phi2 + rho3*phi3
-            //
-            // phi1 = eF 그 자체          → P항 (비례)
-            // phi2 = eF의 적분           → I항 (적분)
-            // phi3 = eF의 미분           → D항 (미분)
-            // bv   = uF (맞춰야 할 목표)
-            double[] phi1 = new double[L]; // P항: eF
-            double[] phi2 = new double[L]; // I항: ∫eF (사다리꼴 적분)
-            double[] phi3 = new double[L]; // D항: d(eF)/dt (중심 차분)
-            double[] bv = new double[L];   // 목표: uF
-
-            // 사다리꼴 적분 (Tustin): (eF[i-1]+eF[i])/2 * dt
-            // 전방 Euler보다 정확 (O(dt²) vs O(dt))
-            double integ = 0.0;
-            for (int i = 0; i < L; i++)
-            {
-                int idx = i0 + i;
-                if (i > 0)
-                    integ += 0.5 * (eF[idx - 1] + eF[idx]) * dt;
-
-                phi1[i] = eF[idx];
-                phi2[i] = integ;
-                bv[i] = uF[idx];
-            }
-
-            // 중심 차분: (eF[i+1]-eF[i-1]) / (2*dt)
-            // 후방 차분 (eF[i]-eF[i-1])/dt 보다 정확 (O(dt²))
-            // 첫/끝 점은 중심 차분 불가 → 전방/후방 차분 사용
-            for (int i = 0; i < L; i++)
-            {
-                int idx = i0 + i;
-                if (i == 0)
-                    phi3[i] = (eF[idx + 1] - eF[idx]) / dt;
-                else if (i == L - 1)
-                    phi3[i] = (eF[idx] - eF[idx - 1]) / dt;
-                else
-                    phi3[i] = (eF[idx + 1] - eF[idx - 1]) / (2.0 * dt);
-            }
-
-            // ── 6단계: 컬럼 스케일링 ──
-            // phi1, phi2, phi3��� 크기(스케일)가 완전히 다름:
-            //   phi1 ~ O(1), phi2 ~ O(수십, 적분이라 누적), phi3 ~ O(50, 미분이라 1/dt)
-            // SVD/TLS는 모든 열이 비슷한 크기라고 가정 → 스케일링 필수.
-            // RMS (Root Mean Square) = sqrt(sum(x²)/N) 로 각 열을 정규화.
-            double scale1 = 0, scale2 = 0, scale3 = 0, scaleB = 0;
-            for (int i = 0; i < L; i++)
-            {
-                scale1 += phi1[i] * phi1[i];
-                scale2 += phi2[i] * phi2[i];
-                scale3 += phi3[i] * phi3[i];
-                scaleB += bv[i] * bv[i];
-            }
-            scale1 = scale1 > 0 ? Math.Sqrt(scale1 / L) : 1.0;
-            scale2 = scale2 > 0 ? Math.Sqrt(scale2 / L) : 1.0;
-            scale3 = scale3 > 0 ? Math.Sqrt(scale3 / L) : 1.0;
-            scaleB = scaleB > 0 ? Math.Sqrt(scaleB / L) : 1.0;
-
-            double invS1 = 1.0 / scale1, invS2 = 1.0 / scale2, invS3 = 1.0 / scale3, invSB = 1.0 / scaleB;
-
-            // ── 7단계: 조건수 진단 ──
-            // 조건수 = 최대 특이값 / 최소 특이값.
-            // 큰 조건수(>10^6) = 행렬이 거의 특이(singular) → 해가 불안정.
-            // 원인: 가진이 부족하거나, 데이터가 특정 방향으로만 분포.
-            Matrix<double> A = MB.Dense(L, 3);
-            for (int i = 0; i < L; i++)
-            {
-                A[i, 0] = phi1[i] * invS1;
-                A[i, 1] = phi2[i] * invS2;
-                A[i, 2] = phi3[i] * invS3;
-            }
-            var svdA = A.Svd();
-            double sMax = svdA.S[0];
-            double sMin = svdA.S[svdA.S.Count - 1];
-            double condNum = sMin > 1e-15 ? sMax / sMin : double.PositiveInfinity;
-
-            // ── 8단계: OLS (스케일링된 QR 최소자승) ──
-            // bv ≈ rho1*phi1 + rho2*phi2 + rho3*phi3 을 최소자승으로 풀기.
-            // QR 분해: A = Q*R → rho = R^{-1} * Q^T * b (수치적으로 안정)
-            //
-            // 왜 TLS 대신 OLS인가?
-            //   TLS는 모든 열에 같은 노이즈를 가정하지만, VRFT에서는
-            //   phi(=eF 유래)와 bv(=uF 유래)의 노이즈 구조가 다름.
-            //   → TLS가 해를 0 방향으로 축소(shrinkage) → Kp 과소추정.
-            //   FTD는 게임이라 측정 노이즈가 거의 없어서 OLS 편향도 미미.
-            var bScaled = VB.DenseOfArray(bv).Multiply(invSB);
-            var rhoScaled = A.QR().Solve(bScaled);
-            double Kp = rhoScaled[0] * (scaleB / scale1);
-            double aI = rhoScaled[1] * (scaleB / scale2);
-            double aD = rhoScaled[2] * (scaleB / scale3);
-
-            if (double.IsNaN(Kp) || double.IsInfinity(Kp)) Kp = 0.0;
-            if (double.IsNaN(aI) || double.IsInfinity(aI)) aI = 0.0;
-            if (double.IsNaN(aD) || double.IsInfinity(aD)) aD = 0.0;
-
+            // ── 8단계: 경계 클램프 + 경고 ──
             string warning = null;
-
-            if (condNum > 1e6)
-                warning = $"High regression condition number ({condNum:0.0e0}). Check excitation. / 회귀 조건수가 높습니다({condNum:0.0e0}).";
-
-            if (Kp < 0)
-            {
-                warning = (warning == null ? "" : warning + " / ") +
-                          $"Kp regression is negative ({Kp:0.000}). Phase inversion or poor data quality. / Kp 음수({Kp:0.000}).";
-                Kp = 0;
-            }
-
-            double nyquist = fs / 2.0;
-            if (s.CutoffHz > nyquist)
-                warning = (warning == null ? "" : warning + " / ") +
-                          $"f_W({s.CutoffHz:0.0}Hz) exceeds Nyquist({nyquist:0.0}Hz). Lower f_W. / f_W가 Nyquist를 초과합니다.";
-
-            // ── Ti 결정 ──
-            // F=M(1-M)W는 DC에서 0 → aI 추정이 구조적으로 부정확.
-            // VRFT 값이 합리적이면 사용, 아니면 IMC 규칙 fallback.
-            // IMC: Ti = 플랜트 시정수 ≈ M의 시정수 × nM = 0.2*Ts*2 = 0.4*Ts
-            double Ti_imc = 0.4 * Math.Max(0.2, s.SettlingTimeTs);
-            double Ti_vrft = 250.0;
-            if (aI > 1e-12 && Kp > 1e-12) Ti_vrft = Kp / aI;
-
-            double Ti;
-            if (Ti_vrft > 0.1 && Ti_vrft < 100.0)
-                Ti = Ti_vrft;  // VRFT 추정이 합리적 범위
-            else
-                Ti = Ti_imc;   // IMC 규칙 fallback
-
+            if (Kp < 0) { warning = $"Kp<0 ({Kp:0.000}) clamped to 0"; Kp = 0; }
             if (Ti < 0.1) Ti = 0.1;
             if (Ti > 250.0) Ti = 250.0;
-
-            double Td = 0.0;
-            if (Kp > 1e-12) Td = aD / Kp;
             if (Td < 0) Td = 0;
+            if (Td > 10.0) Td = 10.0;
 
-            // RMSE
-            double sse = 0.0;
-            for (int i = 0; i < L; i++)
+            if (double.IsNaN(Kp) || double.IsInfinity(Kp)) { Kp = 0; warning = "Kp NaN/Inf"; }
+            if (double.IsNaN(Ti) || double.IsInfinity(Ti)) Ti = 250.0;
+            if (double.IsNaN(Td) || double.IsInfinity(Td)) Td = 0;
+
+            return new FritResult
             {
-                double pred = Kp * phi1[i] + aI * phi2[i] + aD * phi3[i];
-                double err = bv[i] - pred;
-                sse += err * err;
-            }
-            double rmse = Math.Sqrt(sse / Math.Max(1, L));
-
-            return new VrftResult { Kp = Kp, Ti = Ti, Td = Td, Rmse = rmse, Warning = warning };
-        }
-
-        // ============================================================
-        // MISO N4SID 서브스페이스 모델 식별
-        // 다중 입력(자기축 u + 타축 u) → 단일 출력(y) → 커플링 분리
-        // Hankel 행렬 → SVD → 상태공간(A,B,C,D) → IMC-PID (자기축만)
-        // ============================================================
-
-        private struct ModelPidResult
-        {
-            public double Kp, Ti, Td;
-            public string ModelInfo;
-            public double IdentRatio;  // cross-validation RMSE / std(y) — 낮을수록 모델 신뢰 ↑
-            public PemIdentifier.Model PemModel;        // PEM 교차검증용 (null if BLA)
-            public BlaIdentifier.FrfEstimate BlaFrf;    // BLA 교차검증용 (null if PEM)
-        }
-
-        /// <summary>PEM 교차검증: innovation form one-step-ahead prediction on hold-out data.</summary>
-        private static double PemCrossValRmse(PemIdentifier.Model model, double[] uVal, double[] yVal)
-        {
-            int N = Math.Min(uVal.Length, yVal.Length);
-            if (N < 10) return double.NaN;
-            int n = model.Order;
-            double[] x = new double[n];
-            double sse = 0;
-            for (int k = 0; k < N; k++)
-            {
-                double yPred = model.D * uVal[k];
-                for (int i = 0; i < n; i++) yPred += model.C[0, i] * x[i];
-
-                double e = yVal[k] - yPred;
-                sse += e * e;
-
-                // state update: x(k+1) = A x(k) + B u(k) + K e(k)
-                double[] xNext = new double[n];
-                for (int i = 0; i < n; i++)
-                {
-                    double s = model.B[i, 0] * uVal[k] + model.K[i, 0] * e;
-                    for (int j = 0; j < n; j++) s += model.A[i, j] * x[j];
-                    xNext[i] = s;
-                }
-                x = xNext;
-            }
-            return Math.Sqrt(sse / N);
-        }
-
-        /// <summary>BLA 교차검증: FRF 기반 시간 도메인 재구성 RMSE on hold-out data.</summary>
-        private static double BlaCrossValRmse(BlaIdentifier.FrfEstimate frf, double[] uVal, double[] yVal, double dt)
-        {
-            int N = Math.Min(uVal.Length, yVal.Length);
-            if (N < 10) return double.NaN;
-            int K = frf.Freqs.Length;
-            const double COH_MIN = 0.3;
-
-            // 각 주파수 빈에서 U_k = Goertzel(u), Y_pred_k = G_k * U_k
-            // 시간 도메인 재구성: y_pred(t) = (2/N) Σ Re(Y_pred_k · e^{jω_k·t·dt})
-            double[] yPred = new double[N];
-            for (int k = 0; k < K; k++)
-            {
-                if (frf.Coherence[k] < COH_MIN) continue;
-                if (double.IsNaN(frf.G[k].Magnitude) || double.IsInfinity(frf.G[k].Magnitude)) continue;
-
-                double omegaPerSample = 2 * Math.PI * frf.Freqs[k] * dt;
-                var Uk = BlaIdentifier.Goertzel(uVal, omegaPerSample, N);
-                var Ypk = frf.G[k] * Uk;
-
-                double scale = 2.0 / N;
-                for (int t = 0; t < N; t++)
-                {
-                    double phase = omegaPerSample * t;
-                    yPred[t] += scale * (Ypk.Real * Math.Cos(phase) - Ypk.Imaginary * Math.Sin(phase));
-                }
-            }
-
-            double sse = 0;
-            for (int t = 0; t < N; t++)
-            {
-                double err = yVal[t] - yPred[t];
-                sse += err * err;
-            }
-            return Math.Sqrt(sse / N);
-        }
-        // ============================================================
-        private static ModelPidResult ComputePemPid(double[] u, double[] y, double dt)
-        {
-            int N = Math.Min(u.Length, y.Length);
-            if (N < 200) throw new Exception("Too few samples for PEM (need >= 200)");
-
-            // ── 0. 입력 sanity check ──
-            // NaN/Inf, 가진 전무(u std ≈ 0), 응답 전무(y std ≈ 0) 차단 → silent 실패 방지
-            double sumU = 0, sumU2 = 0, sumY = 0, sumY2 = 0;
-            for (int i = 0; i < N; i++)
-            {
-                if (double.IsNaN(u[i]) || double.IsInfinity(u[i])) throw new Exception("u has NaN/Inf");
-                if (double.IsNaN(y[i]) || double.IsInfinity(y[i])) throw new Exception("y has NaN/Inf");
-                sumU += u[i]; sumU2 += u[i] * u[i];
-                sumY += y[i]; sumY2 += y[i] * y[i];
-            }
-            double stdU = Math.Sqrt(Math.Max(0, sumU2 / N - (sumU / N) * (sumU / N)));
-            double stdY = Math.Sqrt(Math.Max(0, sumY2 / N - (sumY / N) * (sumY / N)));
-            if (stdU < 1e-5) throw new Exception($"Excitation too weak (std(u)={stdU:0.0e})");
-            if (stdY < 1e-5) throw new Exception($"Response too weak (std(y)={stdY:0.0e})");
-
-            // ── 1. PBSID-opt 초기 식별 ──
-            // n=2 항상 실행 + n=3 조건부 시도 → innovation cost 비교 → 더 나은 쪽 선택.
-            // 이전: n=3 먼저 시도 → sanity만 보고 선택 → PSO에서 경계값(Kp=0.001) 발생.
-            // 개선: 둘 다 돌리고 실제 cost로 비교.
-            int pastP = Math.Min(30, N / 8);
-
-            // n=2 (항상)
-            var init2 = PemIdentifier.IdentifyPbsid(u, y, pastP, orderCap: 2);
-            var refined = PemIdentifier.RefinePem(init2, u, y, maxIter: 15, tol: 1e-6);
-
-            // n=3 시도 → sanity check + cost 비교
-            try
-            {
-                var init3 = PemIdentifier.IdentifyPbsid(u, y, pastP, orderCap: 3);
-                if (init3.Order >= 3)  // Gavish-Donoho가 실제로 n≥3 제안한 경우만
-                {
-                    var ref3 = PemIdentifier.RefinePem(init3, u, y, maxIter: 15, tol: 1e-6);
-                    int n3 = ref3.Order;
-
-                    // Sanity check
-                    bool sane = true;
-                    double dcG3;
-                    try
-                    {
-                        var IA3 = MB.DenseIdentity(n3) - ref3.A;
-                        var IAB3 = IA3.Solve(ref3.B);
-                        dcG3 = ref3.D;
-                        for (int k = 0; k < n3; k++) dcG3 += ref3.C[0, k] * IAB3[k, 0];
-                    }
-                    catch { dcG3 = double.NaN; sane = false; }
-
-                    if (double.IsNaN(dcG3) || Math.Abs(dcG3) < 0.01 || Math.Abs(dcG3) > 100)
-                        sane = false;
-
-                    if (sane)
-                    {
-                        var eig3 = ref3.A.Evd();
-                        for (int k = 0; k < n3; k++)
-                            if (eig3.EigenValues[k].Magnitude >= 0.99) { sane = false; break; }
-                    }
-
-                    // n=3이 sanity 통과 + innovation cost가 n=2보다 낮으면 채택
-                    if (sane && ref3.InnovationRms < refined.InnovationRms * 0.9)
-                        refined = ref3;
-                }
-            }
-            catch { /* n=3 실패 → n=2 유지 */ }
-            int n = refined.Order;
-            var A = refined.A;
-            var B = refined.B;
-            var C = refined.C;
-            double D_sc = refined.D;
-
-            // ── 3. 모델 분석 ──
-            var eigA = A.Evd();
-            double dominantTau = dt;
-            for (int k = 0; k < n; k++)
-            {
-                double mag = eigA.EigenValues[k].Magnitude;
-                if (mag < 1e-10 || mag >= 1.0) continue;
-                double tau_k = -dt / Math.Log(mag);
-                if (tau_k > dominantTau) dominantTau = tau_k;
-            }
-
-            double dcGain;
-            try
-            {
-                var IA = MB.DenseIdentity(n) - A;
-                var IAB = IA.Solve(B);
-                dcGain = D_sc;
-                for (int k = 0; k < n; k++) dcGain += C[0, k] * IAB[k, 0];
-            }
-            catch { dcGain = double.NaN; }
-
-            // ── DC 게인 보정 (음수 플립 + 스텝 스케일링) ──
-            if (dcGain < -1e-6)
-            {
-                for (int k = 0; k < n; k++) B[k, 0] = -B[k, 0];
-                D_sc = -D_sc;
-                dcGain = -dcGain;
-            }
-            double refScale = (!double.IsNaN(dcGain) && dcGain > 1e-3)
-                ? Math.Min(1.0, Math.Abs(dcGain) * 0.8)
-                : 1.0;
-
-            // ── 4. PSO + 폐루프 시뮬 (1-샘플 지연 측정) ──
-            int simLen = Math.Min(800, Math.Max(200, (int)(6.0 * dominantTau / dt)));
-            double targetTs = Math.Max(0.5, 2.0 * dominantTau);
-            double tauM = 0.2 * targetTs;
-
-            double[] yTarget = new double[simLen];
-            for (int k = 0; k < simLen; k++)
-            {
-                double tm = k * dt / tauM;
-                yTarget[k] = refScale * (1.0 - (1.0 + tm) * Math.Exp(-tm));
-            }
-
-            double[,] Ac = new double[n, n];
-            double[] Bc = new double[n];
-            double[] Cc = new double[n];
-            for (int r = 0; r < n; r++)
-            {
-                for (int c = 0; c < n; c++) Ac[r, c] = A[r, c];
-                Bc[r] = B[r, 0];
-                Cc[r] = C[0, r];
-            }
-            double Dc = D_sc;
-
-            Func<double, double, double, double> evaluate = (tryKp, tryTi, tryTd) =>
-            {
-                double[] x = new double[n];
-                double[] xNext = new double[n];
-                double integ = 0, prevE = 0, yMeas = 0, maxY = 0, cost = 0;
-
-                for (int k = 0; k < simLen; k++)
-                {
-                    double r = refScale;
-                    double e = r - yMeas;
-                    integ += e * dt;
-                    double deriv = (k > 0) ? (e - prevE) / dt : 0;
-                    prevE = e;
-
-                    double uk = tryKp * (e + integ / tryTi + tryTd * deriv);
-                    if (uk > 1.0) uk = 1.0;
-                    else if (uk < -1.0) uk = -1.0;
-
-                    double yk = Dc * uk;
-                    for (int i2 = 0; i2 < n; i2++) yk += Cc[i2] * x[i2];
-
-                    for (int i2 = 0; i2 < n; i2++)
-                    {
-                        double s = Bc[i2] * uk;
-                        for (int jj = 0; jj < n; jj++) s += Ac[i2, jj] * x[jj];
-                        xNext[i2] = s;
-                    }
-                    var tmp = x; x = xNext; xNext = tmp;
-
-                    if (double.IsNaN(yk) || double.IsInfinity(yk) || Math.Abs(yk) > 100)
-                        return double.MaxValue;
-
-                    double err = yTarget[k] - yk;
-                    cost += k * dt * Math.Abs(err) * dt;
-                    if (yk > maxY) maxY = yk;
-                    yMeas = yk;
-                }
-                cost += 10.0 * Math.Max(0, maxY - refScale);
-                return cost;
-            };
-
-            const int nParticles = 20;
-            const int maxIter = 30;
-            const double w_pso = 0.7;
-            const double c1 = 1.5;
-            const double c2 = 1.5;
-            double[] lo = { Math.Log(0.001), Math.Log(0.1),  Math.Log(0.01) };
-            double[] hi = { Math.Log(1.0),   Math.Log(250.0), Math.Log(10.0) };
-
-            // 멀티시드 앙상블: 3개 독립 PSO 실행 → 최저 cost 선택
-            // 단일 시드(42)는 재현성 좋지만 지역해에 갇힐 수 있음.
-            // 여러 시드로 초기 분포 다양화 → 전역해 도달 확률 ↑, variance 추정 가능.
-            int[] seeds = { 42, 17, 83 };
-            double[] globalBest = new double[3];
-            double globalBestCost = double.MaxValue;
-
-            foreach (int seed in seeds)
-            {
-                var rng = new System.Random(seed);
-                double[][] pos = new double[nParticles][];
-                double[][] vel = new double[nParticles][];
-                double[][] pBest = new double[nParticles][];
-                double[] pBestCost = new double[nParticles];
-                double[] gBest = new double[3];
-                double gBestCost = double.MaxValue;
-
-                for (int p = 0; p < nParticles; p++)
-                {
-                    pos[p] = new double[3]; vel[p] = new double[3]; pBest[p] = new double[3];
-                    for (int d = 0; d < 3; d++)
-                    {
-                        pos[p][d] = lo[d] + rng.NextDouble() * (hi[d] - lo[d]);
-                        vel[p][d] = (rng.NextDouble() - 0.5) * (hi[d] - lo[d]) * 0.1;
-                        pBest[p][d] = pos[p][d];
-                    }
-                    double cost = evaluate(Math.Exp(pos[p][0]), Math.Exp(pos[p][1]), Math.Exp(pos[p][2]));
-                    pBestCost[p] = cost;
-                    if (cost < gBestCost) { gBestCost = cost; Array.Copy(pos[p], gBest, 3); }
-                }
-
-                for (int it = 0; it < maxIter; it++)
-                {
-                    for (int p = 0; p < nParticles; p++)
-                    {
-                        for (int d = 0; d < 3; d++)
-                        {
-                            double r1 = rng.NextDouble();
-                            double r2 = rng.NextDouble();
-                            vel[p][d] = w_pso * vel[p][d]
-                                      + c1 * r1 * (pBest[p][d] - pos[p][d])
-                                      + c2 * r2 * (gBest[d] - pos[p][d]);
-                            pos[p][d] += vel[p][d];
-                            if (pos[p][d] < lo[d]) { pos[p][d] = lo[d]; vel[p][d] = 0; }
-                            if (pos[p][d] > hi[d]) { pos[p][d] = hi[d]; vel[p][d] = 0; }
-                        }
-                        double cost = evaluate(Math.Exp(pos[p][0]), Math.Exp(pos[p][1]), Math.Exp(pos[p][2]));
-                        if (cost < pBestCost[p])
-                        {
-                            pBestCost[p] = cost;
-                            Array.Copy(pos[p], pBest[p], 3);
-                            if (cost < gBestCost) { gBestCost = cost; Array.Copy(pos[p], gBest, 3); }
-                        }
-                    }
-                }
-
-                if (gBestCost < globalBestCost)
-                {
-                    globalBestCost = gBestCost;
-                    Array.Copy(gBest, globalBest, 3);
-                }
-            }
-
-            // PSO 수렴 검사: 모든 particle 이 MaxValue 반환 → 식별된 모델이 시뮬에 부적합
-            // (주로 불안정한 A 또는 비현실적 DC/임펄스 → |y|>100 감지 → 모든 cost = MaxValue)
-            if (globalBestCost >= 1e100 || double.IsNaN(globalBestCost) || double.IsInfinity(globalBestCost))
-                throw new Exception("PEM PSO diverged (identified model unsuitable for sim)");
-
-            double bestKp = Math.Round(Math.Max(0.001, Math.Min(1.0,   Math.Exp(globalBest[0]))), 3);
-            double bestTi = Math.Round(Math.Max(0.1,   Math.Min(250.0, Math.Exp(globalBest[1]))), 1);
-            double bestTd = Math.Round(Math.Max(0.0,   Math.Min(10.0,  Math.Exp(globalBest[2]))), 1);
-
-            // ── 경계값 감지: 3개 파라미터 모두 경계에 붙으면 모델이 시뮬에 부적합 ──
-            // Kp=0.001(하한), Ti=250(상한), Td≤0.1(하한 근접) → 식별 모델 reject
-            double boundaryEps = 0.05; // log 공간에서 경계 근접 판정
-            bool kpAtBound = Math.Abs(globalBest[0] - lo[0]) < boundaryEps;
-            bool tiAtBound = Math.Abs(globalBest[1] - hi[1]) < boundaryEps;
-            if (kpAtBound && tiAtBound)
-                throw new Exception("PEM PSO stuck at bounds (model likely unsuitable)");
-
-            // 식별 신뢰도: innovation RMS / std(y). 0에 가까울수록 모델이 y를 잘 설명.
-            double identRatio = (stdY > 1e-10) ? (refined.InnovationRms / stdY) : double.NaN;
-
-            string dcStr = double.IsNaN(dcGain) ? "int" : dcGain.ToString("0.00");
-            string lowDcWarn = (!double.IsNaN(dcGain) && dcGain < 0.3)
-                ? " [⚠ low DC: Kp may hit limit / 저DC: Kp 한계 도달 가능]" : "";
-            string info = $"PEM n={n} DC={dcStr} τp={dominantTau:0.00} D={D_sc:0.000} ident={identRatio:0.00} cost={globalBestCost:0.000e0}{lowDcWarn}";
-
-            return new ModelPidResult { Kp = bestKp, Ti = bestTi, Td = bestTd, ModelInfo = info, IdentRatio = identRatio, PemModel = refined };
-        }
-
-        // ============================================================
-        // BLA (Best Linear Approximation) — Frequency-domain ML
-        // 멀티사인 가진 + 도구변수 (r) 로 폐루프 무편향 FRF 추정.
-        // 주파수 도메인에서 직접 PID 매칭 (파라미터 SS 모델 생략).
-        // 참조: Pintelon-Schoukens 2012.
-        // ============================================================
-        private static ModelPidResult ComputeBlaPid(double[] u, double[] y, double[] r, double dt, Settings s)
-        {
-            int N = Math.Min(Math.Min(u.Length, y.Length), r.Length);
-            if (N < 200) throw new Exception("Too few samples for BLA (need >= 200)");
-
-            // 입력 sanity
-            double sumR = 0, sumR2 = 0;
-            for (int i = 0; i < N; i++) { sumR += r[i]; sumR2 += r[i] * r[i]; }
-            double stdR = Math.Sqrt(Math.Max(0, sumR2 / N - (sumR / N) * (sumR / N)));
-            if (stdR < 1e-5) throw new Exception($"Excitation r std too low ({stdR:0.0e})");
-
-            // 1. 멀티사인 주파수 재구성 (settings에서, ApplyExcitation 과 동일 식)
-            double fBase = Math.Max(0.01, s.ExciteFreqHz);
-            double fMax = Math.Max(fBase * 2.0, s.ChirpEndHz);
-            const int nComp = 12;
-            double[] freqs = new double[nComp];
-            for (int k = 0; k < nComp; k++)
-                freqs[k] = fBase * Math.Pow(fMax / fBase, (double)k / (nComp - 1));
-
-            // 2. Welch-평균 FRF (도구변수법, 폐루프 노이즈/편향 감소)
-            //    윈도우 수는 데이터 길이로 조정: N 짧으면 M=1 폴백
-            int numSeg = N < 400 ? 1 : (N < 800 ? 3 : 4);
-            var frf = BlaIdentifier.EstimateFrf(u, y, r, freqs, dt, numSeg);
-
-            // 신뢰도 점검: γ² 기반. 0.3 이상이면 "합리적", 0.5 이상 "우수"
-            const double COH_MIN = 0.3;
-            int validBins = 0;
-            double meanCoh = 0;
-            for (int k = 0; k < nComp; k++)
-            {
-                if (frf.Coherence[k] > COH_MIN && !double.IsNaN(frf.G[k].Magnitude) && !double.IsInfinity(frf.G[k].Magnitude))
-                {
-                    validBins++;
-                    meanCoh += frf.Coherence[k];
-                }
-            }
-            if (validBins < 4) throw new Exception($"BLA: only {validBins}/{nComp} bins have γ²>{COH_MIN}");
-            meanCoh /= Math.Max(1, validBins);
-
-            // 3. 참조 모델 시상수
-            double fBand = Math.Sqrt(fBase * fMax);
-            double tauM = 1.0 / (2 * Math.PI * fBand * 2.0);
-
-            // 4. PSO + 주파수 도메인 비용 (coherence 가중)
-            //    cost = Σ_k γ²_k · |T_pred(jω_k) - M(jω_k)|²
-            //    신뢰도 낮은 bin 영향 자동 감소
-            Func<double, double, double, double> evaluate = (tryKp, tryTi, tryTd) =>
-            {
-                double cost = 0;
-                double totalWeight = 0;
-                for (int k = 0; k < nComp; k++)
-                {
-                    if (frf.Coherence[k] < COH_MIN) continue;
-                    if (double.IsNaN(frf.G[k].Magnitude) || double.IsInfinity(frf.G[k].Magnitude)) continue;
-
-                    double omega = 2 * Math.PI * freqs[k];
-                    var Kctrl = BlaIdentifier.PidFreqResponseRad(tryKp, tryTi, tryTd, omega);
-                    var GK = frf.G[k] * Kctrl;
-                    var T_pred = GK / (Complex.One + GK);
-                    var M = BlaIdentifier.ReferenceModel(omega, tauM, dt);
-                    var err = T_pred - M;
-                    double w_k = frf.Coherence[k]; // γ² ∈ (COH_MIN, 1]
-                    cost += w_k * (err.Real * err.Real + err.Imaginary * err.Imaginary);
-                    totalWeight += w_k;
-                }
-                if (totalWeight < 1e-10) return double.MaxValue;
-                return cost / totalWeight;
-            };
-
-            // PSO (같은 구조: 멀티시드, log-공간 탐색)
-            const int nParticles = 20;
-            const int maxIter = 30;
-            const double w_pso = 0.7;
-            const double c1 = 1.5;
-            const double c2 = 1.5;
-            double[] lo = { Math.Log(0.001), Math.Log(0.1),  Math.Log(0.01) };
-            double[] hi = { Math.Log(1.0),   Math.Log(250.0), Math.Log(10.0) };
-
-            int[] seeds = { 42, 17, 83 };
-            double[] gBestG = new double[3];
-            double gBestCostG = double.MaxValue;
-
-            foreach (int seed in seeds)
-            {
-                var rng = new System.Random(seed);
-                double[][] pos = new double[nParticles][];
-                double[][] vel = new double[nParticles][];
-                double[][] pBest = new double[nParticles][];
-                double[] pBestCost = new double[nParticles];
-                double[] gBest = new double[3];
-                double gBestCost = double.MaxValue;
-
-                for (int p = 0; p < nParticles; p++)
-                {
-                    pos[p] = new double[3]; vel[p] = new double[3]; pBest[p] = new double[3];
-                    for (int d = 0; d < 3; d++)
-                    {
-                        pos[p][d] = lo[d] + rng.NextDouble() * (hi[d] - lo[d]);
-                        vel[p][d] = (rng.NextDouble() - 0.5) * (hi[d] - lo[d]) * 0.1;
-                        pBest[p][d] = pos[p][d];
-                    }
-                    double cost = evaluate(Math.Exp(pos[p][0]), Math.Exp(pos[p][1]), Math.Exp(pos[p][2]));
-                    pBestCost[p] = cost;
-                    if (cost < gBestCost) { gBestCost = cost; Array.Copy(pos[p], gBest, 3); }
-                }
-
-                for (int it = 0; it < maxIter; it++)
-                {
-                    for (int p = 0; p < nParticles; p++)
-                    {
-                        for (int d = 0; d < 3; d++)
-                        {
-                            double r1 = rng.NextDouble();
-                            double r2 = rng.NextDouble();
-                            vel[p][d] = w_pso * vel[p][d]
-                                      + c1 * r1 * (pBest[p][d] - pos[p][d])
-                                      + c2 * r2 * (gBest[d] - pos[p][d]);
-                            pos[p][d] += vel[p][d];
-                            if (pos[p][d] < lo[d]) { pos[p][d] = lo[d]; vel[p][d] = 0; }
-                            if (pos[p][d] > hi[d]) { pos[p][d] = hi[d]; vel[p][d] = 0; }
-                        }
-                        double cost = evaluate(Math.Exp(pos[p][0]), Math.Exp(pos[p][1]), Math.Exp(pos[p][2]));
-                        if (cost < pBestCost[p])
-                        {
-                            pBestCost[p] = cost;
-                            Array.Copy(pos[p], pBest[p], 3);
-                            if (cost < gBestCost) { gBestCost = cost; Array.Copy(pos[p], gBest, 3); }
-                        }
-                    }
-                }
-
-                if (gBestCost < gBestCostG)
-                {
-                    gBestCostG = gBestCost;
-                    Array.Copy(gBest, gBestG, 3);
-                }
-            }
-
-            if (gBestCostG >= 1e100 || double.IsNaN(gBestCostG) || double.IsInfinity(gBestCostG))
-                throw new Exception("BLA PSO diverged");
-
-            double bestKp = Math.Round(Math.Max(0.001, Math.Min(1.0,   Math.Exp(gBestG[0]))), 3);
-            double bestTi = Math.Round(Math.Max(0.1,   Math.Min(250.0, Math.Exp(gBestG[1]))), 1);
-            double bestTd = Math.Round(Math.Max(0.0,   Math.Min(10.0,  Math.Exp(gBestG[2]))), 1);
-
-            // BLA 신뢰도: 교차검증 RMSE 로 대체 (이전: 1-γ², PEM과 스케일 불일치 문제)
-            string info = $"BLA seg={frf.NumSegments}×{frf.SegmentLength} bins={validBins}/{nComp} γ²={meanCoh:0.00} τM={tauM:0.00} cost={gBestCostG:0.000e0}";
-            return new ModelPidResult
-            {
-                Kp = bestKp, Ti = bestTi, Td = bestTd,
-                ModelInfo = info,
-                IdentRatio = 1.0 - meanCoh,  // fallback (교차검증 데이터 부족 시)
-                BlaFrf = frf
+                Kp = Kp, Ti = Ti, Td = Td,
+                Rmse = rmse,
+                Warning = warning,
+                Iterations = lmResult.Iterations,
+                Converged = (lmResult.ReasonForExit == MathNet.Numerics.Optimization.ExitCondition.Converged)
             };
         }
 

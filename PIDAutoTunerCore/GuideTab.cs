@@ -1,5 +1,5 @@
 // ============================================================================
-// GuideTab.cs — VRFT 사용 안내 탭
+// GuideTab.cs — FRIT 사용 안내 탭
 // ============================================================================
 
 using BrilliantSkies.Ai.Control.Pids;
@@ -16,7 +16,7 @@ namespace PIDAutoTuner
     {
         public GuideTab(ConsoleWindow window, VariableControllerMaster focus) : base(window, focus)
         {
-            this.Name = new Content("Guide / 안내", new ToolTip("How to use the VRFT auto-tuner.\n---\nVRFT 자동 튜너 사용법.", 220f), "guide");
+            this.Name = new Content("Guide / 안내", new ToolTip("How to use the FRIT auto-tuner.\n---\nFRIT 자동 튜너 사용법.", 220f), "guide");
         }
 
         public override void Build()
@@ -39,9 +39,9 @@ namespace PIDAutoTuner
                     "   PID 축이 활성화되어 있는지 확인"
                 ),
                 M.m<VariableControllerMaster>(new ToolTip(
-                    "VRFT assumes a linear, time-invariant plant.\n" +
+                    "FRIT reference-model matching works best on linear, time-invariant plants.\n" +
                     "Stable flight provides the best data quality.\n---\n" +
-                    "VRFT는 선형·시불변 플랜트를 가정합니다.\n" +
+                    "FRIT 의 참조 모델 매칭은 선형·시불변 플랜트에서 가장 정확합니다.\n" +
                     "안정 비행이 최고의 데이터 품질을 제공합니다.", 300f))
             ));
 
@@ -91,10 +91,10 @@ namespace PIDAutoTuner
                     "   필요 시 다른 축도 재튜닝 (롤→피치→요)"
                 ),
                 M.m<VariableControllerMaster>(new ToolTip(
-                    "VRFT has a structural limitation on Ti (integral time) estimation.\n" +
+                    "FRIT may converge to large Ti when the integral mode is poorly excited.\n" +
                     "If oscillation occurs, increase Ti manually.\n" +
                     "Tune axes sequentially for best results.\n---\n" +
-                    "VRFT는 Ti(적분 시간) 추정에 구조적 한계가 있습니다.\n" +
+                    "적분 모드 가진이 약하면 FRIT 가 큰 Ti 로 수렴할 수 있습니다.\n" +
                     "진동이 발생하면 Ti를 수동으로 올리세요.\n" +
                     "최상의 결과를 위해 축을 순차적으로 튜닝하세요.", 300f))
             ));
@@ -122,8 +122,8 @@ namespace PIDAutoTuner
                     "  → Reduce model delay (τ) or increase cutoff\n" +
                     "  → 모델 지연(τ)을 줄이거나 컷오프를 올리세요\n\n" +
                     "Ti = 250 (no integral) / Ti=250 (적분 없음):\n" +
-                    "  → Structural VRFT limitation. Set Ti manually\n" +
-                    "  → VRFT 구조적 한계. Ti를 수동 설정하세요"
+                    "  → Integral mode poorly excited. Set Ti manually or extend recording\n" +
+                    "  → 적분 가진 부족. Ti 수동 설정 또는 녹화 시간 연장"
                 ),
                 M.m<VariableControllerMaster>(new ToolTip(
                     "Common issues and solutions.\n---\n" +
