@@ -704,7 +704,7 @@ namespace PIDAutoTuner
         {
             ScreenSegmentTable table = base.CreateTableSegment(1, 10);
             table.BackgroundStyleWhereApplicable = ConsoleStyles.Instance.Styles.Segments.OptionalSegmentDarkBackgroundWithHeader.Style;
-            table.NameWhereApplicable = "FRIT Settings / FRIT 설정";
+            table.NameWhereApplicable = "FRIT Settings";
             table.SpaceAbove = 10f;
             table.SpaceBelow = 10f;
             table.SqueezeTable = false;
