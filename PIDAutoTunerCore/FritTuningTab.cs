@@ -46,7 +46,6 @@
 //   [자체] RoundToStep(v,step)              step 단위로 반올림
 //   [자체] NextPow2(n)                      2의 거듭제곱으로 올림
 //   [자체] Detrend(x)                       DC+선형추세 제거 (in-place)
-//   [자체] PickLongestBlock(starts,total)   블록 리스트에서 최장 구간 찾기
 //   [자체] StdDev(data)                     표준편차 계산
 //   [자체] EstimateDelay(u,y,dt)            임펄스 응답 기반 지연 추정
 //   [자체] EstimateSettlingTime(y,dt)       자기상관 기반 정착시간 추정
@@ -215,8 +214,9 @@ namespace PIDAutoTuner
             public int DropEdgeSamples = 64;        // FFT 양끝 아티팩트 버릴 개수
 
             // ===== 포화 처리 =====
-            public bool RejectSaturated = true;     // 포화 샘플을 버릴지
-            public float SaturationThreshold = 0.98f; // |u| >= 이 값이면 포화로 판정
+            public float SaturationThreshold = 0.98f;   // |u| >= 이 값이면 포화로 판정
+            public int   TransientTailSamples = 100;    // 포화 이후 IIR 회복 transient 구간 (≈2초)
+            public float MaxRecordingSec = 60.0f;       // 수집 안전 상한 (이 시간 넘으면 fail or 강제 종료)
 
             // ===== 가진(Excitation): 플랜트를 흔들어서 데이터를 만드는 신호 =====
             public bool ExciteEnabled = true;       // 가진 켤지
@@ -254,23 +254,16 @@ namespace PIDAutoTuner
             public bool Recording;                   // 지금 녹화 중인지
             public double T;                          // 경과 시간 (초)
 
-            public readonly List<double> U = new List<double>();          // 제어 출력 기록
-            public readonly List<double> Y = new List<double>();          // 프로세스 변수 기록
+            public readonly List<double> U = new List<double>();          // 제어 출력 기록 (전 샘플)
+            public readonly List<double> Y = new List<double>();          // 프로세스 변수 기록 (전 샘플)
             public readonly List<bool>   Saturated = new List<bool>();    // 이 샘플이 포화 중인지 (가중치용)
 
-            // ── 블록 관리 ──
-            // 포화 샘플을 버리면 시계열에 "구멍"이 생김.
-            // 구멍이 있는 데이터를 FFT하면 시간 정합이 깨짐.
-            // 해결: 구멍 전후를 "블록"으로 분리, 계산 시 가장 긴 블록만 사용.
-            // BlockStarts = [0, 512, 1024] → 블록: [0,512), [512,1024), [1024,끝)
-            public readonly List<int> BlockStarts = new List<int> { 0 };
-            public bool NeedNewBlock;  // 다음 유효 샘플에서 새 블록 시작 필요
-
+            // ── 포화 회복 추적 ──
+            // 포화 끝난 직후 1/C(z) IIR 역필터 state 가 회복하는 데 ~2초 (TransientTailSamples) 소요.
+            // 그 동안 계산되는 e[k] 가 오염됨 → 해당 인덱스는 FRIT 가중치에서 down-weight.
             public int SaturatedCount;
-            public int RejectedCount;
-            public int ConsecutiveSaturated;         // 현재 연속 포화 틱 수
-            public int ConsecutiveSatThreshold = 10; // 이 이상 연속이면 블록 분리
-            public double BlockStartT;               // 현재 블록의 시작 시간 (chirp 리셋용)
+            public int SamplesSinceLastSat;   // 마지막 포화 이후 경과 샘플 수
+            public int EffectiveValidCount;   // transient tail 밖에 있는 깨끗한 샘플 누적
 
             // 적응형 진폭 상태
             public double AdaptiveCurrentAmp;    // 현재 실제 적용 진폭
@@ -302,13 +295,9 @@ namespace PIDAutoTuner
                 U.Clear();
                 Y.Clear();
                 Saturated.Clear();
-                BlockStarts.Clear();
-                BlockStarts.Add(0);
-                NeedNewBlock = false;
                 SaturatedCount = 0;
-                RejectedCount = 0;
-                ConsecutiveSaturated = 0;
-                BlockStartT = 0;
+                SamplesSinceLastSat = int.MaxValue / 2;   // 시작 시 "이미 충분히 오래 깨끗" 상태
+                EffectiveValidCount = 0;
                 AdaptiveCurrentAmp = 0;
                 AdaptiveYSum = 0;
                 AdaptiveYSqSum = 0;
@@ -472,8 +461,9 @@ namespace PIDAutoTuner
                 // 정보량 판단: y 변동 (yStd/amp) AND u 제어 활동 (uStd) 둘 다 고려.
                 //   기존 yStd/amp 만 보면 강한 PID / 고주파 컷오프 상황에서 u가 활발해도 boost 됨
                 //   → 불필요한 포화 유발. u 가 이미 움직이면 FRIT 입장에서도 정보 충분.
+                // 현재 포화 중이면 통계 수집 자체 skip (포화 데이터는 std 왜곡).
                 if (_s.AdaptiveAmp && _s.ExciteEnabled && _autoState == AutoTuneState.Recording
-                    && _sess.ConsecutiveSaturated < _sess.ConsecutiveSatThreshold)
+                    && Math.Abs(u) < _s.SaturationThreshold)
                 {
                     _sess.AdaptiveYSum += y;
                     _sess.AdaptiveYSqSum += y * y;
@@ -506,53 +496,32 @@ namespace PIDAutoTuner
 
                         bool cooledDown = (_sess.T - _sess.AdaptiveLastChangeT) >= AMP_COOLDOWN;
 
+                        // 적응형 진폭 변경 시 블록 분리는 더 이상 안 함.
+                        // 변경 직후의 transient 가 포화로 이어지면 포화 인덱스가 자동으로 down-weight 됨.
+                        // 포화 안 일으키면 그냥 정상 데이터 (FRIT 는 가진 신호 형태 변화에 무관).
                         if (cooledDown && yLow && uLow && amp < _s.AdaptiveAmpMax)
                         {
-                            // 올림: amp × 2
                             double newAmp = Math.Min(amp * 2.0, _s.AdaptiveAmpMax);
                             _sess.AdaptiveCurrentAmp = newAmp;
                             _s.ExciteAmp = (float)newAmp;
                             _sess.AdaptiveBoostCount++;
                             _sess.AdaptiveLastChangeT = _sess.T;
-
-                            if (_sess.U.Count > 0)
-                            {
-                                _sess.BlockStarts.Add(_sess.U.Count);
-                                _sess.BlockStartT = _sess.T;
-                            }
-
                             _sess.LastMessage = $"Adaptive ↑ amp {amp:0.00}→{newAmp:0.00} (yR={yRatio:0.00}, uStd={uStd:0.00} 둘 다 낮음)";
                         }
                         else if (cooledDown && uStd > U_SAT_NEAR && amp > 0.05)
                         {
-                            // 내림: u 가 포화 근접 → 진폭 반감 (dead zone: U_SAT_DEAD_LO ~ U_SAT_NEAR 유지)
                             double newAmp = Math.Max(0.05, amp * 0.5);
                             _sess.AdaptiveCurrentAmp = newAmp;
                             _s.ExciteAmp = (float)newAmp;
                             _sess.AdaptiveLastChangeT = _sess.T;
-
-                            if (_sess.U.Count > 0)
-                            {
-                                _sess.BlockStarts.Add(_sess.U.Count);
-                                _sess.BlockStartT = _sess.T;
-                            }
-
                             _sess.LastMessage = $"Adaptive ↓ amp {amp:0.00}→{newAmp:0.00} (uStd={uStd:0.00} > {U_SAT_NEAR} 포화 근접)";
                         }
                         else if (cooledDown && yRatio > Y_OVER_RATIO && amp > 0.05)
                         {
-                            // 내림: y 과응답 (플랜트 게인 높음) → 진폭 반감
                             double newAmp = Math.Max(0.05, amp * 0.5);
                             _sess.AdaptiveCurrentAmp = newAmp;
                             _s.ExciteAmp = (float)newAmp;
                             _sess.AdaptiveLastChangeT = _sess.T;
-
-                            if (_sess.U.Count > 0)
-                            {
-                                _sess.BlockStarts.Add(_sess.U.Count);
-                                _sess.BlockStartT = _sess.T;
-                            }
-
                             _sess.LastMessage = $"Adaptive ↓ amp {amp:0.00}→{newAmp:0.00} (yStd/amp={yRatio:0.00} > {Y_OVER_RATIO} 과응답)";
                         }
                         else if (yLow && !uLow)
@@ -568,59 +537,58 @@ namespace PIDAutoTuner
                     }
                 }
 
+                // 포화 추적 + transient tail 카운터
+                // (블록 분리 + RejectSaturated 제거 — 모든 샘플 보존, 포화/회복 구간은 FRIT 가중치에서 down-weight)
                 bool saturated = Math.Abs(u) >= _s.SaturationThreshold;
                 if (saturated)
                 {
                     _sess.SaturatedCount++;
-                    _sess.ConsecutiveSaturated++;
+                    _sess.SamplesSinceLastSat = 0;
                 }
                 else
                 {
-                    // 연속 포화가 임계값 이상이었으면 → 블록 분리 (긴 포화 구간 끝)
-                    if (_sess.ConsecutiveSaturated >= _sess.ConsecutiveSatThreshold
-                        && _sess.U.Count > 0)
-                    {
-                        _sess.BlockStarts.Add(_sess.U.Count);
-                        _sess.BlockStartT = _sess.T; // chirp를 새 블록에서 처음부터 다시
-                    }
-                    _sess.ConsecutiveSaturated = 0;
-                }
-
-                // 짧은 포화(< threshold틱): 데이터 유지 (u가 클리핑됐어도 실제 입력)
-                // 긴 연속 포화 중: 데이터 버림 (비선형 영역)
-                if (_s.RejectSaturated && _sess.ConsecutiveSaturated >= _sess.ConsecutiveSatThreshold)
-                {
-                    _sess.RejectedCount++;
-                    _sess.T += dt;
-                    return;
+                    _sess.SamplesSinceLastSat++;
                 }
 
                 _sess.U.Add(u);
                 _sess.Y.Add(y);
-                _sess.Saturated.Add(saturated);  // 짧은 포화 샘플도 저장 (FRIT 에서 가중치로 down-weight)
+                _sess.Saturated.Add(saturated);
+
+                // EffectiveValid: transient tail 밖에 있는 깨끗한 샘플만 카운트
+                if (_sess.SamplesSinceLastSat > _s.TransientTailSamples)
+                    _sess.EffectiveValidCount++;
 
                 _sess.T += dt;
 
                 if (_sess.U.Count % 240 == 0)
                 {
-                    var (_, bestLen) = PickLongestBlock(_sess.BlockStarts, _sess.U.Count);
-                    _sess.LastMessage = $"Collecting... best block {bestLen}/{_s.MinSamples} (total {_sess.U.Count}, boost {_sess.AdaptiveBoostCount}) / 수집중... 최장블록 {bestLen}/{_s.MinSamples}";
+                    _sess.LastMessage = $"Collecting... valid {_sess.EffectiveValidCount}/{_s.MinSamples}  (total {_sess.U.Count}, sat {_sess.SaturatedCount}, boost {_sess.AdaptiveBoostCount}) / 수집중... 유효 {_sess.EffectiveValidCount}/{_s.MinSamples}";
                 }
 
-                // 자동 튜닝: 최장 블록이 MinSamples에 도달하면 중지
+                // 자동 튜닝 종료 조건
                 if (_autoState == AutoTuneState.Recording)
                 {
-                    var (_, bestLen) = PickLongestBlock(_sess.BlockStarts, _sess.U.Count);
-                    if (bestLen >= _s.MinSamples)
+                    if (_sess.EffectiveValidCount >= _s.MinSamples)
                     {
                         StopRecording();
                         _autoState = AutoTuneState.Computing;
                         _sess.LastMessage = "Auto-tune: analyzing... / 자동 튜닝: 데이터 분석 중...";
                     }
-                    // 블록 분리가 많으면 경고만 표시 (Kp는 건드리지 않음)
-                    else if (_sess.BlockStarts.Count >= 5)
+                    else if (_sess.T > _s.MaxRecordingSec)
                     {
-                        _sess.LastMessage = $"Many block splits ({_sess.BlockStarts.Count}). Data may be noisy. / 블록 분리 다수 ({_sess.BlockStarts.Count}). 데이터 품질 주의.";
+                        // 안전 상한 초과 — 최소 유효 샘플 256 이상이면 그래도 진행, 아니면 실패.
+                        if (_sess.EffectiveValidCount >= 256)
+                        {
+                            StopRecording();
+                            _autoState = AutoTuneState.Computing;
+                            _sess.LastMessage = $"Timeout {_s.MaxRecordingSec:0}s — proceeding with {_sess.EffectiveValidCount} valid samples / 타임아웃, {_sess.EffectiveValidCount}개로 진행";
+                        }
+                        else
+                        {
+                            StopRecording();
+                            _autoState = AutoTuneState.Failed;
+                            _sess.LastMessage = $"Auto-tune failed: only {_sess.EffectiveValidCount} valid samples in {_s.MaxRecordingSec:0}s. Check PID / 자동 튜닝 실패: {_s.MaxRecordingSec:0}초 내 유효 샘플 {_sess.EffectiveValidCount}개. PID 점검 필요.";
+                        }
                     }
                 }
             }
@@ -662,17 +630,10 @@ namespace PIDAutoTuner
                         rec = "Idle / 대기";
                     double dt = Time.fixedDeltaTime;
 
-                    int progressCount = 0;
-                    {
-                        int lastBlkStart = _sess.BlockStarts.Count > 0
-                            ? _sess.BlockStarts[_sess.BlockStarts.Count - 1] : 0;
-                        progressCount = _sess.U.Count - lastBlkStart;
-                    }
-
                     return
                         $"Status: {rec}\n" +
-                        $"Samples: {progressCount} / {_s.MinSamples}  (blocks: {_sess.BlockStarts.Count})\n" +
-                        $"Saturated: {_sess.SaturatedCount}  |  Rejected: {_sess.RejectedCount}\n" +
+                        $"Valid: {_sess.EffectiveValidCount} / {_s.MinSamples}  (total {_sess.U.Count}, elapsed {_sess.T:0.0}s)\n" +
+                        $"Saturated: {_sess.SaturatedCount}\n" +
                         $"FixedDeltaTime: {dt:0.000}s\n" +
                         $"Msg: {_sess.LastMessage}";
                 }),
@@ -1367,33 +1328,18 @@ namespace PIDAutoTuner
             if (dt <= 0) dt = 0.02;
             double fs = 1.0 / dt;
 
-            // 최장 연속 블록 선택 (포화로 끊긴 구간 제외)
-            var (blkStart, blkLen) = PickLongestBlock(_sess.BlockStarts, _sess.U.Count, _sess.Y);
+            // 전체 수집 데이터 사용 (블록 분리 제거). 포화 + transient tail 은 FRIT 가중치에서 down-weight.
+            int blkLen = _sess.U.Count;
             if (blkLen < 64)
             {
                 _autoState = AutoTuneState.Failed;
-                _sess.LastMessage = $"Auto-tune failed: best block only {blkLen} samples. Reduce saturation. / 자동 튜닝 실패: 최장 블록 {blkLen}샘플.";
+                _sess.LastMessage = $"Auto-tune failed: only {blkLen} samples collected. / 자동 튜닝 실패: 수집 샘플 {blkLen}개.";
                 return;
             }
 
-            // Step prelude skip 제거 — FRIT 는 정상성 가정이 없어서 transient 도 유효 식별 데이터
-            // (구 PEM/PBSID VAR 회귀 호환용 잔재였음). DC 정보는 step prelude + 저주파 square 둘 다 포함.
-
-            double[] u = new double[blkLen];
-            double[] y = new double[blkLen];
-            bool[]   sat = new bool[blkLen];
-            _sess.U.CopyTo(blkStart, u, 0, blkLen);
-            _sess.Y.CopyTo(blkStart, y, 0, blkLen);
-            _sess.Saturated.CopyTo(blkStart, sat, 0, blkLen);
-
-            // 데이터 품질 체크
-            double satRatio = (double)_sess.SaturatedCount / Math.Max(1, _sess.SaturatedCount + _sess.U.Count);
-            if (satRatio > 0.5)
-            {
-                _autoState = AutoTuneState.Failed;
-                _sess.LastMessage = $"Auto-tune failed: saturation ratio {satRatio:P0}. Reduce amplitude. / 자동 튜닝 실패: 포화 비율 {satRatio:P0}.";
-                return;
-            }
+            double[] u = _sess.U.ToArray();
+            double[] y = _sess.Y.ToArray();
+            bool[]   sat = _sess.Saturated.ToArray();
 
             double yStd = StdDev(y);
             if (yStd < 1e-6)
@@ -1413,7 +1359,7 @@ namespace PIDAutoTuner
                 if (y[i] < yMin) yMin = y[i];
                 if (y[i] > yMax) yMax = y[i];
             }
-            _sess.LastMessage = $"Data: u=[{uMin:0.000},{uMax:0.000}] y=[{yMin:0.0},{yMax:0.0}] yStd={yStd:0.000}";
+            _sess.LastMessage = $"Data: N={blkLen} valid={_sess.EffectiveValidCount} sat={_sess.SaturatedCount} u=[{uMin:0.00},{uMax:0.00}] y=[{yMin:0.0},{yMax:0.0}] yStd={yStd:0.000}";
 
             // τ = dt 고정 (FTD 순수 지연 ≈ 1틱), nM=2 (FTD 제어 대상 대부분 2차)
             _s.ModelDelayTau = (float)dt;
@@ -1669,7 +1615,7 @@ namespace PIDAutoTuner
             if (_s.ExciteWave == WaveType.Off) return;
             if (!_hasBaseSetPointAdjust) return;   // 원래 SP를 백업 못 했으면 무시
 
-            double t = _sess.T - _sess.BlockStartT;  // 현재 블록 시작부터의 경과 시간 (chirp 리셋)
+            double t = _sess.T;  // 녹화 시작부터의 경과 시간 (블록 분리 제거됨)
             double amp = Math.Max(0.0, _s.ExciteAmp); // 진폭 (음수 방지)
 
             // 포화 회피: |u|가 포화 임계값에 가까우면 가진 진폭을 줄임
@@ -1791,20 +1737,16 @@ namespace PIDAutoTuner
                 double dt = Time.fixedDeltaTime;
                 if (dt <= 0) dt = 0.02;
 
-                // 최장 연속 블록 선택
-                var (blkStart, blkLen) = PickLongestBlock(_sess.BlockStarts, _sess.U.Count, _sess.Y);
-                if (blkLen < _s.MinSamples)
+                int blkLen = _sess.U.Count;
+                if (_sess.EffectiveValidCount < _s.MinSamples / 4)
                 {
-                    _sess.LastMessage = $"Insufficient: best block {blkLen}/{_s.MinSamples} / 샘플 부족: 최장 블록 {blkLen}/{_s.MinSamples}";
+                    _sess.LastMessage = $"Insufficient valid samples: {_sess.EffectiveValidCount}. Collect more / 유효 샘플 부족: {_sess.EffectiveValidCount}";
                     return;
                 }
 
-                double[] u = new double[blkLen];
-                double[] y = new double[blkLen];
-                bool[]   sat = new bool[blkLen];
-                _sess.U.CopyTo(blkStart, u, 0, blkLen);
-                _sess.Y.CopyTo(blkStart, y, 0, blkLen);
-                _sess.Saturated.CopyTo(blkStart, sat, 0, blkLen);
+                double[] u = _sess.U.ToArray();
+                double[] y = _sess.Y.ToArray();
+                bool[]   sat = _sess.Saturated.ToArray();
 
                 // 현재 PID 값을 LM 초기 시드로 사용
                 double kp0 = this._focus.Pid.kP.Us;
@@ -1910,10 +1852,29 @@ namespace PIDAutoTuner
             double beta1 = 1.0 - 2.0 * aM / dt;
             int delayN = Math.Max(0, (int)Math.Round(tauM / dt));
 
-            // ── 3단계: per-sample 가중치 (포화: SAT_WEIGHT, 나머지: 1) ──
+            // ── 3단계: 포화 + IIR transient tail 까지 확장한 effective saturation ──
+            // 포화 직후 1/C(z) 역필터 state 가 회복하는 데 ~TransientTailSamples 틱 소요.
+            // 그 구간 동안 계산되는 e[k] 가 오염 → effSat 로 down-weight.
+            int tail = Math.Max(0, s.TransientTailSamples);
+            bool[] effSat = new bool[N];
+            int since = int.MaxValue / 2;   // 시작 부분은 깨끗하다고 가정
+            for (int k = 0; k < N; k++)
+            {
+                if (sat[k]) { effSat[k] = true; since = 0; }
+                else { since++; if (since <= tail) effSat[k] = true; }
+            }
+
+            // per-sample 가중치 (effSat: SAT_WEIGHT, 나머지: 1)
             const double SAT_WEIGHT = 1e-3;
             double[] sqrtW = new double[N];
-            for (int i = 0; i < N; i++) sqrtW[i] = Math.Sqrt(sat[i] ? SAT_WEIGHT : 1.0);
+            int nEffValid = 0;
+            for (int i = 0; i < N; i++)
+            {
+                sqrtW[i] = Math.Sqrt(effSat[i] ? SAT_WEIGHT : 1.0);
+                if (!effSat[i]) nEffValid++;
+            }
+            if (nEffValid < 32)
+                throw new Exception($"Too few effective valid samples after tail ({nEffValid}) / 유효 샘플 부족");
 
             // ── 4단계: LM 모델 함수 (θ → √w · ŷ) ──
             Func<MathNet.Numerics.LinearAlgebra.Vector<double>,
@@ -2040,19 +2001,19 @@ namespace PIDAutoTuner
             double Ti = lmResult.MinimizingPoint[1];
             double Td = lmResult.MinimizingPoint[2];
 
-            // ── 7단계: RMSE (가중 제외, 포화 인덱스 제외, raw 잔차) ──
+            // ── 7단계: RMSE (가중 제외, effSat 인덱스 제외, raw 잔차) ──
             var finalWeighted = model(lmResult.MinimizingPoint, obsX);
             double sse = 0;
-            int nValid = 0;
+            int nValidRmse = 0;
             for (int i = 0; i < N; i++)
             {
-                if (sat[i]) continue;
+                if (effSat[i]) continue;
                 double pred = finalWeighted[i] / sqrtW[i];     // unweight
                 double err = yd[i] - pred;
                 sse += err * err;
-                nValid++;
+                nValidRmse++;
             }
-            double rmse = (nValid > 0) ? Math.Sqrt(sse / nValid) : double.NaN;
+            double rmse = (nValidRmse > 0) ? Math.Sqrt(sse / nValidRmse) : double.NaN;
 
             // ── 8단계: 경계 클램프 + 경고 ──
             string warning = null;
@@ -2229,67 +2190,6 @@ namespace PIDAutoTuner
             double intercept = meanX - slope * meanT;
             for (int i = 0; i < N; i++)
                 x[i] -= (slope * i + intercept);
-        }
-
-        /// <summary>
-        /// BlockStarts 중 "가장 길면서 y 변동이 충분한" 블록을 반환.
-        /// y 변동이 충분한 블록이 없으면 가장 긴 블록을 fallback으로 반환.
-        /// </summary>
-        private static (int start, int count) PickLongestBlock(
-            List<int> blockStarts, int totalSamples,
-            List<double> yData = null, double minYStd = 1e-4)
-        {
-            int bestStart = 0, bestLen = 0;           // 품질 조건 통과한 최장
-            int fallbackStart = 0, fallbackLen = 0;   // 무조건 최장 (fallback)
-
-            for (int i = 0; i < blockStarts.Count; i++)
-            {
-                int s = blockStarts[i];
-                int e = (i + 1 < blockStarts.Count) ? blockStarts[i + 1] : totalSamples;
-                int len = e - s;
-
-                // 무조건 최장 갱신
-                if (len > fallbackLen)
-                {
-                    fallbackLen = len;
-                    fallbackStart = s;
-                }
-
-                // y 데이터가 있으면 품질 체크
-                if (yData != null && len >= 64)
-                {
-                    // 이 블록의 y 표준편차 계산
-                    int actualEnd = Math.Min(e, yData.Count);
-                    int actualLen = actualEnd - s;
-                    if (actualLen < 64) continue;
-
-                    double sum = 0, sumSq = 0;
-                    for (int j = s; j < actualEnd; j++)
-                    {
-                        sum += yData[j];
-                        sumSq += yData[j] * yData[j];
-                    }
-                    double mean = sum / actualLen;
-                    double var = (sumSq / actualLen) - mean * mean;
-                    double std = var > 0 ? Math.Sqrt(var) : 0;
-
-                    if (std >= minYStd && len > bestLen)
-                    {
-                        bestLen = len;
-                        bestStart = s;
-                    }
-                }
-                else if (yData == null && len > bestLen)
-                {
-                    bestLen = len;
-                    bestStart = s;
-                }
-            }
-
-            // 품질 통과 블록이 있으면 그걸, 없으면 fallback
-            if (bestLen >= 64)
-                return (bestStart, bestLen);
-            return (fallbackStart, fallbackLen);
         }
 
         private static double StdDev(double[] data)

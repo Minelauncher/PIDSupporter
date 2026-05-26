@@ -9,12 +9,14 @@
 **식별 체인:**
 ```
 [Auto Tune]
-  → 가진 신호 (멀티사인) 를 SetPoint 에 주입
-  → 현재 PID C₀ 로 폐루프 데이터 (u, y) + 포화 플래그 수집
-  → 최장 비-드롭 블록 추출 (긴 연속 포화는 데이터 자체 드롭, 블록 분리)
+  → 가진 신호 (멀티사인 + 저주파 square) 를 SetPoint 에 주입
+  → 현재 PID C₀ 로 폐루프 데이터 (u, y) + 포화 플래그 연속 수집 (블록 분리 없음)
+  → EffectiveValidCount (= transient-tail 밖 깨끗 샘플) ≥ MinSamples 까지 대기
+       · 적응형 진폭이 자동 조정 → 결국 안정 영역으로 수렴
+       · 안전 상한 (MaxRecordingSec, 기본 60초) 초과 시 fail
   → Ts 자동 스캔 (10단계)
   → 각 Ts 마다 FRIT (시간 영역 IIR + 가중 LS + LM)
-       · 짧은 포화 인덱스는 w = ε 로 down-weight
+       · 포화 + 그 뒤 IIR transient tail (≈2초) 인덱스 모두 w = ε 로 down-weight
        · 1/C(z) 안정성 미충족 시 soft barrier
   → 인접 Ts 간 파라미터 안정성 기반 best Ts 선택
   → Apply
@@ -283,29 +285,52 @@ $$x(t) = x_\text{ms}(t) + x_\text{sq}(t)$$
 
 ---
 
-## 8. 포화 처리 — 다층 방어
+## 8. 포화 처리 — 단일 방어선 (가중치 + 계속 수집)
 
-`|u| ≥ 0.98` 이면 비선형 영역 → FRIT 의 선형 LTI 가정 위반. 5층으로 대응:
+`|u| ≥ 0.98` 이면 비선형 영역 → FRIT 의 선형 LTI 가정 위반. 모든 샘플을 연속 저장하되, 식별 단계에서 가중치로 처리:
 
 ### 8.1 실시간 가진 회피 (`ApplyExcitation`)
 가진 적용 시 `|u|` 가 0.98 근처면 가진 진폭을 자동 축소 (스케일 0.1 ~ 1.0). 포화를 사전 차단.
 
 ### 8.2 양방향 적응형 진폭
-위 §7.4 — `uStd > 0.7` 이면 진폭 절반.
+위 §7.4 — `uStd > 0.7` 이면 진폭 절반. 포화 발생 시 점진적으로 감쇠.
 
-### 8.3 짧은 포화: 가중치로 처리 (NEW)
-`ConsecutiveSaturated < 10` (≈0.2초) 인 짧은 blip 은 데이터에 저장 + `Saturated[k] = true` 플래그. FRIT 비용에서 `w[k] = 1e-3` 으로 down-weight → 식별에 거의 영향 없음.
+### 8.3 모든 샘플 저장 + 포화 플래그
+포화 여부와 무관하게 `(U, Y, Saturated)` 에 모두 저장. 블록 분리, 샘플 드롭, satRatio fail-fast 모두 제거.
 
-이 방식의 장점:
-- 데이터 시간적 연속성 보존 (블록 분리 불필요)
-- 비포화 인접 샘플은 정상 가중치로 활용
-- 시간 영역 FRIT 라 spectral contamination 없음
+### 8.4 포화 + Transient Tail 가중치 ε
+`Saturated[k] = true` 이거나 그 직후 `TransientTailSamples` (기본 100 ≈ 2초) 인덱스는 **effective saturated** 로 표시.
 
-### 8.4 긴 포화: 블록 분리 + 드롭
-`ConsecutiveSaturated ≥ 10` 이면 그 틱 데이터를 저장 자체에서 드롭, `BlockStarts` 에 분기점 추가. **LTI 가정이 깊게 깨진 구간은 가중치만으로 부족** 하므로 보수적으로 데이터에서 완전 배제.
+이유: `1/C(z)` 역필터는 IIR (메모리 있음). 포화 동안 클립된 `u` 가 필터 state 를 망친 뒤, 회복하는 데 ~`5τ` (PID 가장 느린 pole 기준 ~2초). 이 회복 구간 동안 계산되는 `e[k]` 가 오염됨 → 가중치 down-weight 로 cost 에서 제거.
 
-### 8.5 최장 블록 선택 + fail-fast
-`PickLongestBlock` 으로 y 변동 충분한 가장 긴 블록만 식별에 사용. 전체 `satRatio > 50%` 면 자동 튜닝 실패 (가진 진폭이 과함).
+```csharp
+since = ∞
+for k = 0..N-1:
+    if sat[k]: effSat[k] = true; since = 0
+    else:      since++; effSat[k] = (since <= TransientTailSamples)
+
+w[k] = effSat[k] ? 1e-3 : 1.0
+```
+
+### 8.5 EffectiveValidCount 기반 종료
+수집은 `EffectiveValidCount ≥ MinSamples` 까지 계속. 적응형 진폭이 자동으로 진폭을 줄여서 결국 비포화 영역으로 수렴 → 깨끗한 샘플이 쌓임.
+
+### 8.6 안전 상한
+`_sess.T > MaxRecordingSec` (기본 60초) 시점:
+- `EffectiveValidCount ≥ 256` → 그 데이터로 진행
+- `< 256` → fail (기체가 정상 비행 상태가 아닌 것으로 판단)
+
+---
+
+**왜 이렇게 단순화?**
+
+이전에는 (a) 짧은 포화 가중치 + (b) 긴 포화 블록 분리 + (c) 적응형 진폭 변경 시 블록 분리 + (d) satRatio fail-fast 의 다층 구조였음. 하지만:
+
+- (b) 의 "긴 포화 분리" 는 transient tail 가중치로 동등하게 처리됨 (실은 더 정확함 — 분리는 회복 후 깨끗 구간도 같이 버렸음)
+- (c) 의 "진폭 변경 분리" 는 불필요 — FRIT 는 가진 신호 형태 변화에 무관 (포화 안 일으키면 정상 데이터)
+- (d) 의 fail-fast 는 적응형 진폭이 자동으로 해결 → 그냥 더 수집하면 됨
+
+→ 단일 가중치 메커니즘 + 계속 수집으로 동등한 robustness, 더 많은 데이터 활용.
 
 ---
 
