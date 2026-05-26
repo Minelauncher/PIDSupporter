@@ -659,7 +659,7 @@ namespace PIDAutoTuner
         {
             ScreenSegmentStandard seg = base.CreateStandardSegment(InsertPosition.OnCursor);
             seg.BackgroundStyleWhereApplicable = ConsoleStyles.Instance.Styles.Segments.OptionalSegmentDarkBackgroundWithHeader.Style;
-            seg.NameWhereApplicable = "Status / 상태";
+            seg.NameWhereApplicable = "Status\n상태";
             seg.SpaceAbove = 10f;
             seg.SpaceBelow = 10f;
 
@@ -669,19 +669,19 @@ namespace PIDAutoTuner
                 {
                     string rec;
                     if (_autoState == AutoTuneState.Diagnosing)
-                        rec = "Diagnosing / 진단 중";
+                        rec = "Diagnosing\n진단 중";
                     else if (_autoState == AutoTuneState.Validating)
-                        rec = "Validating / 검증 중";
+                        rec = "Validating\n검증 중";
                     else if (_autoState == AutoTuneState.Computing)
-                        rec = "Computing / 계산 중";
+                        rec = "Computing\n계산 중";
                     else if (_sess.Recording)
-                        rec = "Recording / 녹화중";
+                        rec = "Recording\n녹화중";
                     else if (_autoState == AutoTuneState.Done)
-                        rec = "Done / 완료";
+                        rec = "Done\n완료";
                     else if (_autoState == AutoTuneState.Failed)
-                        rec = "Failed / 실패";
+                        rec = "Failed\n실패";
                     else
-                        rec = "Idle / 대기";
+                        rec = "Idle\n대기";
                     double dt = Time.fixedDeltaTime;
 
                     return
@@ -711,7 +711,7 @@ namespace PIDAutoTuner
 
             // t_s
             table.AddInterpretter(MakeSliderFloat(
-                "Settling time t_s (s) / 정착시간 t_s (초)",
+                "Settling time t_s (s)\n정착시간 t_s (초)",
                 "Target settling time. Smaller = faster response.\nAuto-tuning estimates this automatically.\n---\n목표 정착시간. 작을수록 빠른 응답.\n자동 튜닝 시 자동 추정됩니다.",
                 () => _s.SettlingTimeTs,
                 f => _s.SettlingTimeTs = Clamp(f, 0.2f, 60f),
@@ -720,7 +720,7 @@ namespace PIDAutoTuner
 
             // tau_M
             table.AddInterpretter(MakeSliderFloat(
-                "Delay τ_M (s) / 지연 τ_M (초)",
+                "Delay τ_M (s)\n지연 τ_M (초)",
                 "Plant delay (dead-time). 0 = no delay.\nAuto-tuning estimates this automatically.\n---\n플랜트 지연. 0이면 지연 없음.\n자동 튜닝 시 자동 추정됩니다.",
                 () => _s.ModelDelayTau,
                 f => _s.ModelDelayTau = Clamp(f, 0f, 5f),
@@ -729,7 +729,7 @@ namespace PIDAutoTuner
 
             // min samples
             table.AddInterpretter(MakeSliderInt(
-                "Min samples / 최소 샘플 수",
+                "Min samples\n최소 샘플 수",
                 "Minimum samples for data collection.\nMore samples = better accuracy but longer wait.\n---\n데이터 수집 최소 샘플 수.\n많을수록 정확하지만 대기 시간이 길어집니다.",
                 () => _s.MinSamples,
                 v => _s.MinSamples = ClampInt(v, 256, 200000),
@@ -741,12 +741,12 @@ namespace PIDAutoTuner
         {
             ScreenSegmentStandard seg = base.CreateStandardSegment(InsertPosition.OnCursor);
             seg.BackgroundStyleWhereApplicable = ConsoleStyles.Instance.Styles.Segments.OptionalSegmentDarkBackgroundWithHeader.Style;
-            seg.NameWhereApplicable = "Excitation / 자극";
+            seg.NameWhereApplicable = "Excitation\n자극";
             seg.SpaceAbove = 10f;
             seg.SpaceBelow = 10f;
 
             seg.AddInterpretter(MakeToggle(
-                "Enable excitation / 자극 사용",
+                "Enable excitation\n자극 사용",
                 "Adds excitation signal to SetPointAdjust during recording.\nAuto-tuning configures this automatically.\n---\n녹화 중 SetPointAdjust에 가진 신호를 더합니다.\n자동 튜닝 시 자동 설정됩니다.",
                 () => _s.ExciteEnabled,
                 b => _s.ExciteEnabled = b,
@@ -755,7 +755,7 @@ namespace PIDAutoTuner
 
             // Axis type 선택 (cycle 버튼)
             seg.AddInterpretter(MakeCycleButton(
-                "Axis type / 축 타입",
+                "Axis type\n축 타입",
                 "Mark this tab's axis so cross-axis features work correctly.\n" +
                 "Hover axis's PV = altitude (used for pitch altitude-hold).\n" +
                 "Pitch axis receives altitude-hold offset.\n" +
@@ -773,7 +773,7 @@ namespace PIDAutoTuner
             ));
 
             seg.AddInterpretter(MakeToggle(
-                "Fix other axes / 다른 축 고정",
+                "Fix other axes\n다른 축 고정",
                 "During tuning, other axes' SetPoints are frozen at captured values\n" +
                 "so existing PIDs hold attitude/altitude. Open each axis's PID UI\n" +
                 "once before tuning to register it.\n" +
@@ -791,7 +791,7 @@ namespace PIDAutoTuner
             excTable.SqueezeTable = false;
 
             excTable.AddInterpretter(MakeSliderFloat(
-                "Amplitude A / 자극 진폭 A",
+                "Amplitude A\n자극 진폭 A",
                 "Excitation amplitude. Auto-tuning sets this automatically.\n---\n자극 진폭. 자동 튜닝 시 자동 설정됩니다.",
                 () => _s.ExciteAmp,
                 f => _s.ExciteAmp = Clamp(f, 0f, 10f),
@@ -799,7 +799,7 @@ namespace PIDAutoTuner
             ));
 
             excTable.AddInterpretter(MakeSliderFloat(
-                "Freq base Hz / 기저 주파수",
+                "Freq base Hz\n기저 주파수",
                 "Base frequency for Sine/MultiSine excitation.\n---\nSine/MultiSine 가진의 기저 주파수.",
                 () => _s.ExciteFreqHz,
                 f => _s.ExciteFreqHz = Clamp(f, 0.01f, 5.0f),
@@ -807,7 +807,7 @@ namespace PIDAutoTuner
             ));
 
             excTable.AddInterpretter(MakeSliderFloat(
-                "Freq max Hz / 최대 주파수",
+                "Freq max Hz\n최대 주파수",
                 "End frequency for Chirp excitation.\n---\nChirp 가진의 최대 주파수.",
                 () => _s.ChirpEndHz,
                 f => _s.ChirpEndHz = Clamp(f, 0.1f, 10.0f),
@@ -819,14 +819,14 @@ namespace PIDAutoTuner
         {
             ScreenSegmentStandardHorizontal seg = base.CreateStandardHorizontalSegment();
             seg.BackgroundStyleWhereApplicable = ConsoleStyles.Instance.Styles.Segments.OptionalSegmentDarkBackgroundWithHeader.Style;
-            seg.NameWhereApplicable = "Actions / 동작";
+            seg.NameWhereApplicable = "Actions\n동작";
             seg.SpaceAbove = 10f;
             seg.SpaceBelow = 10f;
 
 
             seg.AddInterpretter(new SubjectiveButton<VariableControllerMaster>(
                 this._focus,
-                M.m<VariableControllerMaster>(_ => _autoState == AutoTuneState.Recording ? "Auto-tuning... / 자동 튜닝 중..." : "Auto Tune / 자동 튜닝"),
+                M.m<VariableControllerMaster>(_ => _autoState == AutoTuneState.Recording ? "Auto-tuning...\n자동 튜닝 중..." : "Auto Tune\n자동 튜닝"),
                 M.m<VariableControllerMaster>(new ToolTip(
                     "Closed-loop auto-tuning: excitation → record → FRIT → PID.\n---\n폐루프 자동 튜닝: 가진 → 녹화 → FRIT → PID.", 260f)),
                 null,
@@ -834,7 +834,7 @@ namespace PIDAutoTuner
             ));
 
             seg.AddInterpretter(MakeButton(
-                "Record start/stop / 녹화 시작/중지",
+                "Record start/stop\n녹화 시작/중지",
                 "Start/stop sample collection.\nDuring recording, u (output) and y (process variable) are saved every FixedUpdate.\n---\n샘플 수집을 시작/중지합니다.\n" +
                 "녹화 중에는 FixedUpdate마다 u(출력), y(과정변수) 샘플을 저장합니다.",
                 _ =>
@@ -845,7 +845,7 @@ namespace PIDAutoTuner
             ));
 
             seg.AddInterpretter(MakeButton(
-                "Reset / 초기화",
+                "Reset\n초기화",
                 "Clear all saved samples and results.\n---\n저장된 샘플/결과를 모두 지웁니다.",
                 _ =>
                 {
@@ -857,7 +857,7 @@ namespace PIDAutoTuner
             ));
 
             seg.AddInterpretter(MakeButton(
-                "Compute (FRIT) / 계산(FRIT)",
+                "Compute (FRIT)\n계산(FRIT)",
                 "Compute FRIT: minimize ||y - M·r̃(θ)||² over (Kp,Ti,Td) via Levenberg-Marquardt.\n" +
                 "Seeds from current PID values.\n---\n" +
                 "FRIT 계산: 현재 PID를 시드로 (Kp,Ti,Td)를 LM 으로 비선형 최적화.\n" +
@@ -866,13 +866,13 @@ namespace PIDAutoTuner
             ));
 
             seg.AddInterpretter(MakeButton(
-                "Apply / 적용",
+                "Apply\n적용",
                 "Apply Kp/Ti/Td to PID. (Kp: 0.001, Ti/Td: 0.1 step)\n---\nKp/Ti/Td를 PID에 적용. (Kp: 0.001, Ti/Td: 0.1 단위)",
                 _ => ApplyToPid()
             ));
 
             seg.AddInterpretter(MakeButton(
-                "Validate / 검증",
+                "Validate\n검증",
                 "Health check: record y on all registered axes for 5 seconds (no excitation),\n" +
                 "compute std(y) per axis, flag any with yStd > 2× median as HIGH.\n---\n" +
                 "검증: 전 축 y를 5초간 수집 (가진 없음), 축별 std(y) 계산,\n" +
@@ -885,7 +885,7 @@ namespace PIDAutoTuner
         {
             ScreenSegmentStandard seg = base.CreateStandardSegment(InsertPosition.OnCursor);
             seg.BackgroundStyleWhereApplicable = ConsoleStyles.Instance.Styles.Segments.OptionalSegmentDarkBackgroundWithHeader.Style;
-            seg.NameWhereApplicable = "Result / 결과";
+            seg.NameWhereApplicable = "Result\n결과";
             seg.SpaceAbove = 10f;
             seg.SpaceBelow = 10f;
 
@@ -894,7 +894,7 @@ namespace PIDAutoTuner
                 M.m<VariableControllerMaster>(_ =>
                 {
                     if (!_sess.HasResult)
-                        return "No result yet. Press Compute. / 아직 결과가 없습니다.";
+                        return "No result yet. Press Compute.\n아직 결과가 없습니다.";
 
                     // 표준오차 표시 (CRLB, NaN 이면 생략)
                     string fmtSE(double v, double se, string vFmt) {
