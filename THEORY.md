@@ -82,7 +82,7 @@ $$e[k] = \frac{u[k] - u[k-1] - K_p a_1 e[k-1] - K_p a_2 e[k-2]}{K_p a_0}$$
 
 그러면 `r̃[k] = y[k] + e[k]`.
 
-### 3.3 가중 비용 함수
+### 3.3 가중 비용 함수 + IRLS (Huber)
 
 가상 레퍼런스를 참조 모델에 통과시킨 응답이 실제 출력에 가까워야 함:
 
@@ -90,10 +90,28 @@ $$\hat{y}(\theta) = M(z) \cdot \tilde{r}(\theta)$$
 
 $$J(\theta) = \sum_{k=1}^{N} w[k] \cdot \left[ y[k] - \hat{y}(\theta)[k] \right]^2$$
 
-**가중치 `w[k]`** :
-- 비-포화 샘플: `w[k] = 1`
-- 짧은 포화 샘플: `w[k] = ε ≈ 10⁻³` (down-weight)
-- 긴 연속 포화 샘플: 데이터 자체에서 드롭 + 블록 분리 (앞 단계에서 처리)
+**가중치 `w[k] = w_sat[k] · w_huber[k]`** (두 단계 곱):
+
+- **`w_sat[k]`** — 구조적 (saturation 처리):
+  - 포화 또는 IIR transient tail 내: `1e-3`
+  - 그 외: `1.0`
+
+- **`w_huber[k]`** — robust (이상치 down-weight, IRLS 외부 루프로 갱신):
+  - `|r[k]| ≤ δ` → `1.0` (정상 잔차)
+  - `|r[k]| > δ` → `δ / |r[k]|` (이상치, 영향 감소)
+  - `δ = 1.5 · 1.4826 · MAD(잔차)` (MAD-based robust scale)
+
+**IRLS 루프 (3 iter)**:
+```
+초기: w_huber ≡ 1
+Repeat 3 회:
+  obsY ← √w · y
+  θ* ← LM(obsY, model(·) returns √w · ŷ)
+  잔차 r[k] = y[k] - ŷ(θ*)[k]
+  MAD 로 δ 추정 → Huber 가중치 갱신
+```
+
+**왜 robust 가중치 추가하나**: FRIT 비용은 L2 (잔차 제곱합) 이라 큰 잔차에 민감. Plant 가 진짜 LTI 가 아닌 경우 일부 샘플 잔차가 크게 튀어서 L2 해를 오염시킴. Huber 는 큰 잔차의 영향을 선형으로만 키워서 robust.
 
 `θ = (Kp, Ti, Td)` 3개 파라미터 → **Levenberg-Marquardt** (MathNet `LevenbergMarquardtMinimizer`, finite-difference Jacobian).
 
@@ -134,6 +152,35 @@ FRIT 는 출력 매칭 비용 (비선형) 이라 회귀 구조가 없고 상관 
 $$y = M \cdot \tilde{r}(\theta^*) \implies J(\theta^*) = 0$$
 
 `N → ∞` 에서 `argmin J(θ) → θ*` (Campi-Savaresi 2006).
+
+### 3.8 파라미터 불확실성 (CRLB)
+
+추정된 `(Kp, Ti, Td)` 의 표준오차 (standard error) 를 같이 보고. **얼마나 신뢰할 수 있는지** 정량 표시.
+
+**유도 (Gauss-Newton approximation of CRLB)**:
+
+비용 함수의 Hessian 근사 `H ≈ Jᵀ W J`, 여기서 `J = ∂(√w·ŷ)/∂θ` (`N × 3` 자코비안).
+
+파라미터 공분산:
+$$\mathrm{cov}(\hat{\theta}) \approx \sigma^2 \cdot (J^T J)^{-1}, \quad \sigma^2 \approx \frac{\sum_k w[k]\,r[k]^2}{N_\text{eff} - 3}$$
+
+`N_eff` = effective valid 샘플 수 (`effSat=false` 이고 `√w ≥ 0.5` 인 인덱스).
+
+표준오차 = 공분산 대각선의 sqrt:
+$$\mathrm{SE}(K_p) = \sqrt{\mathrm{cov}_{00}}, \quad \mathrm{SE}(T_i) = \sqrt{\mathrm{cov}_{11}}, \quad \mathrm{SE}(T_d) = \sqrt{\mathrm{cov}_{22}}$$
+
+**구현**:
+- 자코비안: central finite-difference 로 직접 계산 (`θ ± ε`, 3 파라미터 × 2 = 6 model evaluations)
+- `Jᵀ J`: 3×3 행렬, manual sum
+- 역행렬: cofactor 전개 (분석적, singular 면 null 반환)
+- `σ²`: 가중 SSR / (N_eff - 3)
+
+**해석**:
+- `Kp = 0.053 ± 0.001 (2%)` → 매우 신뢰
+- `Ti = 5.2 ± 8.1 (155%)` → 부정확, 데이터 부족이거나 식별 안 됨 → 수동 조정 필요
+- `Td = 0.04 ± 0.02 (50%)` → 어느 정도 신뢰
+
+UI 에 `Kp = 0.0523 ± 0.0012 (2%)` 형태로 자동 표시.
 
 ---
 
@@ -202,23 +249,27 @@ sqrtW[k] = √w[k]
 8. return √w · ŷ
 ```
 
-### 단계 5: LM 최적화
+### 단계 5: IRLS 외부 루프 (3 iter) + LM 최적화
 - 초기값: 현재 PID `(kP, kI, kD)` (sanity check 후 사용)
-- MathNet `LevenbergMarquardtMinimizer`, `maxIter = 30`
-- FD Jacobian (3 파라미터 × 1 = 3 추가 평가 / iter)
+- 각 IRLS iter: MathNet `LevenbergMarquardtMinimizer` (`maxIter = 30`, FD Jacobian)
+- IRLS 사이: 잔차 MAD → δ → Huber 가중치 갱신 → 다음 LM
 
-### 단계 6: RMSE 계산
-포화 인덱스 제외, unweighted 잔차:
+### 단계 6: CRLB (표준오차)
+- LM 수렴 후 `θ*` 에서 자코비안 FD 계산 (6 model evals)
+- `cov ≈ σ² · (JᵀJ)⁻¹` → `SE(Kp), SE(Ti), SE(Td)`
+
+### 단계 7: RMSE 계산
+포화 인덱스 제외, robust-down-weighted 도 제외, unweighted 잔차:
 
 $$\mathrm{RMSE} = \sqrt{\frac{1}{N_\mathrm{valid}} \sum_{k:\,\neg\mathrm{sat}[k]} (y_k - \hat{y}_k)^2}$$
 
-### 단계 7: 경계 클램프
+### 단계 8: 경계 클램프
 - `Kp ∈ [0, 1]`
 - `Ti ∈ [0.1, 250]`
 - `Td ∈ [0, 10]`
 - NaN/Inf 처리
 
-### 단계 8: 게임 PID 에 적용
+### 단계 9: 게임 PID 에 적용
 `RoundToStep` 으로 game UI 호환 단위 (Kp 0.001, Ti/Td 0.1) 로 양자화 후 `_focus.Pid.kP/kI/kD` 에 기록.
 
 ---

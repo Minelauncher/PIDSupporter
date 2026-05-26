@@ -277,6 +277,7 @@ namespace PIDAutoTuner
 
             public bool HasResult;
             public double Kp, Ti, Td;
+            public double KpSE, TiSE, TdSE;     // Cramér-Rao 표준오차 (NaN if 계산 실패)
             public double FitRmse;
 
             public string LastMessage = "";
@@ -305,6 +306,7 @@ namespace PIDAutoTuner
                 NaturalYStd = 0;
                 HasResult = false;
                 Kp = Ti = Td = FitRmse = 0;
+                KpSE = TiSE = TdSE = double.NaN;
                 LastMessage = "";
                 ValidateStartT = 0;
                 ValidateY.Clear();
@@ -810,11 +812,17 @@ namespace PIDAutoTuner
                     if (!_sess.HasResult)
                         return "No result yet. Press Compute. / 아직 결과가 없습니다.";
 
+                    // 표준오차 표시 (CRLB, NaN 이면 생략)
+                    string fmtSE(double v, double se, string vFmt) {
+                        if (double.IsNaN(se) || double.IsInfinity(se) || v == 0) return v.ToString(vFmt);
+                        double pct = 100.0 * se / Math.Abs(v);
+                        return v.ToString(vFmt) + $"  ±{se.ToString(vFmt)}  ({pct:0}%)";
+                    }
                     string result =
                         $"── Single PID ──\n" +
-                        $"Kp = {_sess.Kp:0.0000}\n" +
-                        $"Ti = {_sess.Ti:0.00} s\n" +
-                        $"Td = {_sess.Td:0.0000} s\n" +
+                        $"Kp = {fmtSE(_sess.Kp, _sess.KpSE, "0.0000")}\n" +
+                        $"Ti = {fmtSE(_sess.Ti, _sess.TiSE, "0.00")} s\n" +
+                        $"Td = {fmtSE(_sess.Td, _sess.TdSE, "0.0000")} s\n" +
                         $"Fit (RMSE) = {_sess.FitRmse:0.0000}";
 
                     // ── PI(외부) × PD(내부) 분해 ──
@@ -1411,6 +1419,7 @@ namespace PIDAutoTuner
 
             _sess.HasResult = true;
             _sess.Kp = best.Kp; _sess.Ti = best.Ti; _sess.Td = best.Td;
+            _sess.KpSE = best.KpSE; _sess.TiSE = best.TiSE; _sess.TdSE = best.TdSE;
             _sess.FitRmse = best.Rmse;
 
             _autoState = AutoTuneState.Done;
@@ -1693,8 +1702,10 @@ namespace PIDAutoTuner
         private struct FritResult
         {
             public double Kp, Ti, Td, Rmse;
+            public double KpSE, TiSE, TdSE;     // Cramér-Rao 표준오차 (95% CI ≈ ±2·SE)
             public string Warning;
             public int Iterations;
+            public int IrlsIterations;          // IRLS 반복 횟수
             public bool Converged;
         }
 
@@ -1727,6 +1738,7 @@ namespace PIDAutoTuner
                 _sess.Kp = r.Kp;
                 _sess.Ti = r.Ti;
                 _sess.Td = r.Td;
+                _sess.KpSE = r.KpSE; _sess.TiSE = r.TiSE; _sess.TdSE = r.TdSE;
                 _sess.FitRmse = r.Rmse;
 
                 string conv = r.Converged ? "converged" : "max-iter";
@@ -1936,54 +1948,150 @@ namespace PIDAutoTuner
                 return result;
             };
 
-            // ── 5단계: 관측값 (√w · y) + 초기값 sanity ──
+            // ── 5단계: 관측값 + 초기값 sanity ──
             var obsX = VB.Dense(N, i => (double)i);                       // dummy
-            var obsY = VB.Dense(N, i => sqrtW[i] * yd[i]);
 
             if (Kp0 <= 1e-6 || double.IsNaN(Kp0) || Kp0 > 1.0) Kp0 = 0.1;
             if (Ti0 <= 0.1 || Ti0 >= 250.0 || double.IsNaN(Ti0)) Ti0 = Math.Max(0.5, ts * 2.0);
             if (Td0 < 0 || Td0 > 10.0 || double.IsNaN(Td0)) Td0 = 0.05;
             var initial = VB.DenseOfArray(new[] { Kp0, Ti0, Td0 });
 
-            // ── 6단계: LM 최적화 ──
-            var objective = MathNet.Numerics.Optimization.ObjectiveFunction.NonlinearModel(model, obsX, obsY);
-            var lm = new MathNet.Numerics.Optimization.LevenbergMarquardtMinimizer(maximumIterations: 30);
-            MathNet.Numerics.Optimization.NonlinearMinimizationResult lmResult;
-            try
+            // ── 6단계: IRLS 외부 루프 + LM 내부 (robust M-estimator, Huber) ──
+            //   매 iter:  LM 으로 가중 LS 풀고 → 잔차 보고 → Huber 가중치 업데이트 → 다음 iter
+            //   effSat 인덱스의 saturation 가중치 (=1e-3) 는 유지, 나머지에 Huber 가중치 곱함.
+            //   3 회 반복이면 보통 robust 가중치 수렴.
+            const int IRLS_MAX_ITER = 3;
+            const double HUBER_K = 1.5;        // δ = K · σ_robust
+            MathNet.Numerics.Optimization.NonlinearMinimizationResult lmResult = null;
+            int irlsIter = 0;
+
+            for (int irls = 0; irls < IRLS_MAX_ITER; irls++)
             {
-                lmResult = lm.FindMinimum(objective, initial);
-            }
-            catch (Exception ex)
-            {
-                return new FritResult
+                var obsY = VB.Dense(N, i => sqrtW[i] * yd[i]);
+                var objective = MathNet.Numerics.Optimization.ObjectiveFunction.NonlinearModel(model, obsX, obsY);
+                var lm = new MathNet.Numerics.Optimization.LevenbergMarquardtMinimizer(maximumIterations: 30);
+
+                try
                 {
-                    Kp = Kp0, Ti = Ti0, Td = Td0,
-                    Rmse = double.NaN,
-                    Warning = "LM failed / LM 실패: " + ex.Message,
-                    Iterations = 0,
-                    Converged = false
-                };
+                    lmResult = lm.FindMinimum(objective, initial);
+                }
+                catch (Exception ex)
+                {
+                    return new FritResult
+                    {
+                        Kp = Kp0, Ti = Ti0, Td = Td0,
+                        Rmse = double.NaN,
+                        Warning = "LM failed / LM 실패: " + ex.Message,
+                        Iterations = 0,
+                        IrlsIterations = irls,
+                        Converged = false
+                    };
+                }
+                initial = lmResult.MinimizingPoint;
+                irlsIter = irls + 1;
+
+                // 마지막 iter 에서는 가중치 업데이트 불필요
+                if (irls >= IRLS_MAX_ITER - 1) break;
+
+                // 잔차 계산 (raw, unweight)
+                var ypredW = model(lmResult.MinimizingPoint, obsX);
+                double[] resAbs = new double[N];
+                var unsatResList = new List<double>();
+                for (int i = 0; i < N; i++)
+                {
+                    double pred = ypredW[i] / Math.Max(1e-12, sqrtW[i]);
+                    double r = yd[i] - pred;
+                    resAbs[i] = Math.Abs(r);
+                    if (!effSat[i]) unsatResList.Add(resAbs[i]);
+                }
+                if (unsatResList.Count < 8) break;
+
+                // MAD 기반 robust scale 추정
+                unsatResList.Sort();
+                double mad = unsatResList[unsatResList.Count / 2];
+                double sigmaR = 1.4826 * Math.Max(mad, 1e-6);
+                double delta = HUBER_K * sigmaR;
+
+                // Huber 가중치 업데이트 (effSat 는 saturation 가중치 유지)
+                for (int i = 0; i < N; i++)
+                {
+                    if (effSat[i]) continue;     // saturation weight 보존
+                    double absR = resAbs[i];
+                    double wH = (absR <= delta) ? 1.0 : (delta / absR);
+                    sqrtW[i] = Math.Sqrt(wH);
+                }
             }
 
             double Kp = lmResult.MinimizingPoint[0];
             double Ti = lmResult.MinimizingPoint[1];
             double Td = lmResult.MinimizingPoint[2];
 
-            // ── 7단계: RMSE (가중 제외, effSat 인덱스 제외, raw 잔차) ──
+            // ── 7단계: RMSE (effSat 제외, robust 가중치도 무시한 raw 잔차) ──
             var finalWeighted = model(lmResult.MinimizingPoint, obsX);
             double sse = 0;
             int nValidRmse = 0;
             for (int i = 0; i < N; i++)
             {
                 if (effSat[i]) continue;
-                double pred = finalWeighted[i] / sqrtW[i];     // unweight
+                double pred = finalWeighted[i] / Math.Max(1e-12, sqrtW[i]);
                 double err = yd[i] - pred;
                 sse += err * err;
                 nValidRmse++;
             }
             double rmse = (nValidRmse > 0) ? Math.Sqrt(sse / nValidRmse) : double.NaN;
 
-            // ── 8단계: 경계 클램프 + 경고 ──
+            // ── 8단계: CRLB (Cramér-Rao 표준오차) ──
+            //   J = ∂(√w·ŷ)/∂θ at θ*, σ² ≈ ssr_w / (N_eff - 3)
+            //   cov ≈ σ² · (Jᵀ J)⁻¹ → diag 가 분산, sqrt 가 표준오차
+            double kpSE = double.NaN, tiSE = double.NaN, tdSE = double.NaN;
+            try
+            {
+                double[] eps = { Math.Max(1e-6, Math.Abs(Kp) * 1e-4),
+                                 Math.Max(1e-4, Math.Abs(Ti) * 1e-4),
+                                 Math.Max(1e-7, Math.Abs(Td) * 1e-4) };
+                double[,] Jmat = new double[N, 3];
+                for (int j = 0; j < 3; j++)
+                {
+                    var thp = lmResult.MinimizingPoint.Clone();
+                    var thm = lmResult.MinimizingPoint.Clone();
+                    thp[j] += eps[j]; thm[j] -= eps[j];
+                    var yp = model(thp, obsX);
+                    var ym = model(thm, obsX);
+                    double invDen = 0.5 / eps[j];
+                    for (int i = 0; i < N; i++) Jmat[i, j] = (yp[i] - ym[i]) * invDen;
+                }
+                // JtJ
+                double[,] JtJ = new double[3, 3];
+                for (int a = 0; a < 3; a++)
+                    for (int b = 0; b < 3; b++)
+                    {
+                        double sumJJ = 0;
+                        for (int i = 0; i < N; i++) sumJJ += Jmat[i, a] * Jmat[i, b];
+                        JtJ[a, b] = sumJJ;
+                    }
+                double[,] inv = Invert3x3(JtJ);
+                // σ² from weighted residuals over effective valid samples
+                int nEff = 0;
+                double ssrW = 0;
+                for (int i = 0; i < N; i++)
+                {
+                    if (effSat[i]) continue;
+                    if (sqrtW[i] < 0.5) continue;   // IRLS-downweighted outlier 도 제외
+                    double rW = sqrtW[i] * yd[i] - finalWeighted[i];
+                    ssrW += rW * rW;
+                    nEff++;
+                }
+                if (nEff > 3 && inv != null)
+                {
+                    double sigma2 = ssrW / (nEff - 3);
+                    kpSE = Math.Sqrt(Math.Max(0, sigma2 * inv[0, 0]));
+                    tiSE = Math.Sqrt(Math.Max(0, sigma2 * inv[1, 1]));
+                    tdSE = Math.Sqrt(Math.Max(0, sigma2 * inv[2, 2]));
+                }
+            }
+            catch { /* CRLB 실패해도 본 결과는 유효 */ }
+
+            // ── 9단계: 경계 클램프 + 경고 ──
             string warning = null;
             if (Kp < 0) { warning = $"Kp<0 ({Kp:0.000}) clamped to 0"; Kp = 0; }
             if (Ti < 0.1) Ti = 0.1;
@@ -1998,11 +2106,35 @@ namespace PIDAutoTuner
             return new FritResult
             {
                 Kp = Kp, Ti = Ti, Td = Td,
+                KpSE = kpSE, TiSE = tiSE, TdSE = tdSE,
                 Rmse = rmse,
                 Warning = warning,
                 Iterations = lmResult.Iterations,
+                IrlsIterations = irlsIter,
                 Converged = (lmResult.ReasonForExit == MathNet.Numerics.Optimization.ExitCondition.Converged)
             };
+        }
+
+        /// <summary>3×3 matrix inversion via cofactor expansion. Returns null if singular.</summary>
+        private static double[,] Invert3x3(double[,] m)
+        {
+            double a = m[0, 0], b = m[0, 1], c = m[0, 2];
+            double d = m[1, 0], e = m[1, 1], f = m[1, 2];
+            double g = m[2, 0], h = m[2, 1], i = m[2, 2];
+            double det = a*(e*i - f*h) - b*(d*i - f*g) + c*(d*h - e*g);
+            if (Math.Abs(det) < 1e-30) return null;
+            double inv = 1.0 / det;
+            double[,] r = new double[3, 3];
+            r[0, 0] = (e*i - f*h) * inv;
+            r[0, 1] = (c*h - b*i) * inv;
+            r[0, 2] = (b*f - c*e) * inv;
+            r[1, 0] = (f*g - d*i) * inv;
+            r[1, 1] = (a*i - c*g) * inv;
+            r[1, 2] = (c*d - a*f) * inv;
+            r[2, 0] = (d*h - e*g) * inv;
+            r[2, 1] = (b*g - a*h) * inv;
+            r[2, 2] = (a*e - b*d) * inv;
+            return r;
         }
 
         // ============================================================
