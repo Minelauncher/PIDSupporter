@@ -49,7 +49,7 @@
 //   [자체] FritTuningTab(window, focus)        생성자 (FTD SuperScreen 상속)
 //   [자체] Build()                             override. UI 요소 배치 (FTD가 호출)
 //   [자체] OnUiFixed()                         매 물리 틱 호출. 데이터 수집의 심장
-//   [자체] enum AutoTuneState                  Idle/Recording/Computing/Done/Failed/Validating
+//   [자체] enum AutoTuneState                  Idle/Diagnosing/Recording/Computing/Done/Failed/Validating
 //
 // ── UI 빌더 (Build() 가 호출) ──
 //   [자체] BuildStatus()                       상태 표시 영역
@@ -61,8 +61,9 @@
 //                                              FTD UI 컴포넌트 헬퍼
 //
 // ── 자동 튜닝 진입 / 종료 ──
-//   [자체] AutoTuneNow()                       [자동 튜닝] 클릭 핸들러
-//   [자체] StartAutoTuneRecording()            가진 설정 + StartRecording
+//   [자체] AutoTuneNow()                       [자동 튜닝] 클릭 → Diagnosing 진입
+//   [자체] OnDiagnoseTick(dt)                  3초 사전 진단 (가진 OFF, |u| 통계 → 판정)
+//   [자체] StartAutoTuneRecording()            진단 통과 시 가진 설정 + StartRecording
 //   [자체] StartRecording() / StopRecording()  세션 초기화 / SP 복원
 //   [자체] AutoTuneCompute()                   녹화 완료 → Ts 스캔 → FRIT 결정
 //
@@ -191,12 +192,13 @@ namespace PIDAutoTuner
         /// <summary>자동 튜닝 상태 머신</summary>
         private enum AutoTuneState
         {
-            Idle,       // 대기 중
-            Recording,  // 데이터 수집 중 (폐루프)
-            Computing,  // 수집 끝, FRIT 계산 중
-            Done,       // 계산 완료 (결과 있음)
-            Failed,     // 실패 (에러 메시지 있음)
-            Validating, // 검증 모드: 전 축 y 수집 중 (5초)
+            Idle,        // 대기 중
+            Diagnosing,  // 사전 진단: 가진 OFF 로 3초 관찰 → 현재 PID 상태 판정
+            Recording,   // 데이터 수집 중 (폐루프, 가진 ON)
+            Computing,   // 수집 끝, FRIT 계산 중
+            Done,        // 계산 완료 (결과 있음)
+            Failed,      // 실패 (에러 메시지 있음)
+            Validating,  // 검증 모드: 전 축 y 수집 중 (5초)
         }
 
         /// <summary>축 타입 — 사용자가 각 tab 에서 지정. 피치 고도유지 로직 등에 사용.</summary>
@@ -276,6 +278,14 @@ namespace PIDAutoTuner
             public int SamplesSinceLastSat;   // 마지막 포화 이후 경과 샘플 수
             public int EffectiveValidCount;   // transient tail 밖에 있는 깨끗한 샘플 누적
 
+            // 사전 진단 상태 (Diagnosing 단계, 3초 가진 OFF 관찰)
+            public double DiagT;            // 진단 누적 시간 (초)
+            public int    DiagSampleCount;
+            public double DiagUMax, DiagUMin;
+            public int    DiagSatCount;     // |u| ≥ 임계 카운트
+            public int    DiagSignChanges;  // u 부호 변환 횟수
+            public double DiagPrevU;        // 직전 u (부호 변환 검출용)
+
             // 적응형 진폭 상태 (saturation 기반 — u 만 봄)
             public double AdaptiveCurrentAmp;       // 현재 실제 적용 진폭
             public int    AdaptiveWindowSat;        // 윈도우 내 포화 카운트
@@ -308,6 +318,12 @@ namespace PIDAutoTuner
                 SaturatedCount = 0;
                 SamplesSinceLastSat = int.MaxValue / 2;   // 시작 시 "이미 충분히 오래 깨끗" 상태
                 EffectiveValidCount = 0;
+                DiagT = 0;
+                DiagSampleCount = 0;
+                DiagUMax = DiagUMin = 0;
+                DiagSatCount = 0;
+                DiagSignChanges = 0;
+                DiagPrevU = 0;
                 AdaptiveCurrentAmp = 0;
                 AdaptiveWindowSat = 0;
                 AdaptiveWindowUPeak = 0;
@@ -465,6 +481,15 @@ namespace PIDAutoTuner
                         _autoState = AutoTuneState.Failed;
                         _sess.LastMessage = "Auto-tune failed / 자동 튜닝 실패: " + e.Message;
                     }
+                    return;
+                }
+
+                // 사전 진단 모드 (Auto Tune 직후 3초): 가진 OFF, u 통계만 수집
+                if (_autoState == AutoTuneState.Diagnosing)
+                {
+                    double dtDg = Time.fixedDeltaTime;
+                    if (dtDg <= 0) dtDg = 0.02;
+                    OnDiagnoseTick(dtDg);
                     return;
                 }
 
@@ -638,7 +663,9 @@ namespace PIDAutoTuner
                 M.m<VariableControllerMaster>(_ =>
                 {
                     string rec;
-                    if (_autoState == AutoTuneState.Validating)
+                    if (_autoState == AutoTuneState.Diagnosing)
+                        rec = "Diagnosing / 진단 중";
+                    else if (_autoState == AutoTuneState.Validating)
                         rec = "Validating / 검증 중";
                     else if (_autoState == AutoTuneState.Computing)
                         rec = "Computing / 계산 중";
@@ -1293,8 +1320,13 @@ namespace PIDAutoTuner
 
             RestoreSetPointAdjustIfNeeded();
 
-            // 바로 녹화 시작 — 현재 PID C₀ 로 폐루프 데이터 수집 (FRIT seed 로도 사용)
-            StartAutoTuneRecording();
+            // ── 사전 진단 단계 진입 ──
+            // 가진 OFF 로 3초 동안 |u| 통계 관찰 → 현재 PID 가 이미 limit-cycle 이거나
+            // 지속 포화 상태면 즉시 fail + 구체적 Kp 권장값 표시.
+            // 통과하면 OnUiFixed 의 Diagnosing 핸들러가 StartAutoTuneRecording 호출.
+            _sess.Clear();
+            _autoState = AutoTuneState.Diagnosing;
+            _sess.LastMessage = "Diagnosing initial PID (no excitation, 3s)... / 초기 PID 진단 중 (3초)";
         }
 
         /// <summary>
@@ -1504,6 +1536,110 @@ namespace PIDAutoTuner
             _autoState = AutoTuneState.Validating;
             double valDur = GetValidateDuration();
             _sess.LastMessage = $"Validating: collecting y on all axes for {valDur:0}s... / 검증: 전 축 y 수집 중 ({valDur:0}초)...";
+        }
+
+        // ════════════════════════════════════════════════════════════════════════
+        // OnDiagnoseTick — Auto Tune 직후 3초 사전 진단
+        // ════════════════════════════════════════════════════════════════════════
+        //
+        // 목적: 가진을 켜기 전에 현재 PID 가 "튜닝 가능한 상태" 인지 확인.
+        // 가진 OFF 상태에서 |u| 통계 만 모음 → 3초 후 판정.
+        //
+        // 판정 기준 (윈도우 끝에서):
+        //   1. Limit cycle: satRate > 40%, crossRate > 0.5회/s, uSwing > 1.6
+        //      → u 가 ±포화 사이 진동. 보통 Kp 너무 큼.
+        //   2. 지속 포화: satRate > 40% (진동 적음)
+        //      → u 가 한쪽 rail 에 박혀있음.
+        //   3. 살짝 포화: satRate 15~40% → 경고 후 진행
+        //   4. 정상: satRate < 15% → 정상 진행
+        //
+        // 실패 시 권장 Kp = currentKp × 0.4 (limit cycle) 또는 × 0.5 (지속 포화).
+        // ════════════════════════════════════════════════════════════════════════
+        private void OnDiagnoseTick(double dt)
+        {
+            if (_autoState != AutoTuneState.Diagnosing) return;
+
+            const double DIAG_DURATION = 3.0;
+
+            if (this._focus == null)
+            {
+                _autoState = AutoTuneState.Failed;
+                _sess.LastMessage = "Diag failed: no focus / 진단 실패: focus 없음";
+                return;
+            }
+            var c = this._focus.GetCurrentController();
+            if (c == null)
+            {
+                _autoState = AutoTuneState.Failed;
+                _sess.LastMessage = "Diag failed: no controller / 진단 실패: 컨트롤러 없음";
+                return;
+            }
+
+            double u = c.LastControlVariable;
+
+            // 통계 누적
+            if (_sess.DiagSampleCount == 0)
+            {
+                _sess.DiagUMax = u;
+                _sess.DiagUMin = u;
+            }
+            else
+            {
+                if (u > _sess.DiagUMax) _sess.DiagUMax = u;
+                if (u < _sess.DiagUMin) _sess.DiagUMin = u;
+            }
+            if (Math.Abs(u) >= _s.SaturationThreshold) _sess.DiagSatCount++;
+            if (_sess.DiagSampleCount > 0 && _sess.DiagPrevU != 0
+                && Math.Sign(u) != Math.Sign(_sess.DiagPrevU))
+                _sess.DiagSignChanges++;
+            _sess.DiagPrevU = u;
+            _sess.DiagSampleCount++;
+            _sess.DiagT += dt;
+
+            // 진행 표시
+            double uPeakSoFar = Math.Max(Math.Abs(_sess.DiagUMax), Math.Abs(_sess.DiagUMin));
+            _sess.LastMessage = $"Diagnosing... {_sess.DiagT:0.0}s/{DIAG_DURATION:0.0}s (uPeak={uPeakSoFar:0.00}) / 진단 중";
+
+            if (_sess.DiagT < DIAG_DURATION) return;
+
+            // ── 판정 ──
+            double satRate = (double)_sess.DiagSatCount / Math.Max(1, _sess.DiagSampleCount);
+            double uSwing = _sess.DiagUMax - _sess.DiagUMin;
+            double uPeak = Math.Max(Math.Abs(_sess.DiagUMax), Math.Abs(_sess.DiagUMin));
+            double crossRate = _sess.DiagSignChanges / DIAG_DURATION;
+            double curKp = (double)this._focus.Pid.kP.Us;
+
+            // (1) Limit cycle: ±포화 사이 빠른 진동
+            if (satRate > 0.40 && crossRate > 0.5 && uSwing > 1.6)
+            {
+                double suggested = Math.Max(0.001, curKp * 0.4);
+                _autoState = AutoTuneState.Failed;
+                _sess.LastMessage =
+                    $"⚠ Limit cycle 감지 (u={_sess.DiagUMin:0.00}~{_sess.DiagUMax:0.00}, " +
+                    $"{crossRate:0.0}회/s, sat={satRate:P0}). " +
+                    $"Kp {curKp:0.000}→{suggested:0.000} 으로 줄이고 재시도.";
+                return;
+            }
+
+            // (2) 지속 포화: 한쪽 rail 고정
+            if (satRate > 0.40)
+            {
+                double suggested = Math.Max(0.001, curKp * 0.5);
+                _autoState = AutoTuneState.Failed;
+                _sess.LastMessage =
+                    $"⚠ 지속 포화 (sat={satRate:P0}, uPeak={uPeak:0.00}). " +
+                    $"Kp {curKp:0.000}→{suggested:0.000} 권장.";
+                return;
+            }
+
+            // (3) 진단 통과 — Recording 단계로 이행
+            string warn = (satRate > 0.15)
+                ? $" (주의: 초기 sat={satRate:P0})"
+                : "";
+
+            // 진단 상태 초기화 (사용한 _sess.T 는 StartRecording 에서 Clear 됨)
+            _sess.LastMessage = $"Diag OK (uPeak={uPeak:0.00}, sat={satRate:P0}). 녹화 시작{warn}";
+            StartAutoTuneRecording();
         }
 
         private void OnValidateTick(double dt)

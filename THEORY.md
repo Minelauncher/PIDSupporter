@@ -9,6 +9,9 @@
 **식별 체인:**
 ```
 [Auto Tune]
+  → 사전 진단 3초 (가진 OFF, |u| 통계만 관찰)
+       · Limit cycle 또는 지속 포화 감지 → 즉시 fail + 권장 Kp 표시
+       · 정상이면 다음 단계
   → 가진 신호 (멀티사인 + 저주파 square) 를 SetPoint 에 주입
   → 현재 PID C₀ 로 폐루프 데이터 (u, y) + 포화 플래그 연속 수집 (블록 분리 없음)
   → EffectiveValidCount (= transient-tail 밖 깨끗 샘플) ≥ MinSamples 까지 대기
@@ -350,7 +353,56 @@ $$x(t) = x_\text{ms}(t) + x_\text{sq}(t)$$
 
 ---
 
-## 8. 포화 처리 — 단일 방어선 (가중치 + 계속 수집)
+## 8. 사전 진단 (Pre-Diagnose) — Auto Tune 직후 3초
+
+### 8.1 왜 필요한가
+
+현재 PID 가 "이미 limit cycle" 이거나 "지속 포화" 상태면 어떤 가진을 줘도 식별 못 함:
+- u 가 자체 진동 (±포화 사이) → 모든 샘플이 포화 → effSat 가 거의 전체 → 유효 샘플 0
+- 60 초 타임아웃까지 발버둥 → "왜 안 됐지?" fail 메시지
+
+진단 단계는 **가진을 켜기 전 3 초간 관찰만** 해서 위 상황을 사전 차단 + 사용자에게 정확한 권장값 제시.
+
+### 8.2 측정 (3초간 가진 OFF)
+
+```
+매 틱:
+  |u| 의 max/min 갱신
+  if |u| ≥ SaturationThreshold: satCount++
+  if sign(u) ≠ sign(prevU): signChanges++  (부호 변환)
+
+3초 후:
+  satRate    = satCount / sampleCount
+  uSwing     = uMax − uMin
+  uPeak      = max(|uMax|, |uMin|)
+  crossRate  = signChanges / 3초
+```
+
+### 8.3 판정 규칙
+
+| 패턴 | 조건 | 동작 |
+|---|---|---|
+| **Limit cycle** | `satRate > 40%` AND `crossRate > 0.5/s` AND `uSwing > 1.6` | fail + `Kp × 0.4` 권장 |
+| **지속 포화** | `satRate > 40%` AND 진동 적음 | fail + `Kp × 0.5` 권장 |
+| **살짝 포화** | `satRate 15~40%` | 경고 후 진행 |
+| **정상** | `satRate < 15%` | 정상 진행 |
+
+### 8.4 사용자 경험
+
+**Before**: `[Auto Tune]` → 60초 후 `"failed: only 38 valid samples"` (왜 실패했는지 불명)
+
+**After**: `[Auto Tune]` → 3초 후 `"Limit cycle (u=-0.94~+0.97, 1.7회/s, sat=78%). Kp 0.150→0.060 으로 줄이고 재시도."` (정확한 처방)
+
+### 8.5 자동 PID 변경은 안 함
+
+진단은 **읽기 전용** — 현재 PID 를 자동으로 수정하지 않음. 권장값만 표시. 이유:
+- 사용자 통제권 유지 (PID 가 모르는 새 바뀌는 거 거부감)
+- 진단 권장값이 항상 최선은 아님 (Ti/Td 도 손봐야 할 수도)
+- 안전 (자동 수정으로 더 나빠질 위험 차단)
+
+---
+
+## 9. 포화 처리 — 단일 방어선 (가중치 + 계속 수집)
 
 `|u| ≥ 0.98` 이면 비선형 영역 → FRIT 의 선형 LTI 가정 위반. 모든 샘플을 연속 저장하되, 식별 단계에서 가중치로 처리:
 
@@ -399,7 +451,7 @@ w[k] = effSat[k] ? 1e-3 : 1.0
 
 ---
 
-## 9. FTD 특이사항
+## 10. FTD 특이사항
 
 ### 축별 SP/PV 구조
 - `SetPointAdjust` : 외부에서 SP 에 offset 주입 (가진용)
@@ -423,7 +475,7 @@ w[k] = effSat[k] ? 1e-3 : 1.0
 
 ---
 
-## 10. 알려진 한계
+## 11. 알려진 한계
 
 1. **초기 컨트롤러 안정성 가정.** FRIT 는 폐루프 데이터를 전제. 초기 PID 가 발산 직전이면 데이터 자체가 비선형 transient 라 결과 신뢰도 ↓.
 
@@ -439,7 +491,7 @@ w[k] = effSat[k] ? 1e-3 : 1.0
 
 ---
 
-## 11. 참고문헌
+## 12. 참고문헌
 
 - **FRIT 원본**: Soma, S., Kaneko, O., & Fujii, T. (2004). *A new method of controller parameter tuning based on input-output data — Fictitious Reference Iterative Tuning (FRIT)*. IFAC Workshop on Adaptation and Learning in Control and Signal Processing.
 - **FRIT 강건성 (vs VRFT)**: Kaneko, O. (2013). *Data-driven controller tuning: FRIT approach*. IFAC Proceedings Volumes 46(11).
