@@ -1461,10 +1461,12 @@ namespace PIDSupporter
             //   · Td/dt < 10    (이산 미분의 per-sample 노이즈 게인 상한)
             // 모든 후보가 실패하면 가장 보수적인 후보의 결과로 폴백 (경고 표시).
             double tauM = Math.Max(dt, (double)_s.ModelDelayTau);
-            // 공격 ↔ 보수 사이를 촘촘하게: [1, 2.5] 구간은 0.25 step, [2.5, 4] 구간은 0.5 step.
-            // 후보를 그리드로 두는 이유는 결과를 후처리해서 보거나 디버깅하기 좋고,
-            // Td/Ti·Td/dt 가 Ts 에 대해 항상 monotonic 한 건 아니라 bisection 보다 안전.
-            double[] factors = { 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 3.0, 3.5, 4.0 };
+            // k 범위 [0.1, 4.0] 로 sub-1.0 후보까지 포함.
+            // 이유: τ_p 추정기가 closed-loop 결합/노이즈로 인해 과대추정하는 경우가 있음
+            //   (예: 비행기 롤축은 τ_p ≈ 0.2s 인데 ARX 가 1.8s 추정).
+            // k < 1 후보가 있으면 추정이 N배 부풀려져도 그만큼 작은 k 로 보상해서
+            // 실제 plant 한계에 맞는 Ts 가 sweep 안에 들어옴. 안전 체크가 비현실적 후보를 거름.
+            double[] factors = { 0.1, 0.2, 0.4, 0.6, 1.0, 1.5, 2.0, 2.5, 3.0, 4.0 };
 
             FritResult best = default;
             bool hasBest = false;
