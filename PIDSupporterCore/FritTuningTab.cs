@@ -1572,32 +1572,31 @@ namespace PIDSupporter
             if (_sess.DiagT < DIAG_DURATION) return;
 
             // ── 판정 ──
+            // PIDSupporter 는 "튜너" 가 아니라 "보조" 도구. 관찰된 현상과 의심 가능한
+            // 원인들만 사용자에게 전달하고, 구체적인 게인 변경은 사용자의 판단에 맡긴다.
             double satRate = (double)_sess.DiagSatCount / Math.Max(1, _sess.DiagSampleCount);
             double uSwing = _sess.DiagUMax - _sess.DiagUMin;
             double uPeak = Math.Max(Math.Abs(_sess.DiagUMax), Math.Abs(_sess.DiagUMin));
             double crossRate = _sess.DiagSignChanges / DIAG_DURATION;
-            double curKp = (double)this._focus.Pid.kP.Us;
 
             // (1) Limit cycle: ±포화 사이 빠른 진동
             if (satRate > 0.40 && crossRate > 0.5 && uSwing > 1.6)
             {
-                double suggested = Math.Max(0.001, curKp * 0.4);
                 _autoState = AutoTuneState.Failed;
                 _sess.LastMessage =
                     $"⚠ Limit cycle 감지 (u={_sess.DiagUMin:0.00}~{_sess.DiagUMax:0.00}, " +
                     $"{crossRate:0.0}회/s, sat={satRate:P0}). " +
-                    $"Kp {curKp:0.000}→{suggested:0.000} 으로 줄이고 재시도.";
+                    $"의심 원인: Kp 과대 / Ti 과소 (windup) / Td 과대. 게인 낮춰 재시도.";
                 return;
             }
 
             // (2) 지속 포화: 한쪽 rail 고정
             if (satRate > 0.40)
             {
-                double suggested = Math.Max(0.001, curKp * 0.5);
                 _autoState = AutoTuneState.Failed;
                 _sess.LastMessage =
                     $"⚠ 지속 포화 (sat={satRate:P0}, uPeak={uPeak:0.00}). " +
-                    $"Kp {curKp:0.000}→{suggested:0.000} 권장.";
+                    $"의심 원인: Kp/Ki 과대 또는 SetPoint 가 액추에이터 한계 초과. 점검 후 재시도.";
                 return;
             }
 
