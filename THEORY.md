@@ -220,13 +220,19 @@ $$y[k] = \frac{x[k] + x[k-1] - \beta_1 y[k-1]}{\beta_0}$$
 **1단계: τ_p 추정**
 
 1. **FOPDT fit** (`EstimateTauFromFopdtFit`) — **주 추정기, plant 고유 τ_p (PID 무관 unbiased)**:
-   MultiSine 가진의 step prelude 구간 (u, y) 둘 다 사용해서 ARX(1,1) OLS 로 1차 plant 모델 fit.
+   MultiSine 가진의 전체 (u, y) 시계열에 **ARX(2,1) OLS** 로 2차 plant 모델 fit.
    ```
-   y_d[k] = a · y_d[k-1] + b · u_d[k-1-delayN]
-   τ_p = -dt / ln(a)
+   y[k] = a₁ · y[k-1] + a₂ · y[k-2] + b · u[k-1-delayN]
+   특성 다항식: z² - a₁·z - a₂ = 0  →  근 z₁, z₂
+   τ_p = -dt / ln(|z|)  (지배 극점의 시정수)
    ```
-   plant 방정식 `τ_p·dy/dt + y = K·u(t-θ)` 가 PID 와 무관하게 성립한다는 사실 활용.
-   포화 샘플 제외, 응답이 노이즈 수준이면 NaN 반환 → 폴백.
+   ARX(2,1) 은 1차/2차/integrator 동특성 모두 처리:
+   - 1차 plant: a₂≈0, 한 근이 ≈0 (즉시), 나머지 = exp(-dt/τ_p)
+   - 2차 plant: 두 안정 근 → 큰 쪽 (느린 극점) = τ_p
+   - integrator: 한 근이 ≈1 → 제외, 나머지 근으로 τ_p
+   - 진동 plant: 복소 conjugate 근, |z| 로 τ_p
+   
+   plant 방정식이 PID 와 무관하게 성립한다는 사실 활용. 포화 샘플 제외, ARX(2,1) 적합 실패 시 NaN 반환 → 폴백.
 
 2. **자기상관 1/e** (`EstimateDominantTau`) — **단일 폴백**:
    y(t) 의 자기상관 (PSD → IFFT, Wiener-Khinchin) 에서 1/e 떨어지는 시각.

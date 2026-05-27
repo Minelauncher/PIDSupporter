@@ -1556,7 +1556,7 @@ namespace PIDSupporter
             _sess.LastMessage =
                 $"Done | τ_p≈{tau_p:0.00}s ({tauSrc}) → Ts={bestTs:0.00}s (k={bestFactor:0.00}, safe {safeCount}/{factors.Length}) " +
                 $"({conv}, {best.Iterations} iter) " +
-                $"Kp={best.Kp:0.000} Ti={best.Ti:0.1} Td={best.Td:0.00} rmse={best.Rmse:0.0000}{warn}{safetyWarn}";
+                $"Kp={best.Kp:0.000} Ti={best.Ti:0.0} Td={best.Td:0.00} rmse={best.Rmse:0.0000}{warn}{safetyWarn}";
         }
 
         private void ValidateAxes()
@@ -2669,86 +2669,133 @@ namespace PIDSupporter
         }
 
         /// <summary>
-        /// Step prelude 데이터 (u, y) 에 FOPDT (1차 + 지연) 모델을 ARX(1,1) OLS 로 fit 해
-        /// **plant 고유 시정수 τ_p** 를 PID 영향 없이 추출한다.
+        /// 전체 (u, y) 시계열에 **ARX(2,1) OLS** 로 2차 plant 모델을 fit, 지배 시정수 τ_p 를
+        /// 추출한다. 1차/2차 plant 와 integrator 동특성을 모두 처리.
         ///
-        /// 모델 (이산 형태):
-        ///   y_d[k] = a · y_d[k-1] + b · u_d[k-1-delayN]
-        ///       y_d = y - y[0], u_d = u - u[0]      ← baseline 제거
-        ///   τ_p = -dt / ln(a)                       ← α = exp(-dt/τ_p)
+        /// 모델:
+        ///   y[k] = a₁·y[k-1] + a₂·y[k-2] + b·u[k-1-delayN]
+        ///   → 특성 다항식 z² - a₁·z - a₂ = 0 의 근 = 이산 plant 극점
+        ///   → τ_i = -dt / ln(|z_i|)  (각 극점의 시정수)
         ///
-        /// 왜 closed-loop 데이터에서도 작동하나:
-        ///   plant 방정식 τ_p·dy/dt + y = K·u(t-θ) 은 PID 와 무관하게 성립.
-        ///   (u, y) 쌍에서 plant 파라미터를 추정하는 건 closed-loop 든 open-loop 든 같음.
-        ///   유일한 차이는 u 가 PID 의 출력이라 노이즈와 약하게 상관될 수 있다는 점인데,
-        ///   prelude 의 step 응답은 deterministic 변화가 압도해서 OLS 편향이 작음.
+        /// 지배 시정수 선택:
+        ///   · 양 극점 모두 안정 (|z|<1) → 큰 쪽을 τ_p
+        ///   · 한 극점이 z≈1 (integrator) → 나머지 극점 사용 (integrator 는 τ_p 무한대라 의미 없음)
+        ///   · 복소 conjugate (진동 plant) → |z| 로부터 τ_p
+        ///   · 양 극점 불안정 → NaN (폴백)
         ///
-        /// 포화 샘플은 ARX regressor 에서 제외.
-        /// 응답이 너무 작거나 (signal/noise) ARX 적합 실패 시 NaN 반환 → 호출측 폴백.
+        /// 1차 plant 일 때도 작동:  a₂≈0 이면 한 극점이 ≈0 (즉시 응답) + 나머지 극점이 τ_p.
+        /// closed-loop 편향 작음 (FRIT 와 같은 이유: plant 식 자체가 PID 무관).
         /// </summary>
         // FOPDT fit 실패 시 마지막 사유 (UI 메시지에 표시).
         private static string _fopdtLastFailReason = "";
 
         private static double EstimateTauFromFopdtFit(double[] u, double[] y, bool[] sat, double dt, double theta)
         {
-            int nPrelude = (int)Math.Round(STEP_PRELUDE_SEC / dt);
-            if (u.Length < nPrelude || y.Length < nPrelude || sat.Length < nPrelude || nPrelude < 12)
-            { _fopdtLastFailReason = "data short"; return double.NaN; }
+            int N = Math.Min(u.Length, Math.Min(y.Length, sat.Length));
+            if (N < 64) { _fopdtLastFailReason = "data too short"; return double.NaN; }
 
             int delayN = Math.Max(0, (int)Math.Round(theta / dt));
-            int kStart = 1 + delayN;
-            if (kStart >= nPrelude - 2)
-            { _fopdtLastFailReason = "delay > prelude"; return double.NaN; }
+            int kStart = 2 + delayN;
+            if (kStart >= N - 4) { _fopdtLastFailReason = "delay > data"; return double.NaN; }
 
-            // 응답 크기 sanity (잡음 수준 변동이면 fit 무의미)
-            double yMax = y[0], yMin = y[0];
-            for (int i = 0; i < nPrelude; i++)
-            {
-                if (y[i] > yMax) yMax = y[i];
-                if (y[i] < yMin) yMin = y[i];
-            }
+            // 응답 크기 sanity
             double yStd = StdDev(y);
-            if ((yMax - yMin) < Math.Max(1e-4, 0.1 * yStd))
-            { _fopdtLastFailReason = $"weak response (Δy={yMax - yMin:0.000})"; return double.NaN; }
+            if (yStd < 1e-4) { _fopdtLastFailReason = $"weak response (yStd={yStd:0.0000})"; return double.NaN; }
 
-            double y0 = y[0];
-            double u0 = u[0];
+            // 디트렌드 (DC + 선형 추세 제거) — 전체 데이터 사용하므로 필수
+            double[] yd = new double[N]; Array.Copy(y, yd, N); Detrend(yd);
+            double[] ud = new double[N]; Array.Copy(u, ud, N); Detrend(ud);
 
-            // ARX(1,1) OLS: y_d[k] = a·y_d[k-1] + b·u_d[k-1-delayN]
-            // 정규방정식: [sYY  sYU][a]   [sYtY]
-            //              [sYU  sUU][b] = [sYtU]
-            double sYY = 0, sYU = 0, sUU = 0, sYtY = 0, sYtU = 0;
+            // ARX(2,1) OLS: y[k] = a₁·y[k-1] + a₂·y[k-2] + b·u[k-1-delayN]
+            // 정규방정식 3x3:
+            //   M = [[s11, s12, s13], [s12, s22, s23], [s13, s23, s33]]
+            //   b = [t1, t2, t3]
+            // 여기서 s_ij = Σ x_i·x_j, t_i = Σ x_i·y[k]
+            //   x_1 = y[k-1], x_2 = y[k-2], x_3 = u[k-1-delayN]
+            double s11 = 0, s12 = 0, s13 = 0;
+            double s22 = 0, s23 = 0;
+            double s33 = 0;
+            double t1 = 0, t2 = 0, t3 = 0;
             int count = 0;
-            for (int k = kStart; k < nPrelude; k++)
+            for (int k = kStart; k < N; k++)
             {
-                if (sat[k] || sat[k - 1] || sat[k - 1 - delayN]) continue;
-                double yt = y[k] - y0;
-                double y1 = y[k - 1] - y0;
-                double u1 = u[k - 1 - delayN] - u0;
-                sYY += y1 * y1;
-                sYU += y1 * u1;
-                sUU += u1 * u1;
-                sYtY += yt * y1;
-                sYtU += yt * u1;
+                if (sat[k] || sat[k - 1] || sat[k - 2] || sat[k - 1 - delayN]) continue;
+                double yt = yd[k];
+                double y1 = yd[k - 1];
+                double y2 = yd[k - 2];
+                double u1 = ud[k - 1 - delayN];
+                s11 += y1 * y1;
+                s12 += y1 * y2;
+                s13 += y1 * u1;
+                s22 += y2 * y2;
+                s23 += y2 * u1;
+                s33 += u1 * u1;
+                t1 += yt * y1;
+                t2 += yt * y2;
+                t3 += yt * u1;
                 count++;
             }
-            if (count < 6)
-            { _fopdtLastFailReason = $"too few clean samples ({count}/{nPrelude - kStart})"; return double.NaN; }
+            if (count < 32)
+            { _fopdtLastFailReason = $"too few clean samples ({count})"; return double.NaN; }
 
-            double det = sYY * sUU - sYU * sYU;
+            // 3x3 역행렬 (Cramer's rule)
+            double m11 = s22 * s33 - s23 * s23;
+            double m12 = s12 * s33 - s23 * s13;
+            double m13 = s12 * s23 - s22 * s13;
+            double det = s11 * m11 - s12 * m12 + s13 * m13;
             if (Math.Abs(det) < 1e-12)
-            { _fopdtLastFailReason = "singular (u and y collinear)"; return double.NaN; }
+            { _fopdtLastFailReason = "singular (regressors collinear)"; return double.NaN; }
 
-            double a = (sUU * sYtY - sYU * sYtU) / det;
-            // b = (sYY*sYtU - sYU*sYtY) / det;  // K 추정에는 쓰지만 τ_p 만 필요하면 생략
+            // a1 = det1 / det, where det1 replaces column 1 of M with target vector
+            double det1 = t1 * m11
+                        - s12 * (t2 * s33 - s23 * t3)
+                        + s13 * (t2 * s23 - s22 * t3);
+            // a2 = det2 / det, where det2 replaces column 2
+            double det2 = s11 * (t2 * s33 - s23 * t3)
+                        - t1 * (s12 * s33 - s23 * s13)
+                        + s13 * (s12 * t3 - t2 * s13);
 
-            // a ∈ (0, 1) 이어야 1st-order 안정 plant. 벗어나면 모델 부적합 → 폴백.
-            if (double.IsNaN(a))
+            double a1 = det1 / det;
+            double a2 = det2 / det;
+            if (double.IsNaN(a1) || double.IsNaN(a2))
             { _fopdtLastFailReason = "NaN in fit"; return double.NaN; }
-            if (a <= 0.0 || a >= 1.0)
-            { _fopdtLastFailReason = $"non-1st-order plant (a={a:0.000}, not in (0,1))"; return double.NaN; }
 
-            double tau_p = -dt / Math.Log(a);
+            // 특성 다항식 z² - a1·z - a2 = 0 의 근.
+            double disc = a1 * a1 + 4.0 * a2;
+            double dominantAbsZ;
+
+            if (disc >= 0)
+            {
+                // 실근 2개
+                double sq = Math.Sqrt(disc);
+                double z1 = (a1 + sq) / 2.0;
+                double z2 = (a1 - sq) / 2.0;
+                double az1 = Math.Abs(z1);
+                double az2 = Math.Abs(z2);
+
+                // integrator 근 (|z|≈1) 은 제외, 안정 근 중 큰 쪽 채택.
+                // 큰 쪽 = 느린 극점 = 지배 시정수.
+                bool z1Stable = az1 > 0 && az1 < 0.99;
+                bool z2Stable = az2 > 0 && az2 < 0.99;
+
+                if (z1Stable && z2Stable) dominantAbsZ = Math.Max(az1, az2);
+                else if (z1Stable) dominantAbsZ = az1;
+                else if (z2Stable) dominantAbsZ = az2;
+                else
+                { _fopdtLastFailReason = $"poles outside unit circle (|z|={az1:0.000},{az2:0.000})"; return double.NaN; }
+            }
+            else
+            {
+                // 복소 conjugate (진동 plant): |z|² = -a₂
+                if (-a2 <= 0) { _fopdtLastFailReason = "complex poles, -a₂≤0"; return double.NaN; }
+                dominantAbsZ = Math.Sqrt(-a2);
+                if (dominantAbsZ >= 0.99) { _fopdtLastFailReason = $"complex poles |z|={dominantAbsZ:0.000}≈1"; return double.NaN; }
+            }
+
+            if (dominantAbsZ <= 0 || dominantAbsZ >= 1)
+            { _fopdtLastFailReason = $"dominant pole |z|={dominantAbsZ:0.000} invalid"; return double.NaN; }
+
+            double tau_p = -dt / Math.Log(dominantAbsZ);
             if (double.IsNaN(tau_p) || tau_p <= 0)
             { _fopdtLastFailReason = "τ_p invalid"; return double.NaN; }
 
