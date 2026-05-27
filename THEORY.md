@@ -217,13 +217,23 @@ $$y[k] = \frac{x[k] + x[k-1] - \beta_1 y[k-1]}{\beta_0}$$
 
 ### 4.4 Ts 자동 결정 — Ts sweep + Td 안전 체크
 
-**1단계: τ_p 추정**
+**1단계: τ_p 추정 (또는 캐시 사용)**
 
+반복 AutoTune 시 closed-loop bias drift (현재 PID 가 느릴수록 측정 τ_p 가 커져서 다음 PID 가 더 느려지는 양성 피드백) 방지를 위해 **τ_p 캐싱** 적용. 첫 AutoTune 에서 추정한 값을 `_cachedTauP` 에 저장하고 이후엔 그 값을 재사용. Reset 버튼이 캐시를 클리어해서 강제 재추정.
+
+신선 추정 시:
 - **MultiSine 가진 시 (선호)** — `EstimateTauFromStepPrelude`:
   멀티사인 첫 0.5초의 step prelude 응답에서 63.2% rise 시점을 찾아 τ_p 직접 측정.
   저주파 드리프트에 강건 (자기상관 방식 대비).
 - **그 외 (Sine/Chirp 또는 prelude 응답 약함)** — `EstimateDominantTau`:
   y(t) 의 자기상관 (PSD → IFFT, Wiener-Khinchin) 에서 **1/e 떨어지는 시각** 으로 폴백.
+
+**캐싱의 이유** — τ_p 는 원리적으로 plant 고유 정보이지만, 우리 추정기는 closed-loop y 데이터에서 얻으니까 현재 PID 의 영향이 섞임. 반복 호출하면:
+1. 현재 PID 가 sluggish → closed-loop 응답 느림 → 추정 τ_p 큼
+2. 큰 τ_p → Ts 크게 → 더 sluggish 한 PID
+3. positive feedback → τ_p 가 상한 1.0 에 박힘 → PID 가 항상 보수적 폴백
+
+캐싱하면 첫 1회 추정값으로 고정되어 이 drift 가 끊김. 단점: vehicle/axis 가 바뀌면 stale 한 캐시 → 사용자가 Reset 으로 재추정 트리거해야 함.
 
 **2단계: Ts sweep** (SIMC 일반화 + τ_M 고려)
 

@@ -354,6 +354,12 @@ namespace PIDSupporter
         private readonly Session _sess = new Session();
         private AutoTuneState _autoState = AutoTuneState.Idle;
 
+        // 반복 AutoTune 시 closed-loop bias drift 방지용 τ_p 캐시.
+        // 첫 AutoTune 에서 추정한 값을 보관, 이후엔 그 값을 재사용.
+        // 사용자가 "Clear τ_p" 버튼을 누르거나 axis 가 바뀌면 리셋.
+        // (axis 별로 FritTuningTab 인스턴스가 따로니까 자동으로 plant-별 캐시가 됨.)
+        private double _cachedTauP = double.NaN;
+
 
         // ── 축 분리 모드 (Axis Fixture) ──
         // 방법 1: 리플렉션으로 _focus 의 부모 객체에서 형제 VariableControllerMaster 자동 발견.
@@ -838,13 +844,14 @@ namespace PIDSupporter
 
             seg.AddInterpretter(MakeButton(
                 "Reset",
-                "Clear all saved samples and results.\n---\n저장된 샘플/결과를 모두 지웁니다.",
+                "Clear all saved samples, results, and the cached τ_p estimate.\nClick this when switching vehicle/axis to force τ_p re-estimation.\n---\n저장된 샘플/결과와 캐시된 τ_p 추정값을 모두 지웁니다.\n다른 기체/축으로 옮기면 τ_p 재추정 위해 눌러주세요.",
                 _ =>
                 {
                     RestoreSetPointAdjustIfNeeded();
                     _sess.Clear();
+                    _cachedTauP = double.NaN;
                     _autoState = AutoTuneState.Idle;
-                    _sess.LastMessage = "Reset complete / 초기화 완료";
+                    _sess.LastMessage = "Reset complete (τ_p cache cleared) / 초기화 완료 (τ_p 캐시 클리어됨)";
                 }
             ));
 
@@ -1428,14 +1435,29 @@ namespace PIDSupporter
             double ti0 = this._focus.Pid.kI.Us;
             double td0 = this._focus.Pid.kD.Us;
 
-            // ── τ_p 추정 ──
-            // MultiSine 가진 시: step prelude (첫 0.5초) 의 63.2% rise 시간으로 τ_p 직접 측정.
-            // prelude 가 없거나 응답이 약하면 y 자기상관 1/e 방식으로 폴백.
-            double tau_p_prelude = (_s.ExciteWave == WaveType.MultiSine)
-                ? EstimateTauFromStepPrelude(y, dt)
-                : double.NaN;
-            double tau_p = !double.IsNaN(tau_p_prelude) ? tau_p_prelude : EstimateDominantTau(y, dt);
-            string tauSrc = !double.IsNaN(tau_p_prelude) ? "prelude" : "autocorr";
+            // ── τ_p 추정 (또는 캐시 사용) ──
+            // 반복 AutoTune 시 closed-loop bias drift 방지: 첫 추정값을 _cachedTauP 에 저장하고
+            // 이후엔 그 값을 재사용. 사용자가 "Clear τ_p" 누르면 캐시 무효화.
+            //
+            // 신선 추정:
+            //   MultiSine 가진 시: step prelude 의 63.2% rise 시간으로 τ_p 직접 측정.
+            //   prelude 가 없거나 응답이 약하면 y 자기상관 1/e 방식으로 폴백.
+            double tau_p;
+            string tauSrc;
+            if (!double.IsNaN(_cachedTauP))
+            {
+                tau_p = _cachedTauP;
+                tauSrc = "cached";
+            }
+            else
+            {
+                double tau_p_prelude = (_s.ExciteWave == WaveType.MultiSine)
+                    ? EstimateTauFromStepPrelude(y, dt)
+                    : double.NaN;
+                tau_p = !double.IsNaN(tau_p_prelude) ? tau_p_prelude : EstimateDominantTau(y, dt);
+                tauSrc = !double.IsNaN(tau_p_prelude) ? "prelude" : "autocorr";
+                _cachedTauP = tau_p;   // 다음 호출부터 캐시 활용
+            }
 
             // ── Ts sweep + Td 안전 체크 ──
             // SIMC 일반화 형태: Ts = max(k·τ_p, k·τ_M).
