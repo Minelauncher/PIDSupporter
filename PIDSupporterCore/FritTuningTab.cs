@@ -354,12 +354,6 @@ namespace PIDSupporter
         private readonly Session _sess = new Session();
         private AutoTuneState _autoState = AutoTuneState.Idle;
 
-        // 반복 AutoTune 시 closed-loop bias drift 방지용 τ_p 캐시.
-        // 첫 AutoTune 에서 추정한 값을 보관, 이후엔 그 값을 재사용.
-        // 사용자가 "Clear τ_p" 버튼을 누르거나 axis 가 바뀌면 리셋.
-        // (axis 별로 FritTuningTab 인스턴스가 따로니까 자동으로 plant-별 캐시가 됨.)
-        private double _cachedTauP = double.NaN;
-
 
         // ── 축 분리 모드 (Axis Fixture) ──
         // 방법 1: 리플렉션으로 _focus 의 부모 객체에서 형제 VariableControllerMaster 자동 발견.
@@ -390,7 +384,7 @@ namespace PIDSupporter
         private const int NaturalBufSize = 60; // 약 1.2초 분량
 
         // Step prelude 길이 (초). MultiSine 가진 시 최초 이 시간 동안 일정 SP offset 유지.
-        // ApplyExcitation 및 EstimateTauFromStepPrelude 에서 공유.
+        // ApplyExcitation 및 EstimateTauFromFopdtFit 에서 공유.
         private const double STEP_PRELUDE_SEC = 0.5;
         private readonly double[] _naturalYBuf = new double[NaturalBufSize];
         private int _naturalYIdx = 0;
@@ -844,14 +838,13 @@ namespace PIDSupporter
 
             seg.AddInterpretter(MakeButton(
                 "Reset",
-                "Clear all saved samples, results, and the cached τ_p estimate.\nClick this when switching vehicle/axis to force τ_p re-estimation.\n---\n저장된 샘플/결과와 캐시된 τ_p 추정값을 모두 지웁니다.\n다른 기체/축으로 옮기면 τ_p 재추정 위해 눌러주세요.",
+                "Clear all saved samples and results.\n---\n저장된 샘플/결과를 모두 지웁니다.",
                 _ =>
                 {
                     RestoreSetPointAdjustIfNeeded();
                     _sess.Clear();
-                    _cachedTauP = double.NaN;
                     _autoState = AutoTuneState.Idle;
-                    _sess.LastMessage = "Reset complete (τ_p cache cleared) / 초기화 완료 (τ_p 캐시 클리어됨)";
+                    _sess.LastMessage = "Reset complete / 초기화 완료";
                 }
             ));
 
@@ -1435,46 +1428,23 @@ namespace PIDSupporter
             double ti0 = this._focus.Pid.kI.Us;
             double td0 = this._focus.Pid.kD.Us;
 
-            // ── τ_p 추정 (또는 캐시 사용) ──
-            // 반복 AutoTune 시 closed-loop bias drift 방지: 첫 추정값을 _cachedTauP 에 저장하고
-            // 이후엔 그 값을 재사용. 사용자가 Reset 누르면 캐시 무효화.
-            //
-            // 신선 추정 우선순위 (MultiSine 가진 가정):
-            //   1. FOPDT fit: prelude (u, y) 둘 다 사용한 ARX(1,1) OLS. plant 고유 τ_p (unbiased).
-            //   2. step prelude 63.2%: y 만 사용. closed-loop biased 지만 ARX fit 실패 시 폴백.
-            //   3. 자기상관 1/e: 최후 폴백 (Sine/Chirp 또는 prelude 응답 약함).
+            // ── τ_p 추정 ──
+            // 주: FOPDT fit (prelude (u,y) 에 ARX(1,1) OLS → plant 고유 τ_p, PID 무관 unbiased).
+            // 폴백: 자기상관 1/e (MultiSine 가진 아니거나 FOPDT fit 실패 시).
+            double tauFopdt = (_s.ExciteWave == WaveType.MultiSine)
+                ? EstimateTauFromFopdtFit(u, y, sat, dt, (double)_s.ModelDelayTau)
+                : double.NaN;
             double tau_p;
             string tauSrc;
-            if (!double.IsNaN(_cachedTauP))
+            if (!double.IsNaN(tauFopdt))
             {
-                tau_p = _cachedTauP;
-                tauSrc = "cached";
+                tau_p = tauFopdt;
+                tauSrc = "fopdt";
             }
             else
             {
-                double tauFopdt = (_s.ExciteWave == WaveType.MultiSine)
-                    ? EstimateTauFromFopdtFit(u, y, sat, dt, (double)_s.ModelDelayTau)
-                    : double.NaN;
-                double tauPrelude = (double.IsNaN(tauFopdt) && _s.ExciteWave == WaveType.MultiSine)
-                    ? EstimateTauFromStepPrelude(y, dt)
-                    : double.NaN;
-
-                if (!double.IsNaN(tauFopdt))
-                {
-                    tau_p = tauFopdt;
-                    tauSrc = "fopdt";
-                }
-                else if (!double.IsNaN(tauPrelude))
-                {
-                    tau_p = tauPrelude;
-                    tauSrc = "prelude";
-                }
-                else
-                {
-                    tau_p = EstimateDominantTau(y, dt);
-                    tauSrc = "autocorr";
-                }
-                _cachedTauP = tau_p;   // 다음 호출부터 캐시 활용
+                tau_p = EstimateDominantTau(y, dt);
+                tauSrc = "autocorr";
             }
 
             // ── Ts sweep + Td 안전 체크 ──
@@ -2771,58 +2741,6 @@ namespace PIDSupporter
             if (double.IsNaN(tau_p) || tau_p <= 0) return double.NaN;
 
             return Math.Max(3.0 * dt, Math.Min(1.0, tau_p));
-        }
-
-        /// <summary>
-        /// Step prelude (MultiSine 가진 최초 STEP_PRELUDE_SEC 구간) 의 y 응답에서
-        /// 63.2% rise 시점을 찾아 τ_p 를 직접 측정한다.
-        /// 자기상관 방식보다 저주파 드리프트에 강함.
-        ///
-        /// 알고리즘:
-        ///   baseline = y[0]
-        ///   ss       = mean(y[0.7·N .. N-1])              ← prelude 후반 평균
-        ///   threshold = baseline + 0.632·(ss - baseline)
-        ///   τ_p = 첫 번째 y[i] 가 threshold 를 통과한 시각
-        ///
-        /// 응답 진폭이 너무 작거나 (|ss - baseline| < 잡음) prelude 길이가 충분치 않으면
-        /// NaN 을 반환하여 호출측이 자기상관 방식으로 폴백하게 한다.
-        /// </summary>
-        private static double EstimateTauFromStepPrelude(double[] y, double dt)
-        {
-            int nPrelude = (int)Math.Round(STEP_PRELUDE_SEC / dt);
-            if (y.Length < nPrelude || nPrelude < 8) return double.NaN;
-
-            double baseline = y[0];
-
-            // prelude 후반 30% 평균 = 추정 steady-state
-            int tailStart = (int)(nPrelude * 0.7);
-            double sum = 0.0;
-            int cnt = 0;
-            for (int i = tailStart; i < nPrelude; i++) { sum += y[i]; cnt++; }
-            if (cnt == 0) return double.NaN;
-            double ss = sum / cnt;
-
-            double delta = ss - baseline;
-
-            // 응답 진폭이 잡음 수준이면 추정 불가 → 폴백
-            // (전체 y 의 표준편차의 10% 이상은 변해야 step response 로 인정)
-            double yStd = StdDev(y);
-            if (Math.Abs(delta) < Math.Max(1e-4, 0.1 * yStd)) return double.NaN;
-
-            double threshold = baseline + 0.632 * delta;
-            bool rising = delta > 0;
-
-            for (int i = 1; i < nPrelude; i++)
-            {
-                bool crossed = rising ? (y[i] >= threshold) : (y[i] <= threshold);
-                if (crossed)
-                {
-                    return Math.Max(3.0 * dt, Math.Min(1.0, i * dt));
-                }
-            }
-
-            // prelude 안에 63.2% 도달 못하면 τ_p > STEP_PRELUDE_SEC 인 셈 → 상한 반환.
-            return 1.0;
         }
 
         /// <summary>
