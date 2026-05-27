@@ -6,6 +6,17 @@
 
 이 모드는 **ARX(2,1) plant identification + SIMC PID design** 기반 자동 튜닝을 제공합니다. classical closed-loop indirect ID 방법 (Ljung, Skogestad 계열).
 
+**수학적 기반과 한계 (명시)** — 모든 cap/bound 는 **수학적 근거** 또는 **UI 강제 제약** 에서 옵니다. 임의 휴리스틱 숫자 사용 안 함:
+- ARX(2,1) OLS — Linear LS, closed-form unique solution (Ljung "System ID" §10)
+- 극점 → 시정수: τ = -dt/ln|z| (이산 시간 정의)
+- SIMC formula — Skogestad 2003 paper
+- 적분기 판정 — `|1-a₁-a₂| < 2·SE` 통계적 (2σ confidence)
+- Plant pole reject — `|z| > 1 + 3·SE_z` (3σ 통계적)
+- 강제 bound — FTD UI 슬라이더 한계 (Ti ≤ 250, Td ≤ 10)
+- SIMC variant 선택 — balanced (τ_c = 2·τ) 가 default. aggressive/conservative 는 사용자 슬라이더 조정.
+
+**한계 인정** — 위 외에 추가 cap (예: Td/Ti < 0.25 같은 산업 룰) 은 적용 안 함. 결과적으로 Td 가 노이즈 증폭하는 영역 (Td/dt 크게) 으로 갈 수 있으며 이 경우 사용자가 Ts 슬라이더로 더 큰 (conservative) 값 선택해 해결. mod 가 진동을 자동 차단하지 않음.
+
 **식별 체인:**
 ```
 [Auto Tune]

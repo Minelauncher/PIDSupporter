@@ -1427,22 +1427,6 @@ namespace PIDSupporter
             // controller-invariant (G 는 plant property), local minimum 없음, iteration 자연 수렴.
             double tauM = Math.Max(dt, (double)_s.ModelDelayTau);
 
-            // ── 한계 진동 감지: 데이터 수집 중 saturation 너무 많으면 현재 PID 가 plant 를
-            // 자체 진동시키는 중. 그런 데이터로 식별 시도하면 weird 결과. fail 후 사용자에게
-            // PID 약화 권장.
-            int satCount = 0;
-            for (int i = 0; i < sat.Length; i++) if (sat[i]) satCount++;
-            double satRate = (double)satCount / Math.Max(1, sat.Length);
-            if (satRate > 0.15)
-            {
-                _autoState = AutoTuneState.Failed;
-                _sess.LastMessage =
-                    $"Plant in limit cycle (sat={satRate:P0}, {satCount}/{sat.Length}). " +
-                    $"Current PID is oscillating the plant. Lower Kp/Td manually and retry. " +
-                    $"/ 현재 PID 가 plant 를 진동시키는 중. Kp/Td 낮추고 재시도.";
-                return;
-            }
-
             PlantModel plant = IdentifyPlantArx(u, y, sat, dt, tauM);
 
             if (!plant.Valid)
@@ -1452,25 +1436,22 @@ namespace PIDSupporter
                 return;
             }
 
-            // 목표 Ts 자동 결정 (plant 특성 기반):
-            //   적분기 plant: τ_2 (rate damping) 이 자연스러운 시정수 — closed-loop 가
-            //     rate dynamics 만큼 빠르게 응답하도록.
-            //   1차/2차 plant: τ_1 (지배 시정수) — SIMC aggressive 룰.
-            // 사용자 슬라이더 값은 무시하고 자동값을 사용. AutoTune 끝나면 슬라이더에
-            // 선택된 값을 반영해 사용자가 확인 가능. 직접 다른 Ts 원하면 슬라이더 조정 후
-            // 별도로 (Compute FRIT 등) 시도.
-            double targetTs;
-            if (plant.HasIntegrator)
-            {
-                // 적분기 plant: τ_2 (rate damping) 가 자연 closed-loop 시정수.
-                // τ_2 가 너무 작으면 (pure double integrator 등) 10·dt 정도가 합리적 default.
-                targetTs = (plant.Tau2 > 3.0 * dt) ? plant.Tau2 : 10.0 * dt;
-            }
-            else
-            {
-                targetTs = plant.Tau1;
-            }
-            targetTs = Math.Max(3.0 * dt, Math.Min(5.0, targetTs));
+            // 목표 Ts — SIMC variant 선택:
+            //   Skogestad SIMC paper 의 세 변형:
+            //     aggressive  : τ_c = τ_p  (1차) 또는 τ_2 (적분기 plant 의 rate damping)
+            //     balanced    : τ_c = 2·τ_p (또는 2·τ_2)  ← default 선택
+            //     conservative: τ_c = 4·τ_p
+            //   더 큰 τ_c = 더 보수적 = 더 안정 = 더 느린 응답.
+            //   사용자가 더 공격적 원하면 슬라이더로 작게 설정.
+            //
+            // SIMC 의 유일한 강제 한계: τ_c ≥ θ (지연 한계)
+            double charTau = plant.HasIntegrator
+                ? (plant.Tau2 > 0 ? plant.Tau2 : dt)  // 적분기엔 rate damping 이 자연 시정수
+                : plant.Tau1;
+            double targetTs = 2.0 * charTau;             // SIMC balanced
+            targetTs = Math.Max(targetTs, plant.Theta);  // SIMC physical: τ_c ≥ θ
+            // FTD slider range bound (UI constraint, not tuning heuristic)
+            targetTs = Math.Max(dt, Math.Min(5.0, targetTs));
 
             SimcResult simc = DesignSimcPid(plant, targetTs);
 
@@ -2634,40 +2615,36 @@ namespace PIDSupporter
             double zSlow = Math.Max(az1, az2);
             double zFast = Math.Min(az1, az2);
 
-            // 적분기 plant 관용 처리:
-            //   진짜 적분기는 z=1. 노이즈로 추정치가 0.95~1.1 사이에 떠다닐 수 있음.
-            //   엄격한 z<1 거부는 비행기 롤 angle 같은 적분기 plant 를 false reject 함.
-            //   대신: 0.95 이상이면 적분기로 간주, 내부 계산엔 0.9999 cap.
-            //   1.1 이상이면 진짜 불안정 추정 → fail.
-            const double INTEGRATOR_LO = 0.95;
-            const double INTEGRATOR_CAP = 0.9999;
-            const double UNSTABLE_THRESHOLD = 1.1;
+            // 적분기 판정 — 통계적 기준 (휴리스틱 임계값 사용 안 함):
+            //   진짜 적분기는 1 - a₁ - a₂ = 0 (DC 게인 ∞).
+            //   추정치의 SE 보다 작으면 "noise 와 구분 불가" → 적분기.
+            //   SE(1-a₁-a₂) ≈ √(σ²·(M_11 + 2·M_12 + M_22)/det) — Fisher info 기반.
+            double denom = 1.0 - a1 - a2;
+            double seDenom = Math.Sqrt(sigma2 * Math.Abs(M11 + 2.0 * M12 + s11 * s33 - s13 * s13) / Math.Max(1e-12, Math.Abs(det)));
+            m.HasIntegrator = Math.Abs(denom) < 2.0 * seDenom;  // 2σ 통계적 판정
 
-            if (zSlow > UNSTABLE_THRESHOLD)
-            { m.Diagnosis = $"slow pole |z|={zSlow:0.000} > 1.1 (truly unstable)"; return m; }
+            // 불안정 추정 거부 — SIMC physical: stable plant 면 |z| < 1.
+            //   추정 노이즈 허용해서 1 + 3·SE_z 까지는 적분기로 cap. 그 이상은 truly unstable.
+            double seZ = Math.Sqrt(sigma2 * M11 / Math.Max(1e-12, Math.Abs(det))); // a₁ 의 SE ≈ z₁ 의 SE
+            if (zSlow > 1.0 + 3.0 * seZ)
+            { m.Diagnosis = $"slow pole |z|={zSlow:0.000} > 1 + 3σ (truly unstable)"; return m; }
             if (zSlow <= 0)
             { m.Diagnosis = $"slow pole |z|={zSlow:0.000} ≤ 0 (invalid)"; return m; }
 
-            m.HasIntegrator = zSlow > INTEGRATOR_LO;
-            double zForTau = m.HasIntegrator ? INTEGRATOR_CAP : zSlow;
+            // |z| ≥ 1 노이즈 → 1 직전으로 cap (적분기 표현). cap 자체는 수치 보호 (1/ln(1) = ∞).
+            double zForTau = Math.Min(zSlow, 1.0 - 1e-6);
             m.Tau1 = -dt / Math.Log(zForTau);
 
-            // τ_2 (rate damping) 연속 계산 — 임계값 binary flip 방지.
-            // 상한 0.5s (이전 2.0 에서 더 빡빡하게):
-            //   · 0.5s 넘는 τ_2 는 보통 zFast 추정 오류 (적분기 같은 second pole)
-            //   · Td 가 0.5 넘으면 노이즈 증폭 폭주 (50Hz tick → Td/dt > 20)
-            double zFastClamped = Math.Max(0.01, Math.Min(INTEGRATOR_CAP, zFast));
-            m.Tau2 = Math.Min(0.5, -dt / Math.Log(zFastClamped));
+            // τ_2 (rate damping) 동일 방식 — cap 만 수치적 보호.
+            double zFastClamped = Math.Max(1e-6, Math.Min(zFast, 1.0 - 1e-6));
+            m.Tau2 = -dt / Math.Log(zFastClamped);
 
             // DC gain K 계산:
-            //   일반 plant:  K = b / (1 - a₁ - a₂)   (적분기 아닐 때)
-            //   적분기 plant: K_i = b / dt           (denom ≈ 0)
-            // HasIntegrator 가 true 이거나 denom 이 작으면 적분기 공식 사용.
-            double denom = 1.0 - a1 - a2;
-            if (m.HasIntegrator || Math.Abs(denom) < 1e-3)
+            //   일반 plant: K = b / (1 - a₁ - a₂)    (denom: DC gain 의 역수)
+            //   적분기 plant: K_i = b / dt           (rate gain, denom ≈ 0)
+            if (m.HasIntegrator)
             {
                 m.K = b / Math.Max(1e-6, dt);
-                m.HasIntegrator = true;
             }
             else
             {
@@ -2737,23 +2714,13 @@ namespace PIDSupporter
                 r.Form = "PI";
             }
 
-            // FTD 입력 사정 (Ti 무한대 표현은 250)
+            // FTD slider 한계 (mandatory, not heuristic):
+            //   FTD 의 Integral time slider 는 250 까지 (표현상 "off"). Td 는 10 까지.
+            //   이건 게임 UI 의 강제 bound 라 적용 안 하면 슬라이더가 무시.
             if (r.Ti > 250.0) r.Ti = 250.0;
             if (r.Ti < 0.1) r.Ti = 0.1;
             if (r.Td < 0) r.Td = 0;
-
-            // ── Td 강한 cap (산업 표준 + 노이즈 보호) ──
-            // 적용 시 진동 방지를 위해 세 가지 한계 중 가장 작은 값 사용:
-            //   1. Td/Ti < 0.25     (산업 표준 PID 비율)
-            //   2. Td/Ts < 0.5      (SIMC 물리 한계)
-            //   3. Td/dt < 20       (이산 미분 노이즈 증폭 한계, dt=0.025 → Td<0.5)
-            // 사용자분 케이스: Td=0.29 (Td/dt=11.6) 도 떨림 → cap 으로 강제 낮춤.
-            double dtForCap = 0.025; // 표준 FTD tick (정확한 dt 는 호출측이 알지만, 보수적으로 fix)
-            double tdCapByTi = 0.25 * r.Ti;
-            double tdCapByTs = 0.5 * tauC;
-            double tdCapByDt = 20.0 * dtForCap;
-            double tdCap = Math.Min(tdCapByTi, Math.Min(tdCapByTs, tdCapByDt));
-            if (r.Td > tdCap) r.Td = tdCap;
+            if (r.Td > 10.0) r.Td = 10.0;
 
             return r;
         }
