@@ -2623,9 +2623,15 @@ namespace PIDSupporter
             double zForTau = m.HasIntegrator ? INTEGRATOR_CAP : zSlow;
             m.Tau1 = -dt / Math.Log(zForTau);
 
-            m.Tau2 = (zFast > 0.001 && zFast < INTEGRATOR_LO)
-                ? -dt / Math.Log(zFast)
-                : 0.0;
+            // τ_2 (rate damping) 연속 계산 — 임계값 binary flip 방지.
+            // zFast 가 어디 있든 항상 τ_2 산출 (cap 만 적용):
+            //   · zFast 매우 작음 (< 0.01) → τ_2 ≈ 0 (deadbeat 빠른 극점)
+            //   · zFast 0.5~0.9 → τ_2 = -dt/ln(zFast)  (정상 1차 rate damping)
+            //   · zFast → 0.9999 → τ_2 → 큰 값 (적분기 같은 두 번째 극점)
+            //   · 상한 2초로 cap (Td 가 비합리적으로 커지지 않도록)
+            // iteration 안정성: zFast 가 잡음으로 흔들려도 τ_2 가 부드럽게 변함.
+            double zFastClamped = Math.Max(0.01, Math.Min(INTEGRATOR_CAP, zFast));
+            m.Tau2 = Math.Min(2.0, -dt / Math.Log(zFastClamped));
 
             // DC gain K 계산:
             //   일반 plant:  K = b / (1 - a₁ - a₂)   (적분기 아닐 때)
