@@ -139,7 +139,7 @@ using MathNet.Numerics.IntegralTransforms;  // Fourier (FFT/IFFT)
 using MathNet.Numerics.LinearAlgebra;       // Matrix, Vector (선형대수 — SVD, QR 등)
 using UnityEngine;                          // Time.fixedDeltaTime (Unity 물리 틱 간격)
 
-namespace PIDAutoTuner
+namespace PIDSupporter
 {
     /// <summary>
     /// FRIT(Fictitious Reference Iterative Tuning) 기반 PID 자동 튜닝 UI 탭.

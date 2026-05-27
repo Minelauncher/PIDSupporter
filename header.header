@@ -3,7 +3,7 @@
   "Version": "00000000-0000-0000-0000-000000000000",
   "ComponentId": {
     "Guid": "f9f89a9e-bebd-42e1-b4a7-c3c25b87259b",
-    "Name": "PID AutoTuner"
+    "Name": "PID Supporter"
   },
-  "Description": "VRFT-based PID Auto Tuner v1.0.0"
+  "Description": "FRIT-based PID Tuning Supporter v1.0.0"
 }

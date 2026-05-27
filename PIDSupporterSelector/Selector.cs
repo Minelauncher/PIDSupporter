@@ -13,16 +13,16 @@ using System.Reflection;
 /// 목적:
 /// 1) FTD 모드 로더가 요구하는 GamePlugin 진입점은 가볍게 유지
 /// 2) 의존 DLL(0Harmony.dll 등)을 확실히 같은 폴더에서 해결
-/// 3) 메인 기능 DLL(PIDAutoTunerCore.dll)을 나중에 로드하여 안정적으로 패치 적용
+/// 3) 메인 기능 DLL(PIDSupporterCore.dll)을 나중에 로드하여 안정적으로 패치 적용
 /// </summary>
-public class PIDAutoTunerSelectorPlugin : GamePlugin
+public class PIDSupporterSelectorPlugin : GamePlugin
 {
     // ----------------------------
     // 1) GamePlugin 메타데이터
     // ----------------------------
 
     /// <summary>모드 이름(표시/식별용)</summary>
-    public string Name => "PIDAutoTuner";
+    public string Name => "PIDSupporter";
 
     /// <summary>모드 버전(표시/식별용)</summary>
     public Version Version => new Version(1, 0, 0);
@@ -54,34 +54,34 @@ public class PIDAutoTunerSelectorPlugin : GamePlugin
     /// <summary>
     /// 게임이 모드를 "로드"할 때 호출되는 훅.
     /// - 1회 초기화(BootOnce) 보장
-    /// - Core DLL의 PIDAutoTuner.CoreEntry.OnLoad() 호출 시도
+    /// - Core DLL의 PIDSupporter.CoreEntry.OnLoad() 호출 시도
     /// </summary>
     public void OnLoad()
     {
         BootOnce("OnLoad");
-        InvokeCore("PIDAutoTuner.CoreEntry", "OnLoad");
+        InvokeCore("PIDSupporter.CoreEntry", "OnLoad");
     }
 
     /// <summary>
     /// 게임이 본격적으로 "시작"될 때 호출되는 훅.
     /// - 1회 초기화(BootOnce) 보장
-    /// - Core DLL의 PIDAutoTuner.CoreEntry.OnStart() 호출 시도
+    /// - Core DLL의 PIDSupporter.CoreEntry.OnStart() 호출 시도
     /// </summary>
     public void OnStart()
     {
         BootOnce("OnStart");
-        InvokeCore("PIDAutoTuner.CoreEntry", "OnStart");
+        InvokeCore("PIDSupporter.CoreEntry", "OnStart");
     }
 
     /// <summary>
     /// 게임 저장 시 호출되는 훅.
     /// - 1회 초기화(BootOnce) 보장
-    /// - Core DLL의 PIDAutoTuner.CoreEntry.OnSave() 호출 시도
+    /// - Core DLL의 PIDSupporter.CoreEntry.OnSave() 호출 시도
     /// </summary>
     public void OnSave()
     {
         BootOnce("OnSave");
-        InvokeCore("PIDAutoTuner.CoreEntry", "OnSave");
+        InvokeCore("PIDSupporter.CoreEntry", "OnSave");
     }
 
 
@@ -94,7 +94,7 @@ public class PIDAutoTunerSelectorPlugin : GamePlugin
     /// - 모드 디렉토리 계산
     /// - AssemblyResolve 핸들러 설치 (의존 DLL을 모드 폴더에서 찾게 함)
     /// - 0Harmony.dll 선 로드
-    /// - PIDAutoTunerCore.dll 로드 (실제 패치/로직 포함)
+    /// - PIDSupporterCore.dll 로드 (실제 패치/로직 포함)
     /// </summary>
     private static void BootOnce(string phase)
     {
@@ -103,11 +103,11 @@ public class PIDAutoTunerSelectorPlugin : GamePlugin
         _booted = true;
 
         // 현재 실행 중인(=Selector) 어셈블리의 실제 경로에서 폴더를 추출
-        // 예: ...\From The Depths\Mods\PIDAutoTuner\
+        // 예: ...\From The Depths\Mods\PIDSupporter\
         _modDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
 
         // 로그로 부트 단계와 경로를 찍어서 "정말 여기서 로드되고 있나" 확인 가능
-        AdvLogger.LogInfo($"[PIDAutoTunerSelector] Boot phase={phase} dir={_modDir}", LogOptions.None);
+        AdvLogger.LogInfo($"[PIDSupporterSelector] Boot phase={phase} dir={_modDir}", LogOptions.None);
 
         // 같은 폴더에서 의존 DLL을 자동으로 찾아 로드하게 해주는 리졸버 설치
         InstallResolver(_modDir);
@@ -118,7 +118,7 @@ public class PIDAutoTunerSelectorPlugin : GamePlugin
         LoadDllIfExists("MathNet.Numerics.dll");
 
         // 2) 실제 기능/패치가 들어있는 Core DLL 로드
-        LoadCoreIfExists("PIDAutoTunerCore.dll");
+        LoadCoreIfExists("PIDSupporterCore.dll");
     }
 
 
@@ -179,13 +179,13 @@ public class PIDAutoTunerSelectorPlugin : GamePlugin
         // 파일이 없다면 로드 시도하지 않음(=크래시 방지)
         if (!File.Exists(path))
         {
-            AdvLogger.LogInfo($"[PIDAutoTunerSelector] Missing {fileName} at {path}", LogOptions.None);
+            AdvLogger.LogInfo($"[PIDSupporterSelector] Missing {fileName} at {path}", LogOptions.None);
             return;
         }
 
         // 해당 DLL을 명시적으로 로드
         Assembly.LoadFrom(path);
-        AdvLogger.LogInfo($"[PIDAutoTunerSelector] Loaded {fileName}", LogOptions.None);
+        AdvLogger.LogInfo($"[PIDSupporterSelector] Loaded {fileName}", LogOptions.None);
     }
 
 
@@ -194,7 +194,7 @@ public class PIDAutoTunerSelectorPlugin : GamePlugin
     // ----------------------------
 
     /// <summary>
-    /// Core DLL(PIDAutoTunerCore.dll)을 로드하고 _coreAsm에 저장.
+    /// Core DLL(PIDSupporterCore.dll)을 로드하고 _coreAsm에 저장.
     /// 이후 InvokeCore가 이 Assembly 안에서 타입/메서드를 찾아 실행한다.
     /// </summary>
     private static void LoadCoreIfExists(string coreFileName)
@@ -203,13 +203,13 @@ public class PIDAutoTunerSelectorPlugin : GamePlugin
 
         if (!File.Exists(path))
         {
-            AdvLogger.LogInfo($"[PIDAutoTunerSelector] Missing core at {path}", LogOptions.None);
+            AdvLogger.LogInfo($"[PIDSupporterSelector] Missing core at {path}", LogOptions.None);
             return;
         }
 
         // Core DLL 로드 후 Assembly 참조 저장
         _coreAsm = Assembly.LoadFrom(path);
-        AdvLogger.LogInfo($"[PIDAutoTunerSelector] Loaded core: {coreFileName}", LogOptions.None);
+        AdvLogger.LogInfo($"[PIDSupporterSelector] Loaded core: {coreFileName}", LogOptions.None);
     }
 
 
@@ -221,13 +221,13 @@ public class PIDAutoTunerSelectorPlugin : GamePlugin
     /// Core DLL 내부의 특정 타입(typeName)에서 정적 메서드(methodName)를 찾아 호출한다.
     ///
     /// 기대 구조 예:
-    /// namespace PIDAutoTuner {
+    /// namespace PIDSupporter {
     ///   public static class CoreEntry {
     ///     public static void OnStart() { ... Harmony.PatchAll ... }
     ///   }
     /// }
     ///
-    /// 여기서는 "PIDAutoTuner.CoreEntry" 타입의
+    /// 여기서는 "PIDSupporter.CoreEntry" 타입의
     /// "OnLoad/OnStart/OnSave" 같은 메서드를 호출하려고 한다.
     /// </summary>
     private static void InvokeCore(string typeName, string methodName)
@@ -237,7 +237,7 @@ public class PIDAutoTunerSelectorPlugin : GamePlugin
             // Core DLL이 아직 로드 안됐으면 호출 불가
             if (_coreAsm == null)
             {
-                AdvLogger.LogInfo("[PIDAutoTunerSelector] Core assembly not loaded. Skip invoke.", LogOptions.None);
+                AdvLogger.LogInfo("[PIDSupporterSelector] Core assembly not loaded. Skip invoke.", LogOptions.None);
                 return;
             }
 
@@ -253,7 +253,7 @@ public class PIDAutoTunerSelectorPlugin : GamePlugin
             // 타입 또는 메서드가 없으면 로그만 남기고 종료
             if (t == null || m == null)
             {
-                AdvLogger.LogInfo($"[PIDAutoTunerSelector] Core method not found: {typeName}.{methodName}", LogOptions.None);
+                AdvLogger.LogInfo($"[PIDSupporterSelector] Core method not found: {typeName}.{methodName}", LogOptions.None);
                 return;
             }
 
@@ -261,12 +261,12 @@ public class PIDAutoTunerSelectorPlugin : GamePlugin
             m.Invoke(null, null);
 
             // 호출 성공 로그
-            AdvLogger.LogInfo($"[PIDAutoTunerSelector] Invoked: {typeName}.{methodName}", LogOptions.None);
+            AdvLogger.LogInfo($"[PIDSupporterSelector] Invoked: {typeName}.{methodName}", LogOptions.None);
         }
         catch (Exception e)
         {
             // 리플렉션 호출은 예외가 잦을 수 있으니 전체 예외를 로그로 남김
-            AdvLogger.LogInfo("[PIDAutoTunerSelector] InvokeCore failed: " + e, LogOptions.None);
+            AdvLogger.LogInfo("[PIDSupporterSelector] InvokeCore failed: " + e, LogOptions.None);
         }
     }
 }

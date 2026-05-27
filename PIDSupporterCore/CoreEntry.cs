@@ -13,7 +13,7 @@ using BrilliantSkies.Core.Logger;
 using HarmonyLib;
 using System.Reflection;
 
-namespace PIDAutoTuner
+namespace PIDSupporter
 {
     internal static class CoreEntry
     {
@@ -22,7 +22,7 @@ namespace PIDAutoTuner
         public static void OnLoad()
         {
             // 로드 확인용 UI 표시(원하면)
-            ModUiNotice.ShowActive("PIDAutoTuner", "Activate!");
+            ModUiNotice.ShowActive("PIDSupporter", "Activate!");
 
             PatchAllOnce();
         }
@@ -42,10 +42,10 @@ namespace PIDAutoTuner
             _patched = true;
 
             // Harmony ID는 모드 고유 문자열로 고정 권장
-            Harmony harmony = new Harmony("PIDAutoTuner");
+            Harmony harmony = new Harmony("PIDSupporter");
             harmony.PatchAll(Assembly.GetExecutingAssembly());
 
-            AdvLogger.LogInfo("[PIDAutoTuner] Harmony PatchAll done (Core)", LogOptions.None);
+            AdvLogger.LogInfo("[PIDSupporter] Harmony PatchAll done (Core)", LogOptions.None);
         }
     }
 }

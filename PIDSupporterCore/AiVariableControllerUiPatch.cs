@@ -26,7 +26,7 @@ using BrilliantSkies.Core.Timing;
 using BrilliantSkies.Ui.Consoles;
 using BrilliantSkies.Ai.Control.Pids;
 
-namespace PIDAutoTuner
+namespace PIDSupporter
 {
     /// <summary>
     /// AI Mainframe에서 여는 PID 편집창 패치.
@@ -79,11 +79,11 @@ namespace PIDAutoTuner
 
                 _tabsByUiInstance.Add(__instance, fritTab);
 
-                AdvLogger.LogInfo("[PIDAutoTuner] AI-PID용 FRIT 창 생성됨.", LogOptions.None);
+                AdvLogger.LogInfo("[PIDSupporter] AI-PID용 FRIT 창 생성됨.", LogOptions.None);
             }
             catch (Exception e)
             {
-                AdvLogger.LogInfo("[PIDAutoTuner] AiVariableControllerUiPatch 실패: " + e, LogOptions.None);
+                AdvLogger.LogInfo("[PIDSupporter] AiVariableControllerUiPatch 실패: " + e, LogOptions.None);
             }
         }
 
@@ -149,7 +149,7 @@ namespace PIDAutoTuner
             }
             catch (Exception e)
             {
-                AdvLogger.LogInfo("[PIDAutoTuner] AiVariableControllerUiFixedUpdatePatch 실패: " + e, LogOptions.None);
+                AdvLogger.LogInfo("[PIDSupporter] AiVariableControllerUiFixedUpdatePatch 실패: " + e, LogOptions.None);
             }
         }
     }

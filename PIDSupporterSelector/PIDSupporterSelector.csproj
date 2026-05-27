@@ -18,7 +18,7 @@
   </ItemGroup>
 
   <Target Name="PostBuild" AfterTargets="PostBuildEvent">
-    <Exec Command="set MODDIR=C:\Users\user\Documents\From The Depths\Mods\PIDAutoTuner&#xD;&#xA;if not exist &quot;%25MODDIR%25&quot; mkdir &quot;%25MODDIR%25&quot;&#xD;&#xA;&#xD;&#xA;copy /Y &quot;$(TargetPath)&quot; &quot;%25MODDIR%25\PIDAutoTunerSelector.dll&quot;" />
+    <Exec Command="set MODDIR=C:\Users\user\Documents\From The Depths\Mods\PIDSupporter&#xD;&#xA;if not exist &quot;%25MODDIR%25&quot; mkdir &quot;%25MODDIR%25&quot;&#xD;&#xA;&#xD;&#xA;copy /Y &quot;$(TargetPath)&quot; &quot;%25MODDIR%25\PIDSupporterSelector.dll&quot;" />
   </Target>
 
 </Project>

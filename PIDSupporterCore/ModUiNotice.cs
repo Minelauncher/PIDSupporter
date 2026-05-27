@@ -14,7 +14,7 @@ using System.Reflection;
 using BrilliantSkies.Core.Logger;
 using BrilliantSkies.Modding;
 
-namespace PIDAutoTuner
+namespace PIDSupporter
 {
     internal static class ModUiNotice
     {

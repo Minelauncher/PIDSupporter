@@ -10,7 +10,7 @@ using BrilliantSkies.Ui.Consoles.Segments;
 using BrilliantSkies.Ui.Consoles.Styles;
 using BrilliantSkies.Ui.Tips;
 
-namespace PIDAutoTuner
+namespace PIDSupporter
 {
     public class GuideTab : SuperScreen<VariableControllerMaster>
     {

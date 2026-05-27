@@ -46,7 +46,7 @@ using BrilliantSkies.Core.Logger;   // AdvLogger (FTD 로그 시스템)
 using BrilliantSkies.Ui.Consoles;   // ConsoleWindow 등 (FTD UI)
 using BrilliantSkies.Ai.Control.Pids; // VariableControllerMaster (PID 제어기)
 
-namespace PIDAutoTuner
+namespace PIDSupporter
 {
     // [HarmonyPatch] = "이 클래스는 Harmony 패치입니다"라는 표시.
     // static class = 인스턴스를 만들지 않는 클래스 (모든 멤버가 static).
@@ -123,11 +123,11 @@ namespace PIDAutoTuner
 
                 _tabsByUiInstance.Add(__instance, fritTab);
 
-                AdvLogger.LogInfo("[PIDAutoTuner] FRIT를 별도 창으로 열었습니다.", LogOptions.None);
+                AdvLogger.LogInfo("[PIDSupporter] FRIT를 별도 창으로 열었습니다.", LogOptions.None);
             }
             catch (Exception e)
             {
-                AdvLogger.LogInfo("[PIDAutoTuner] VariableControllerUiPatch 실패: " + e, LogOptions.None);
+                AdvLogger.LogInfo("[PIDSupporter] VariableControllerUiPatch 실패: " + e, LogOptions.None);
             }
         }
 
@@ -149,7 +149,7 @@ namespace PIDAutoTuner
 
                 if (mi == null)
                 {
-                    AdvLogger.LogInfo("[PIDAutoTuner] NewWindow 메서드를 찾지 못했습니다.", LogOptions.None);
+                    AdvLogger.LogInfo("[PIDSupporter] NewWindow 메서드를 찾지 못했습니다.", LogOptions.None);
                     return null;
                 }
 
@@ -159,7 +159,7 @@ namespace PIDAutoTuner
             }
             catch (Exception e)
             {
-                AdvLogger.LogInfo("[PIDAutoTuner] CreateFritWindow 실패: " + e, LogOptions.None);
+                AdvLogger.LogInfo("[PIDSupporter] CreateFritWindow 실패: " + e, LogOptions.None);
                 return null;
             }
         }

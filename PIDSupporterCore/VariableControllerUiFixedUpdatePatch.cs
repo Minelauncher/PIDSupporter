@@ -26,7 +26,7 @@ using System.Reflection;
 using BrilliantSkies.Core.Logger;
 using BrilliantSkies.Core.Timing;   // ITimeStep (FTD의 시간 정보 인터페이스)
 
-namespace PIDAutoTuner
+namespace PIDSupporter
 {
     [HarmonyPatch]
     public static class VariableControllerUiFixedUpdatePatch
@@ -57,7 +57,7 @@ namespace PIDAutoTuner
             }
             catch (Exception e)
             {
-                AdvLogger.LogInfo("[PIDAutoTuner] FixedUpdatePatch 실패: " + e, LogOptions.None);
+                AdvLogger.LogInfo("[PIDSupporter] FixedUpdatePatch 실패: " + e, LogOptions.None);
             }
         }
     }

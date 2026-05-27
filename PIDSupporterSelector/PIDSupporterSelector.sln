@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.11.35327.3
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PIDAutoTunerSelector", "PIDAutoTunerSelector.csproj", "{87B7614D-9574-440E-8CAC-99350C8D6BAF}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PIDSupporterSelector", "PIDSupporterSelector.csproj", "{87B7614D-9574-440E-8CAC-99350C8D6BAF}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
