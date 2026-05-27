@@ -19,9 +19,3 @@ Thumbs.db
 
 # Archives
 *.zip
-
-# Build artifacts (DLLs are in root for FTD mod loading, but built from source)
-PIDAutoTunerCore/bin/
-PIDAutoTunerCore/obj/
-PIDAutoTunerSelector/bin/
-PIDAutoTunerSelector/obj/
