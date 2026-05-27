@@ -1427,6 +1427,22 @@ namespace PIDSupporter
             // controller-invariant (G 는 plant property), local minimum 없음, iteration 자연 수렴.
             double tauM = Math.Max(dt, (double)_s.ModelDelayTau);
 
+            // ── 한계 진동 감지: 데이터 수집 중 saturation 너무 많으면 현재 PID 가 plant 를
+            // 자체 진동시키는 중. 그런 데이터로 식별 시도하면 weird 결과. fail 후 사용자에게
+            // PID 약화 권장.
+            int satCount = 0;
+            for (int i = 0; i < sat.Length; i++) if (sat[i]) satCount++;
+            double satRate = (double)satCount / Math.Max(1, sat.Length);
+            if (satRate > 0.15)
+            {
+                _autoState = AutoTuneState.Failed;
+                _sess.LastMessage =
+                    $"Plant in limit cycle (sat={satRate:P0}, {satCount}/{sat.Length}). " +
+                    $"Current PID is oscillating the plant. Lower Kp/Td manually and retry. " +
+                    $"/ 현재 PID 가 plant 를 진동시키는 중. Kp/Td 낮추고 재시도.";
+                return;
+            }
+
             PlantModel plant = IdentifyPlantArx(u, y, sat, dt, tauM);
 
             if (!plant.Valid)
@@ -2637,14 +2653,11 @@ namespace PIDSupporter
             m.Tau1 = -dt / Math.Log(zForTau);
 
             // τ_2 (rate damping) 연속 계산 — 임계값 binary flip 방지.
-            // zFast 가 어디 있든 항상 τ_2 산출 (cap 만 적용):
-            //   · zFast 매우 작음 (< 0.01) → τ_2 ≈ 0 (deadbeat 빠른 극점)
-            //   · zFast 0.5~0.9 → τ_2 = -dt/ln(zFast)  (정상 1차 rate damping)
-            //   · zFast → 0.9999 → τ_2 → 큰 값 (적분기 같은 두 번째 극점)
-            //   · 상한 2초로 cap (Td 가 비합리적으로 커지지 않도록)
-            // iteration 안정성: zFast 가 잡음으로 흔들려도 τ_2 가 부드럽게 변함.
+            // 상한 0.5s (이전 2.0 에서 더 빡빡하게):
+            //   · 0.5s 넘는 τ_2 는 보통 zFast 추정 오류 (적분기 같은 second pole)
+            //   · Td 가 0.5 넘으면 노이즈 증폭 폭주 (50Hz tick → Td/dt > 20)
             double zFastClamped = Math.Max(0.01, Math.Min(INTEGRATOR_CAP, zFast));
-            m.Tau2 = Math.Min(2.0, -dt / Math.Log(zFastClamped));
+            m.Tau2 = Math.Min(0.5, -dt / Math.Log(zFastClamped));
 
             // DC gain K 계산:
             //   일반 plant:  K = b / (1 - a₁ - a₂)   (적분기 아닐 때)
@@ -2728,7 +2741,20 @@ namespace PIDSupporter
             if (r.Ti > 250.0) r.Ti = 250.0;
             if (r.Ti < 0.1) r.Ti = 0.1;
             if (r.Td < 0) r.Td = 0;
-            if (r.Td > 10.0) r.Td = 10.0;
+
+            // ── Td 강한 cap (산업 표준 + 노이즈 보호) ──
+            // 적용 시 진동 방지를 위해 세 가지 한계 중 가장 작은 값 사용:
+            //   1. Td/Ti < 0.25     (산업 표준 PID 비율)
+            //   2. Td/Ts < 0.5      (SIMC 물리 한계)
+            //   3. Td/dt < 20       (이산 미분 노이즈 증폭 한계, dt=0.025 → Td<0.5)
+            // 사용자분 케이스: Td=0.29 (Td/dt=11.6) 도 떨림 → cap 으로 강제 낮춤.
+            double dtForCap = 0.025; // 표준 FTD tick (정확한 dt 는 호출측이 알지만, 보수적으로 fix)
+            double tdCapByTi = 0.25 * r.Ti;
+            double tdCapByTs = 0.5 * tauC;
+            double tdCapByDt = 20.0 * dtForCap;
+            double tdCap = Math.Min(tdCapByTi, Math.Min(tdCapByTs, tdCapByDt));
+            if (r.Td > tdCap) r.Td = tdCap;
+
             return r;
         }
 
