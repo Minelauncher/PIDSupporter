@@ -349,35 +349,40 @@ disc < 0:  복소 conjugate 한 쌍
 ## 7. 가진 (Excitation)
 
 ### 7.1 왜 필요한가
-PID 가 안정적으로 잘 작동하면 `u/y` 가 거의 일정 → 플랜트 정보 없음. 외부 가진으로 SP 를 흔들어 정보를 만듭니다.
+PID 가 안정적으로 잘 작동하면 `u/y` 가 거의 일정 → 플랜트 정보 없음. 외부 가진으로 plant 를 흔들어 정보를 만듭니다.
 
-### 7.2 멀티사인 + 저주파 square wave (기본)
+### 7.2 u-direct 임펄스 패턴 (현재 방식)
 
-진폭 예산을 둘로 분할: 멀티사인 `(1-r)·A` + square wave `r·A`, 기본 `r = 0.5`.
+**핵심 디자인** — 가진 신호를 PID 출력 `u` 에 직접 더하고 (additive perturbation), 짧은 자극 + 긴 회복을 부호 교대로 반복.
 
-**멀티사인 (P/D 모드 식별):**
-12 성분, 로그 간격 (`fBase` ~ `fMax`), 슈뢰더 위상.
+```
+[0.0 ~ 0.3s]  u += +A   ← 임펄스 1 (양)
+[0.3 ~ 5.0s]  자극 OFF  ← PID 가 plant 복원
+[5.0 ~ 5.3s]  u += -A   ← 임펄스 2 (음, 평균 zero)
+[5.3 ~ 10.0s] 자극 OFF
+[10.0 ~ 10.3s] u += +A  ← 임펄스 3
+...
+```
 
-$$x_\text{ms}(t) = (1-r) A \sum_{i=0}^{11} \frac{1}{\sqrt{12}} \sin(2\pi f_i t + \phi_i), \quad \phi_i = -\frac{\pi i (i+1)}{12}$$
+**파라미터** (코드 상수)
+- `IMPULSE_PERIOD = 5.0s` — 한 사이클 길이
+- `IMPULSE_WIDTH = 0.3s` — 임펄스 폭
+- 부호 교대 (+ - + - ...) → 평균 0 → 장기 drift 0
+- 25초 녹화 → 임펄스 5번 + 회복 구간 4번
 
-슈뢰더 위상 → 피크 팩터 ≈ √2 (균일 사인). 같은 RMS 진폭으로 가장 큰 SNR 확보.
+**왜 이게 정통인가** (산업/항공계 표준 step response autotuning 과 동일 원리)
+1. **PE (Persistent Excitation) 충분** — 각 임펄스가 broadband 임펄스 응답을 자극 → 모든 plant mode 활성화
+2. **Integrator drift 안 누적** — 임펄스 사이 회복 구간에 PID 가 정상 자세로 끌어당김. 부호 교대로 평균 zero 보장
+3. **PID 강도 무관** — u 에 직접 인젝션이라 약한 PID 도 plant 가 자극받음
+4. **Plant 안정성** — 임펄스가 짧고 (~0.3s) 회복 구간이 길어서 (~4.7s) closed-loop 이 매번 정상 상태로 복귀
+5. **Multi-axis 결합 영향 최소** — 회복 구간에 다른 축들도 안정화
 
-**저주파 square wave (I 모드 식별 — DC 정보 보강):**
+**u-direct 인젝션 메커니즘** — `VariableControllerOutputPatch` 가 `VariableControllerMaster.NewMeasurement` Harmony postfix 에서 `FritExcitationInjector` 에 등록된 가진값을 PID 의 u 출력에 더해 클램프 [-1, 1] 적용. `LastControlVariable` 도 reflection 으로 동기화 → 데이터 수집 시 일관성.
 
-$$x_\text{sq}(t) = r A \cdot \mathrm{sign}\!\left[\sin(2\pi f_\text{sq} t)\right]$$
-
-기본 `f_sq = 0.1Hz` (주기 10초). 각 half-period 동안 SP 가 일정 → **적분기에 sustained 오차** → Ti 식별 강화. 평균 0 이라 자세 bias 없음. Square 전환 시점마다 transient → FRIT 가 좋아하는 데이터.
-
-전체:
-
-$$x(t) = x_\text{ms}(t) + x_\text{sq}(t)$$
-
-설정: `SquareAmpRatio` (`r`, 기본 0.5), `SquareFreqHz` (`f_sq`, 기본 0.1Hz). `r = 0` 으로 두면 순수 멀티사인.
-
-**왜 DC 정보가 따로 필요한가**: 멀티사인은 DC 성분이 0 (모든 사인의 평균은 0). PID 적분 모드 `(K_p/T_i) ∫e dt` 는 저주파 / DC 오차에 반응 → 저주파 가진 없으면 `T_i` 가 데이터에 거의 안 묻혀나옴. Square wave 의 half-period 가 길수록 (`f_sq` 작을수록) 적분 모드가 더 강하게 식별됨, 단 녹화 시간 내 최소 2회 전환 필요.
-
-### 7.3 Step Prelude (초기 DC kick)
-첫 0.5초는 가진 대신 `x = A` 일정 (full magnitude DC pulse). 이후 multisine + square 정상 사이클. FRIT 는 정상성 가정이 없으므로 **이 transient 도 식별 데이터에 그대로 포함** (구 PEM 시절 step skip 제거됨).
+**과거 방식 (제거됨)**
+- 연속 멀티사인 + square wave (SP 인젝션): PID 가 약하면 u 안 움직이고, 강하면 가진 reject. closed-loop ID 의 PID 의존성 문제.
+- Step prelude 0.5초 DC offset: integrator plant 에선 그 0.5초에 drift 누적 → 위험.
+- 임펄스 패턴은 이 두 문제를 한 번에 해결.
 
 ### 7.4 적응형 진폭 (saturation 기반 binary)
 

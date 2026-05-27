@@ -68,7 +68,7 @@
 //   [자체] AutoTuneCompute()                   녹화 완료 → Ts 스캔 → FRIT 결정
 //
 // ── 가진 신호 (ApplyExcitation) ──
-//   [자체] ApplyExcitation(dt)                 멀티사인 + square + step prelude 합성
+//   [자체] ApplyExcitation(dt)                 임펄스 패턴 (짧은 자극 + 긴 회복, 부호 교대)
 //   [자체] CaptureSetPointAdjustBase()         원래 SP 백업
 //   [자체] RestoreSetPointAdjustIfNeeded()     SP 복원
 //   [자체] enum WaveType                       Off/Sine/Chirp/MultiSine
@@ -243,15 +243,11 @@ namespace PIDSupporter
             public float ChirpStartHz = 0.2f;       // Chirp 시작 주파수
             public float ChirpEndHz = 2.0f;         // Chirp 끝 주파수
 
-            // ===== 저주파 square wave (적분 모드 식별용 DC 보강) =====
-            // MultiSine 가진 위에 sign(sin(2π·f_sq·t)) 를 더해서 적분기에 sustained 오차 주입.
-            // 각 half-period 동안 SP 일정 → Ti 식별이 강해짐. 평균 0 이라 자세 bias 없음.
-            public float SquareAmpRatio = 0.5f;     // 0 = off, 멀티사인 대비 square 진폭 비율
-            public float SquareFreqHz   = 0.1f;     // square 주파수 (주기 10초)
-
             // ===== 적응형 진폭: PID가 가진을 다 눌러버릴 때 자동으로 키움 =====
-            public bool  AdaptiveAmp = true;        // 적응형 켤지
-            public float AdaptiveAmpMax = 10.0f;    // 최대 허용 진폭 (안전 상한)
+            // u-direct 인젝션이라 u 자체가 [-1, 1] 범위. AmpMax 를 1.0 으로 cap (그 이상은
+            // 어차피 patch 에서 clamp 되어 효과 없음). integrator drift 위험도 줄어듦.
+            public bool  AdaptiveAmp = true;
+            public float AdaptiveAmpMax = 1.0f;
 
             // ===== 축 분리 (Axis Fixture) =====
             public bool FixOtherAxes = true;        // 튜닝 중 다른 축 SP 고정
@@ -381,9 +377,6 @@ namespace PIDSupporter
         // 자연 변동 측정: 녹화 전 y를 링버퍼에 모아서 std 계산
         private const int NaturalBufSize = 60; // 약 1.2초 분량
 
-        // Step prelude 길이 (초). MultiSine 가진 시 최초 이 시간 동안 일정 SP offset 유지.
-        // DC 정보 주입으로 FRIT 의 DC 매칭이 외삽 영역이 되는 걸 방지.
-        private const double STEP_PRELUDE_SEC = 0.5;
         private readonly double[] _naturalYBuf = new double[NaturalBufSize];
         private int _naturalYIdx = 0;
         private int _naturalYCount = 0;
@@ -1374,7 +1367,7 @@ namespace PIDSupporter
 
         /// <summary>
         /// 녹화 완료 후 다음 틱에 호출. 자동 튜닝 계산 파이프라인:
-        /// 1) 최장 연속 블록 선택 (포화 구멍 제외) + step prelude 제외
+        /// 1) 전체 (u, y, sat) 데이터 사용 — 임펄스 패턴이라 prelude 분리 불필요
         /// 2) 데이터 품질 체크 (포화율, y 변화량)
         /// 3) Ts 자동 스캔 (10단계) + FRIT (LM 비선형 최적화)
         /// 4) 파라미터 안정성 기반 best Ts 선택
@@ -1827,17 +1820,6 @@ namespace PIDSupporter
 
             double x = 0.0;
 
-            // ── Step prelude: 최초 STEP_PRELUDE_SEC 동안 u 에 일정 offset 주입 (DC 정보) ──
-            // 멀티사인은 DC 성분 없음 → FRIT 의 DC 동작 매칭이 외삽 영역이 됨.
-            // step 구간은 DC 방향 Fisher information 보강용.
-            if (_s.ExciteWave == WaveType.MultiSine && _sess.T < STEP_PRELUDE_SEC)
-            {
-                x = amp;
-                _lastExciteValue = x;
-                FritExcitationInjector.Set(this._focus, (float)x);
-                return;
-            }
-
             switch (_s.ExciteWave)
             {
                 case WaveType.Sine:
@@ -1849,8 +1831,6 @@ namespace PIDSupporter
                 case WaveType.Chirp:
                     {
                         // 로그 chirp - 저주파에서 오래 머물러 Ti 추정에 유리
-                        // 순시 주파수: f(t) = f0 * (f1/f0)^(t/T)
-                        // 위상: φ(t) = 2π * f0*T/ln(f1/f0) * ((f1/f0)^(t/T) - 1)
                         double f0 = Math.Max(0.01, _s.ChirpStartHz);
                         double f1 = Math.Max(f0 * 1.1, _s.ChirpEndHz);
                         double T = Math.Max(1.0, _s.MinSamples * dt);
@@ -1858,46 +1838,32 @@ namespace PIDSupporter
                         double lnRatio = Math.Log(ratio);
                         double phase;
                         if (t <= T)
-                        {
                             phase = 2.0 * Math.PI * f0 * T / lnRatio * (Math.Pow(ratio, t / T) - 1.0);
-                        }
                         else
-                        {
-                            double phaseAtT = 2.0 * Math.PI * f0 * T / lnRatio * (ratio - 1.0);
-                            phase = phaseAtT + 2.0 * Math.PI * f1 * (t - T);
-                        }
+                            phase = 2.0 * Math.PI * f0 * T / lnRatio * (ratio - 1.0) + 2.0 * Math.PI * f1 * (t - T);
                         x = amp * Math.Sin(phase);
                         break;
                     }
                 case WaveType.MultiSine:
                     {
-                        // 12성분 멀티사인 (P/D 모드) + 저주파 square wave (I 모드 DC 정보)
-                        // 진폭 예산 분할: 멀티사인 (1-r) : square r,  r = SquareAmpRatio
-                        double fBase = Math.Max(0.01, _s.ExciteFreqHz);
-                        double fMax = Math.Max(fBase * 2.0, _s.ChirpEndHz);
-                        int nComp = 12;
+                        // 임펄스 패턴: 짧은 임펄스 + 긴 회복 구간 N회 반복.
+                        // 각 임펄스 사이에 PID 가 plant 를 정상 자세로 회복시켜 integrator drift 누적 안 됨.
+                        // 부호 교대 (+, -, +, -, ...) 로 평균 zero 보장 → 장기 drift 0.
+                        // closed-loop 안정성 유지하면서 (u, y) 에 풍부한 transient 정보 확보.
+                        //
+                        // 한 사이클 = IMPULSE_WIDTH (자극) + (IMPULSE_PERIOD - IMPULSE_WIDTH) (회복).
+                        // 5초 주기 × 5번 = 25초 동안 5개 step-response 데이터 포인트 수집.
+                        const double IMPULSE_PERIOD = 5.0;
+                        const double IMPULSE_WIDTH = 0.3;
+                        int impulseIdx = (int)(t / IMPULSE_PERIOD);
+                        double tInPeriod = t - impulseIdx * IMPULSE_PERIOD;
 
-                        double sqRatio = Math.Max(0.0, Math.Min(0.8, _s.SquareAmpRatio));
-                        double msAmp = amp * (1.0 - sqRatio);
-                        double sqAmp = amp * sqRatio;
-
-                        // 슈뢰더 위상 멀티사인 — P/D 식별
-                        double compAmp = msAmp / Math.Sqrt(nComp);
-                        for (int ci = 0; ci < nComp; ci++)
+                        if (tInPeriod < IMPULSE_WIDTH)
                         {
-                            double fi = fBase * Math.Pow(fMax / fBase, (double)ci / (nComp - 1));
-                            double phi = -Math.PI * ci * (ci + 1) / nComp;
-                            x += compAmp * Math.Sin(2.0 * Math.PI * fi * t + phi);
+                            double sign = (impulseIdx % 2 == 0) ? 1.0 : -1.0;
+                            x = sign * amp;
                         }
-
-                        // 저주파 square wave — 각 half-period 동안 SP 일정 → 적분기 sustained 오차 → Ti 식별 강화
-                        // 평균 0 이라 자세 bias 없음. f_sq 주기보다 짧은 chatter 쿨다운 (3초) 과 자연스럽게 어우러짐.
-                        if (sqAmp > 0)
-                        {
-                            double sqFreq = Math.Max(0.01, _s.SquareFreqHz);
-                            double sinPhase = Math.Sin(2.0 * Math.PI * sqFreq * t);
-                            x += sqAmp * (sinPhase >= 0 ? 1.0 : -1.0);
-                        }
+                        // else: 회복 구간 — x = 0, PID 가 정상 작동
                         break;
                     }
             }
