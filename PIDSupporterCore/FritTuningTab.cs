@@ -1437,11 +1437,12 @@ namespace PIDSupporter
 
             // ── τ_p 추정 (또는 캐시 사용) ──
             // 반복 AutoTune 시 closed-loop bias drift 방지: 첫 추정값을 _cachedTauP 에 저장하고
-            // 이후엔 그 값을 재사용. 사용자가 "Clear τ_p" 누르면 캐시 무효화.
+            // 이후엔 그 값을 재사용. 사용자가 Reset 누르면 캐시 무효화.
             //
-            // 신선 추정:
-            //   MultiSine 가진 시: step prelude 의 63.2% rise 시간으로 τ_p 직접 측정.
-            //   prelude 가 없거나 응답이 약하면 y 자기상관 1/e 방식으로 폴백.
+            // 신선 추정 우선순위 (MultiSine 가진 가정):
+            //   1. FOPDT fit: prelude (u, y) 둘 다 사용한 ARX(1,1) OLS. plant 고유 τ_p (unbiased).
+            //   2. step prelude 63.2%: y 만 사용. closed-loop biased 지만 ARX fit 실패 시 폴백.
+            //   3. 자기상관 1/e: 최후 폴백 (Sine/Chirp 또는 prelude 응답 약함).
             double tau_p;
             string tauSrc;
             if (!double.IsNaN(_cachedTauP))
@@ -1451,11 +1452,28 @@ namespace PIDSupporter
             }
             else
             {
-                double tau_p_prelude = (_s.ExciteWave == WaveType.MultiSine)
+                double tauFopdt = (_s.ExciteWave == WaveType.MultiSine)
+                    ? EstimateTauFromFopdtFit(u, y, sat, dt, (double)_s.ModelDelayTau)
+                    : double.NaN;
+                double tauPrelude = (double.IsNaN(tauFopdt) && _s.ExciteWave == WaveType.MultiSine)
                     ? EstimateTauFromStepPrelude(y, dt)
                     : double.NaN;
-                tau_p = !double.IsNaN(tau_p_prelude) ? tau_p_prelude : EstimateDominantTau(y, dt);
-                tauSrc = !double.IsNaN(tau_p_prelude) ? "prelude" : "autocorr";
+
+                if (!double.IsNaN(tauFopdt))
+                {
+                    tau_p = tauFopdt;
+                    tauSrc = "fopdt";
+                }
+                else if (!double.IsNaN(tauPrelude))
+                {
+                    tau_p = tauPrelude;
+                    tauSrc = "prelude";
+                }
+                else
+                {
+                    tau_p = EstimateDominantTau(y, dt);
+                    tauSrc = "autocorr";
+                }
                 _cachedTauP = tau_p;   // 다음 호출부터 캐시 활용
             }
 
@@ -2676,6 +2694,83 @@ namespace PIDSupporter
             // τ = -slope (위상 기울기가 음수면 양의 지연)
             double tau = -slope;
             return Math.Max(0.0, Math.Min(tau, 0.2)); // FTD 환경: 순수 지연 최대 0.2초 (10틱)
+        }
+
+        /// <summary>
+        /// Step prelude 데이터 (u, y) 에 FOPDT (1차 + 지연) 모델을 ARX(1,1) OLS 로 fit 해
+        /// **plant 고유 시정수 τ_p** 를 PID 영향 없이 추출한다.
+        ///
+        /// 모델 (이산 형태):
+        ///   y_d[k] = a · y_d[k-1] + b · u_d[k-1-delayN]
+        ///       y_d = y - y[0], u_d = u - u[0]      ← baseline 제거
+        ///   τ_p = -dt / ln(a)                       ← α = exp(-dt/τ_p)
+        ///
+        /// 왜 closed-loop 데이터에서도 작동하나:
+        ///   plant 방정식 τ_p·dy/dt + y = K·u(t-θ) 은 PID 와 무관하게 성립.
+        ///   (u, y) 쌍에서 plant 파라미터를 추정하는 건 closed-loop 든 open-loop 든 같음.
+        ///   유일한 차이는 u 가 PID 의 출력이라 노이즈와 약하게 상관될 수 있다는 점인데,
+        ///   prelude 의 step 응답은 deterministic 변화가 압도해서 OLS 편향이 작음.
+        ///
+        /// 포화 샘플은 ARX regressor 에서 제외.
+        /// 응답이 너무 작거나 (signal/noise) ARX 적합 실패 시 NaN 반환 → 호출측 폴백.
+        /// </summary>
+        private static double EstimateTauFromFopdtFit(double[] u, double[] y, bool[] sat, double dt, double theta)
+        {
+            int nPrelude = (int)Math.Round(STEP_PRELUDE_SEC / dt);
+            if (u.Length < nPrelude || y.Length < nPrelude || sat.Length < nPrelude || nPrelude < 12)
+                return double.NaN;
+
+            int delayN = Math.Max(0, (int)Math.Round(theta / dt));
+            int kStart = 1 + delayN;
+            if (kStart >= nPrelude - 2) return double.NaN;
+
+            // 응답 크기 sanity (잡음 수준 변동이면 fit 무의미)
+            double yMax = y[0], yMin = y[0];
+            for (int i = 0; i < nPrelude; i++)
+            {
+                if (y[i] > yMax) yMax = y[i];
+                if (y[i] < yMin) yMin = y[i];
+            }
+            double yStd = StdDev(y);
+            if ((yMax - yMin) < Math.Max(1e-4, 0.1 * yStd))
+                return double.NaN;
+
+            double y0 = y[0];
+            double u0 = u[0];
+
+            // ARX(1,1) OLS: y_d[k] = a·y_d[k-1] + b·u_d[k-1-delayN]
+            // 정규방정식: [sYY  sYU][a]   [sYtY]
+            //              [sYU  sUU][b] = [sYtU]
+            double sYY = 0, sYU = 0, sUU = 0, sYtY = 0, sYtU = 0;
+            int count = 0;
+            for (int k = kStart; k < nPrelude; k++)
+            {
+                if (sat[k] || sat[k - 1] || sat[k - 1 - delayN]) continue;
+                double yt = y[k] - y0;
+                double y1 = y[k - 1] - y0;
+                double u1 = u[k - 1 - delayN] - u0;
+                sYY += y1 * y1;
+                sYU += y1 * u1;
+                sUU += u1 * u1;
+                sYtY += yt * y1;
+                sYtU += yt * u1;
+                count++;
+            }
+            if (count < 6) return double.NaN;
+
+            double det = sYY * sUU - sYU * sYU;
+            if (Math.Abs(det) < 1e-12) return double.NaN;
+
+            double a = (sUU * sYtY - sYU * sYtU) / det;
+            // b = (sYY*sYtU - sYU*sYtY) / det;  // K 추정에는 쓰지만 τ_p 만 필요하면 생략
+
+            // a ∈ (0, 1) 이어야 1st-order 안정 plant. 벗어나면 모델 부적합 → 폴백.
+            if (double.IsNaN(a) || a <= 0.0 || a >= 1.0) return double.NaN;
+
+            double tau_p = -dt / Math.Log(a);
+            if (double.IsNaN(tau_p) || tau_p <= 0) return double.NaN;
+
+            return Math.Max(3.0 * dt, Math.Min(1.0, tau_p));
         }
 
         /// <summary>

@@ -17,7 +17,7 @@
   → EffectiveValidCount (= transient-tail 밖 깨끗 샘플) ≥ MinSamples 까지 대기
        · 적응형 진폭이 자동 조정 → 결국 비포화 영역으로 수렴
        · 시간 상한 없음 (사용자가 멈추기 전까지 계속 수집)
-  → τ_p 추정 (MultiSine: step prelude 63.2% rise / 그 외: 자기상관 1/e drop)
+  → τ_p 추정 (1순위 FOPDT fit on (u,y) prelude, 2순위 prelude 63.2%, 3순위 자기상관 1/e)
   → Ts sweep — k ∈ {1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 3.0, 3.5, 4.0} 로
                 max(k·τ_p, k·τ_M) 후보 10개 생성, FRIT 10번 돌려서
                 Td/Ti < 0.3 + Td/dt < 10 충족하는 가장 공격적인 후보 채택
@@ -221,12 +221,25 @@ $$y[k] = \frac{x[k] + x[k-1] - \beta_1 y[k-1]}{\beta_0}$$
 
 반복 AutoTune 시 closed-loop bias drift (현재 PID 가 느릴수록 측정 τ_p 가 커져서 다음 PID 가 더 느려지는 양성 피드백) 방지를 위해 **τ_p 캐싱** 적용. 첫 AutoTune 에서 추정한 값을 `_cachedTauP` 에 저장하고 이후엔 그 값을 재사용. Reset 버튼이 캐시를 클리어해서 강제 재추정.
 
-신선 추정 시:
-- **MultiSine 가진 시 (선호)** — `EstimateTauFromStepPrelude`:
-  멀티사인 첫 0.5초의 step prelude 응답에서 63.2% rise 시점을 찾아 τ_p 직접 측정.
-  저주파 드리프트에 강건 (자기상관 방식 대비).
-- **그 외 (Sine/Chirp 또는 prelude 응답 약함)** — `EstimateDominantTau`:
-  y(t) 의 자기상관 (PSD → IFFT, Wiener-Khinchin) 에서 **1/e 떨어지는 시각** 으로 폴백.
+신선 추정 시 우선순위:
+
+1. **FOPDT fit** (`EstimateTauFromFopdtFit`) — **plant 고유 τ_p, PID 무관 (unbiased)**:
+   prelude 의 (u, y) 둘 다 사용해서 ARX(1,1) OLS 로 1차 plant 모델 fit.
+   ```
+   y_d[k] = a · y_d[k-1] + b · u_d[k-1-delayN]
+   τ_p = -dt / ln(a)
+   ```
+   plant 방정식 `τ_p·dy/dt + y = K·u(t-θ)` 가 PID 무관하게 성립한다는 사실 활용.
+   포화 샘플 제외, 응답이 노이즈 수준이면 NaN 반환 → 폴백.
+
+2. **step prelude 63.2%** (`EstimateTauFromStepPrelude`) — closed-loop biased 폴백:
+   FOPDT fit 실패 시 y 의 63.2% rise time 으로 대략 추정. 현재 PID 영향 받음.
+
+3. **자기상관 1/e** (`EstimateDominantTau`) — 최후 폴백:
+   y(t) 의 자기상관 (PSD → IFFT, Wiener-Khinchin) 에서 1/e 떨어지는 시각.
+   Sine/Chirp 가진 또는 위 두 방법 모두 실패 시.
+
+**왜 FOPDT 가 closed-loop 데이터에서도 unbiased 인가** — plant 미분방정식은 PID 와 무관하게 항상 성립. (u, y) 쌍에서 plant 파라미터를 추정하는 건 OLS 의 표준 절차. PID 가 만들어내는 u 는 노이즈와 약하게 상관될 수 있지만 (closed-loop ID bias), prelude step 의 deterministic 변화가 압도해서 편향이 작음.
 
 **캐싱의 이유** — τ_p 는 원리적으로 plant 고유 정보이지만, 우리 추정기는 closed-loop y 데이터에서 얻으니까 현재 PID 의 영향이 섞임. 반복 호출하면:
 1. 현재 PID 가 sluggish → closed-loop 응답 느림 → 추정 τ_p 큼
@@ -271,7 +284,7 @@ return best ?? fallback  (best 없으면 fallback + ⚠ 경고)
 ## 5. 계산 파이프라인 (FRIT 시간 영역)
 
 ### 단계 0: Ts sweep (자세히는 §4.4)
-1. **τ_p 추정** — MultiSine 면 step prelude (`EstimateTauFromStepPrelude`), 그 외 자기상관 (`EstimateDominantTau`)
+1. **τ_p 추정** — 캐시 ↘ FOPDT fit ↘ step prelude 63.2% ↘ 자기상관 1/e (자세히는 §4.4)
 2. **10개 후보 sweep** — `k ∈ {1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 3, 3.5, 4}` 로 `Ts_k = clamp(max(k·τ_p, k·τ_M), 3·dt, 1.0)`
 3. **각 Ts_k 마다 ComputeFritPid 호출** → 안전 체크 (`Td/Ti < 0.3 ∧ Td/dt < 10`) 통과한 가장 공격적인 결과 채택. 끝까지 돌면서 `safeCount` 카운트
 4. **모두 실패 시** 마지막 성공 후보 (가장 보수적) + 경고 메시지 폴백
