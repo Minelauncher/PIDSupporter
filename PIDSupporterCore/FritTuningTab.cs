@@ -2605,24 +2605,35 @@ namespace PIDSupporter
             double zSlow = Math.Max(az1, az2);
             double zFast = Math.Min(az1, az2);
 
-            // 적분기 감지: |z| ≈ 1
-            const double INTEGRATOR_THRESHOLD = 0.9999;
-            m.HasIntegrator = zSlow > INTEGRATOR_THRESHOLD;
+            // 적분기 plant 관용 처리:
+            //   진짜 적분기는 z=1. 노이즈로 추정치가 0.95~1.1 사이에 떠다닐 수 있음.
+            //   엄격한 z<1 거부는 비행기 롤 angle 같은 적분기 plant 를 false reject 함.
+            //   대신: 0.95 이상이면 적분기로 간주, 내부 계산엔 0.9999 cap.
+            //   1.1 이상이면 진짜 불안정 추정 → fail.
+            const double INTEGRATOR_LO = 0.95;
+            const double INTEGRATOR_CAP = 0.9999;
+            const double UNSTABLE_THRESHOLD = 1.1;
 
-            if (zSlow <= 0 || zSlow >= 1)
-            { m.Diagnosis = $"slow pole |z|={zSlow:0.000} unstable (>1) or invalid"; return m; }
+            if (zSlow > UNSTABLE_THRESHOLD)
+            { m.Diagnosis = $"slow pole |z|={zSlow:0.000} > 1.1 (truly unstable)"; return m; }
+            if (zSlow <= 0)
+            { m.Diagnosis = $"slow pole |z|={zSlow:0.000} ≤ 0 (invalid)"; return m; }
 
-            m.Tau1 = -dt / Math.Log(zSlow);
-            m.Tau2 = (zFast > 0.001 && zFast < INTEGRATOR_THRESHOLD)
+            m.HasIntegrator = zSlow > INTEGRATOR_LO;
+            double zForTau = m.HasIntegrator ? INTEGRATOR_CAP : zSlow;
+            m.Tau1 = -dt / Math.Log(zForTau);
+
+            m.Tau2 = (zFast > 0.001 && zFast < INTEGRATOR_LO)
                 ? -dt / Math.Log(zFast)
-                : 0.0;  // 빠른 극점 무시 가능하면 1차 plant 로 취급
+                : 0.0;
 
-            // DC gain K = b / (1 - a₁ - a₂)  for ARX(2,1)
-            // (적분기 plant 면 1-a₁-a₂ ≈ 0 이라 K → ∞, 별도 처리)
+            // DC gain K 계산:
+            //   일반 plant:  K = b / (1 - a₁ - a₂)   (적분기 아닐 때)
+            //   적분기 plant: K_i = b / dt           (denom ≈ 0)
+            // HasIntegrator 가 true 이거나 denom 이 작으면 적분기 공식 사용.
             double denom = 1.0 - a1 - a2;
-            if (Math.Abs(denom) < 1e-4)
+            if (m.HasIntegrator || Math.Abs(denom) < 1e-3)
             {
-                // 적분기 plant: K' = b / dt (rate gain)
                 m.K = b / Math.Max(1e-6, dt);
                 m.HasIntegrator = true;
             }
