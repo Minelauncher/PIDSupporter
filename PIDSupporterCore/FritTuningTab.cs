@@ -1449,7 +1449,10 @@ namespace PIDSupporter
             //   · Td/dt < 10    (이산 미분의 per-sample 노이즈 게인 상한)
             // 모든 후보가 실패하면 가장 보수적인 후보의 결과로 폴백 (경고 표시).
             double tauM = Math.Max(dt, (double)_s.ModelDelayTau);
-            double[] factors = { 1.0, 1.5, 2.0, 3.0, 4.0 };
+            // 공격 ↔ 보수 사이를 촘촘하게: [1, 2.5] 구간은 0.25 step, [2.5, 4] 구간은 0.5 step.
+            // 후보를 그리드로 두는 이유는 결과를 후처리해서 보거나 디버깅하기 좋고,
+            // Td/Ti·Td/dt 가 Ts 에 대해 항상 monotonic 한 건 아니라 bisection 보다 안전.
+            double[] factors = { 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 3.0, 3.5, 4.0 };
 
             FritResult best = default;
             bool hasBest = false;
@@ -1459,8 +1462,11 @@ namespace PIDSupporter
             bool hasFallback = false;
             double fallbackTs = 0.0;
             double fallbackFactor = 0.0;
+            int safeCount = 0;
             string lastFailReason = "";
 
+            // 모든 후보를 끝까지 평가해서 안전 후보 갯수까지 카운트.
+            // best = 가장 공격적인 안전 후보 (= 처음 만난 safe), fallback = 가장 보수적인 성공 후보 (= 마지막 성공).
             for (int i = 0; i < factors.Length; i++)
             {
                 double k = factors[i];
@@ -1475,17 +1481,17 @@ namespace PIDSupporter
                 }
                 catch (Exception ex)
                 {
-                    lastFailReason = $"k={k:0.0}: {ex.Message}";
+                    lastFailReason = $"k={k:0.2f}: {ex.Message}";
                     continue;
                 }
 
                 if (r.Kp <= 0 || double.IsNaN(r.Rmse))
                 {
-                    lastFailReason = $"k={k:0.0}: degenerate (Kp={r.Kp:0.000})";
+                    lastFailReason = $"k={k:0.2f}: degenerate (Kp={r.Kp:0.000})";
                     continue;
                 }
 
-                // 가장 보수적인 (마지막) 결과는 fallback 으로 보관
+                // 가장 보수적인 성공 후보 (k 큰 쪽) 갱신: 매 성공마다 덮어쓰기.
                 fallback = r;
                 hasFallback = true;
                 fallbackTs = ts;
@@ -1497,12 +1503,15 @@ namespace PIDSupporter
 
                 if (tdOverTi < 0.3 && tdOverDt < 10.0)
                 {
-                    // 첫 번째 안전 후보 채택 (= 가장 공격적인 안전 후보)
-                    best = r;
-                    hasBest = true;
-                    bestTs = ts;
-                    bestFactor = k;
-                    break;
+                    safeCount++;
+                    // 가장 공격적인 안전 후보는 첫 번째 만남에서만 기록.
+                    if (!hasBest)
+                    {
+                        best = r;
+                        hasBest = true;
+                        bestTs = ts;
+                        bestFactor = k;
+                    }
                 }
             }
 
@@ -1533,7 +1542,7 @@ namespace PIDSupporter
             string conv = best.Converged ? "converged" : "max-iter";
             string warn = string.IsNullOrEmpty(best.Warning) ? "" : " [⚠ " + best.Warning + "]";
             _sess.LastMessage =
-                $"Done | τ_p≈{tau_p:0.00}s ({tauSrc}) → Ts={bestTs:0.00}s (k={bestFactor:0.0}·max(τ_p,τ_M)) " +
+                $"Done | τ_p≈{tau_p:0.00}s ({tauSrc}) → Ts={bestTs:0.00}s (k={bestFactor:0.2f}, safe {safeCount}/{factors.Length}) " +
                 $"({conv}, {best.Iterations} iter) " +
                 $"Kp={best.Kp:0.000} Ti={best.Ti:0.1} Td={best.Td:0.00} rmse={best.Rmse:0.0000}{warn}{safetyWarn}";
         }

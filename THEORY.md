@@ -18,8 +18,9 @@
        · 적응형 진폭이 자동 조정 → 결국 비포화 영역으로 수렴
        · 시간 상한 없음 (사용자가 멈추기 전까지 계속 수집)
   → τ_p 추정 (MultiSine: step prelude 63.2% rise / 그 외: 자기상관 1/e drop)
-  → Ts sweep — k ∈ {1.0, 1.5, 2.0, 3.0, 4.0} 로 max(k·τ_p, k·τ_M) 후보 생성,
-                FRIT 5번 돌려서 Td/Ti < 0.3 + Td/dt < 10 충족하는 첫 후보 채택
+  → Ts sweep — k ∈ {1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 3.0, 3.5, 4.0} 로
+                max(k·τ_p, k·τ_M) 후보 10개 생성, FRIT 10번 돌려서
+                Td/Ti < 0.3 + Td/dt < 10 충족하는 가장 공격적인 후보 채택
   → FRIT 1회 (시간 영역 IIR + 가중 LS + LM)
        · 포화 인덱스만 w = ε 로 down-weight (IIR 회복 transient 는 IRLS Huber 가 자동 처리)
        · 1/C(z) 안정성 미충족 시 soft barrier
@@ -194,7 +195,7 @@ UI 에 `Kp = 0.0523 ± 0.0012 (2%)` 형태로 자동 표시.
 
 $$M(s) = \frac{e^{-s \tau_M}}{(1 + s \cdot 0.2 T_s)^{n_M}}$$
 
-- `T_s` : 목표 정착시간 (Ts sweep: `k·max(τ_p, τ_M)` for k ∈ {1.0, 1.5, 2.0, 3.0, 4.0}, 클램프 [3·dt, 1.0])
+- `T_s` : 목표 정착시간 (Ts sweep 10개 후보 `k·max(τ_p, τ_M)` for k ∈ {1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 3.0, 3.5, 4.0}, 클램프 [3·dt, 1.0])
 - `n_M` : 모델 차수 (FTD 제어 대상 대부분 2차 → `n_M = 2` 고정)
 - `τ_M` : 지연 (FTD 순수 지연 ≈ 1틱 → `τ_M = dt` 고정)
 
@@ -227,14 +228,21 @@ $$y[k] = \frac{x[k] + x[k-1] - \beta_1 y[k-1]}{\beta_0}$$
 **2단계: Ts sweep** (SIMC 일반화 + τ_M 고려)
 
 ```
-factors = {1.0, 1.5, 2.0, 3.0, 4.0}           ← 공격 → 보수
+factors = {1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 3.0, 3.5, 4.0}  ← 공격 → 보수, 10개
+best = null;  safeCount = 0;  fallback = null
 for k in factors:
     ts_k = clamp(max(k·τ_p, k·τ_M), 3·dt, 1.0)
     r = ComputeFritPid(ts = ts_k)
-    if r 정상 + Td/Ti < 0.3 + Td/dt < 10:
-        return r  ← 첫 통과 = 가장 공격적인 안전 후보
-return 가장 보수적인 후보 (k=4) + 경고
+    if r 정상:
+        fallback = r                ← 항상 갱신 (마지막 성공 = 가장 보수적)
+        if Td/Ti < 0.3 + Td/dt < 10:
+            safeCount++
+            if best == null:
+                best = r            ← 처음 만난 안전 후보 = 가장 공격적
+return best ?? fallback  (best 없으면 fallback + ⚠ 경고)
 ```
+
+**왜 break 안 하고 끝까지 도는가** — `safeCount` 를 사용자에게 보여줘서 결정의 robustness 를 알리기 위함. `safe 8/10` 이면 매우 안정적, `safe 1/10` 이면 fragile 한 채택. 비용은 FRIT 10회 ≈ 0.5초.
 
 **왜 max(k·τ_p, k·τ_M) 인가** — SIMC 의 표준 하한: closed-loop 은 plant delay 보다 빠를 수 없음. FTD 일반 케이스에선 τ_M = dt 라 `k·τ_p` 가 우세하지만, 사용자가 τ_M 슬라이더 올리면 그쪽이 하한이 됨.
 
@@ -244,7 +252,7 @@ return 가장 보수적인 후보 (k=4) + 경고
 
 **왜 sweep 인가** — 단일 SIMC factor (예: 2·τ_p balanced) 로는 D 진동 회피와 빠른 응답을 동시 달성 못함. plant 별로 안전한 τ_c 범위가 달라서, 사용자가 1클릭으로 "안전한 가장 빠른 응답" 받게 하려면 자동 sweep 필요.
 
-**왜 sweep 비용이 안 부담인가** — FRIT 1회 ≈ 30~80ms, 5회 ≈ 0.2~0.4s. 사용자가 체감 못함.
+**왜 sweep 비용이 안 부담인가** — FRIT 1회 ≈ 30~80ms, 10회 ≈ 0.3~0.8s. 사용자가 체감 못함.
 
 **한계**: 단일 τ_p 추정이라 multi-mode plant 에선 부정확할 수 있음. FTD 게임 환경은 대부분 효과적 1st-order 근사가 OK.
 
@@ -254,9 +262,9 @@ return 가장 보수적인 후보 (k=4) + 경고
 
 ### 단계 0: Ts sweep (자세히는 §4.4)
 1. **τ_p 추정** — MultiSine 면 step prelude (`EstimateTauFromStepPrelude`), 그 외 자기상관 (`EstimateDominantTau`)
-2. **5개 후보 sweep** — `k ∈ {1, 1.5, 2, 3, 4}` 로 `Ts_k = clamp(max(k·τ_p, k·τ_M), 3·dt, 1.0)`
-3. **각 Ts_k 마다 ComputeFritPid 호출** → 안전 체크 (`Td/Ti < 0.3 ∧ Td/dt < 10`) 통과한 가장 공격적인 결과 채택
-4. **모두 실패 시** k=4 (보수) 결과 + 경고 메시지 폴백
+2. **10개 후보 sweep** — `k ∈ {1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 3, 3.5, 4}` 로 `Ts_k = clamp(max(k·τ_p, k·τ_M), 3·dt, 1.0)`
+3. **각 Ts_k 마다 ComputeFritPid 호출** → 안전 체크 (`Td/Ti < 0.3 ∧ Td/dt < 10`) 통과한 가장 공격적인 결과 채택. 끝까지 돌면서 `safeCount` 카운트
+4. **모두 실패 시** 마지막 성공 후보 (가장 보수적) + 경고 메시지 폴백
 
 ### 단계 1: 디트렌드
 DC + 선형 추세 제거 (전체 데이터 기준). 짧은 포화 샘플 영향은 미미.
