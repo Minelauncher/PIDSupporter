@@ -21,14 +21,16 @@ namespace PIDSupporter
 
         public static void OnLoad()
         {
-            // 로드 확인용 UI 표시(원하면)
-            ModUiNotice.ShowActive("PIDSupporter", "Activate!");
-
             PatchAllOnce();
         }
 
         public static void OnStart()
         {
+            // OnStart 단계에서 호출해야 GameEvents.Twice_Second 가 준비되어 있다.
+            // plugin.json 의 version/workshop_id 를 읽어 ModProblems 에 표시하고,
+            // workshop_id 가 0 이 아니면 Steam Workshop description 의 최신 버전 줄을 조회한다.
+            ModInformation.VersionConfirmation();
+
             PatchAllOnce();
         }
 
