@@ -244,10 +244,10 @@ namespace PIDSupporter
             public float ChirpEndHz = 2.0f;         // Chirp 끝 주파수
 
             // ===== 적응형 진폭: PID가 가진을 다 눌러버릴 때 자동으로 키움 =====
-            // u-direct 인젝션이라 u 자체가 [-1, 1] 범위. AmpMax 를 1.0 으로 cap (그 이상은
-            // 어차피 patch 에서 clamp 되어 효과 없음). integrator drift 위험도 줄어듦.
+            // SP-direct 라 SP 단위 (u 의 [-1, 1] 범위와 무관). 큰 amp 허용해 강한 PID 의
+            // closed-loop reject 극복 가능. 액추에이터 saturation 은 별도 메커니즘이 감지.
             public bool  AdaptiveAmp = true;
-            public float AdaptiveAmpMax = 1.0f;
+            public float AdaptiveAmpMax = 10.0f;
 
             // ===== 축 분리 (Axis Fixture) =====
             public bool FixOtherAxes = true;        // 튜닝 중 다른 축 SP 고정
@@ -1071,9 +1071,8 @@ namespace PIDSupporter
 
                 if (_pitchTargetAxis == this._focus)
                 {
-                    // 피치가 튜닝 대상: u-direct 가진이라 SP 는 baseline + 고도 offset 만.
-                    // (가진은 NewMeasurement postfix 에서 u 에 직접 더해짐)
-                    _pitchTargetAxis.SetPointAdjust.Us = _baseSetPointAdjust + (float)offset;
+                    // 피치가 튜닝 대상: SP-direct 가진 위에 고도 offset 더함.
+                    _pitchTargetAxis.SetPointAdjust.Us = _baseSetPointAdjust + (float)_lastExciteValue + (float)offset;
                 }
                 else
                 {
@@ -1421,141 +1420,50 @@ namespace PIDSupporter
             double ti0 = this._focus.Pid.kI.Us;
             double td0 = this._focus.Pid.kD.Us;
 
-            // ── Ts sweep + Td 안전 체크 ──
-            // τ_p 추정 (FOPDT, autocorr) 은 closed-loop 결합/노이즈로 인해 unreliable.
-            // 어차피 추정값은 Ts 후보 만드는 anchor 일 뿐이라, **τ_p 단계를 제거**하고
-            // **dt 단위 log-spaced 절대 Ts 그리드**를 직접 sweep 함.
-            //
-            // dt-multiple 그리드 (10 후보): {3, 5, 7, 10, 15, 20, 30, 50, 80, 200}·dt
-            //   dt=0.025 기준: {0.075, 0.125, 0.175, 0.25, 0.375, 0.5, 0.75, 1.25, 2.0, 5.0}s
-            // log-spaced 라 빠른 plant ~ 느린 plant 모두 커버.
-            //
-            // 후보를 공격(작은 Ts) → 보수(큰 Ts) 순으로 시도해서:
-            //   · 첫 번째 "안전" 후보 채택 (= 가장 공격적인 작동 가능 PID)
-            //   · 끝까지 sweep 해서 safe 후보 갯수 카운트 (= 결정의 robustness 지표)
-            //
-            // 안전 기준 (D 진동 방지):
-            //   · LM 수렴 + Kp > 0 + RMSE 정상
-            //   · Td/Ti < 0.3   (산업 표준 PID 비율)
-            //   · Td/Ts < 0.5   (SIMC 물리 한계: Td 가 Ts 절반 이하)
-            // 모든 후보가 실패하면 가장 보수적인 (큰 Ts) 후보의 결과로 폴백 (경고 표시).
-            //
-            // ── Multistart LM ──
-            // FRIT cost 가 비선형 (non-convex) 이라 LM 시작점에 따라 다른 local minimum 으로 수렴.
-            // 사용자 현재 PID 가 weird 한 영역에 있으면 거기 근처 weird local min 잡힘
-            // (iteration drift 의 근본 원인). 해결책: 매 Ts 후보마다 여러 시드로 LM 돌리고
-            // 안전 통과한 것 중 RMSE 최저 선택.
-            // 시드: (1) 사용자 PID  (2) 표준 default  (3) conservative
+            // ── ARX(2,1) plant identification + SIMC PID design ──
+            // FRIT 의 비선형 LM + cost surface 의존성 대신 classical indirect ID:
+            //   1. (u, y) 데이터에 linear LS → plant G 추출 (deterministic, single solution)
+            //   2. G 의 시정수/극점/게인에 SIMC 공식 적용 → PID
+            // controller-invariant (G 는 plant property), local minimum 없음, iteration 자연 수렴.
             double tauM = Math.Max(dt, (double)_s.ModelDelayTau);
-            int[] dtMultiples = { 3, 5, 7, 10, 15, 20, 30, 50, 80, 200 };
 
-            FritResult best = default;
-            bool hasBest = false;
-            double bestTs = 0.0;
-            string bestSeedLabel = "";
-            FritResult fallback = default;
-            bool hasFallback = false;
-            double fallbackTs = 0.0;
-            string fallbackSeedLabel = "";
-            int safeCount = 0;
-            int totalTrials = 0;
-            string lastFailReason = "";
+            PlantModel plant = IdentifyPlantArx(u, y, sat, dt, tauM);
 
-            for (int i = 0; i < dtMultiples.Length; i++)
+            if (!plant.Valid)
             {
-                double ts = dtMultiples[i] * dt;
-                ts = Math.Max(tauM, ts);
-                ts = Math.Max(3.0 * dt, Math.Min(5.0, ts));
-                _s.SettlingTimeTs = (float)ts;
-
-                // Multistart 시드 3종 (이 Ts 에 맞춰 ts 의존 시드 포함).
-                // (Kp, Ti, Td, label) tuples — value tuple
-                var seeds = new (double Kp, double Ti, double Td, string label)[]
-                {
-                    (kp0, ti0, td0, "user"),
-                    (0.10, Math.Max(0.5, ts * 2.0), 0.05, "default"),
-                    (0.05, Math.Max(0.5, ts * 4.0), 0.02, "conservative"),
-                };
-
-                foreach (var seed in seeds)
-                {
-                    totalTrials++;
-                    FritResult r;
-                    try
-                    {
-                        r = ComputeFritPid(u, y, sat, dt, _s, seed.Kp, seed.Ti, seed.Td);
-                    }
-                    catch (Exception ex)
-                    {
-                        lastFailReason = $"Ts={ts:0.000} seed={seed.label}: {ex.Message}";
-                        continue;
-                    }
-
-                    if (r.Kp <= 0 || double.IsNaN(r.Rmse))
-                    {
-                        lastFailReason = $"Ts={ts:0.000} seed={seed.label}: degenerate";
-                        continue;
-                    }
-
-                    // 가장 보수적인 성공 후보 (큰 Ts) 갱신: 마지막 성공 = 가장 큰 Ts × 마지막 시드.
-                    fallback = r;
-                    hasFallback = true;
-                    fallbackTs = ts;
-                    fallbackSeedLabel = seed.label;
-
-                    // 안전 체크 (Td/Ts 비율 기반, ts-aware)
-                    double tdOverTi = r.Td / Math.Max(1e-6, r.Ti);
-                    double tdOverTs = r.Td / Math.Max(1e-6, ts);
-
-                    if (tdOverTi < 0.3 && tdOverTs < 0.5)
-                    {
-                        safeCount++;
-                        // 안전 통과한 것 중 RMSE 최저 채택.
-                        // (현재 best 없거나, 이 후보 RMSE 가 더 작거나, 같은 RMSE 면 더 작은 ts 선호)
-                        bool isBetter = !hasBest
-                            || r.Rmse < best.Rmse * 0.99
-                            || (Math.Abs(r.Rmse - best.Rmse) < best.Rmse * 0.01 && ts < bestTs);
-                        if (isBetter)
-                        {
-                            best = r;
-                            hasBest = true;
-                            bestTs = ts;
-                            bestSeedLabel = seed.label;
-                        }
-                    }
-                }
+                _autoState = AutoTuneState.Failed;
+                _sess.LastMessage = $"Plant ID failed: {plant.Diagnosis} / plant 식별 실패";
+                return;
             }
 
-            string safetyWarn = "";
-            if (!hasBest)
-            {
-                if (!hasFallback)
-                {
-                    _autoState = AutoTuneState.Failed;
-                    _sess.LastMessage = $"All trials failed. Last: {lastFailReason} / 모든 시도 실패";
-                    return;
-                }
-                // 폴백 사용 + 경고
-                best = fallback;
-                bestTs = fallbackTs;
-                bestSeedLabel = fallbackSeedLabel;
-                safetyWarn = " ⚠ no safe Ts found, using conservative fallback";
-            }
+            // 목표 Ts 선택: 사용자가 SettlingTimeTs 슬라이더로 지정 가능.
+            // 자동 default: τ_1 (1·τ_p, SIMC aggressive). 너무 빠르면 사용자가 슬라이더로 조정.
+            double targetTs = (double)_s.SettlingTimeTs;
+            if (targetTs <= 0 || targetTs > 5.0)
+                targetTs = plant.Tau1; // 자동 default
+            targetTs = Math.Max(3.0 * dt, Math.Min(5.0, targetTs));
 
-            _s.SettlingTimeTs = (float)bestTs;
+            SimcResult simc = DesignSimcPid(plant, targetTs);
+
+            // FTD slider 단위로 반올림
+            double kpFinal = Math.Max(0.001, Math.Round(simc.Kp * 1000.0) / 1000.0);
+            double tiFinal = Math.Round(simc.Ti * 10.0) / 10.0;
+            double tdFinal = Math.Round(simc.Td * 100.0) / 100.0;
+
+            _s.SettlingTimeTs = (float)targetTs;
 
             _sess.HasResult = true;
-            _sess.Kp = best.Kp; _sess.Ti = best.Ti; _sess.Td = best.Td;
-            _sess.KpSE = best.KpSE; _sess.TiSE = best.TiSE; _sess.TdSE = best.TdSE;
-            _sess.FitRmse = best.Rmse;
+            _sess.Kp = kpFinal; _sess.Ti = tiFinal; _sess.Td = tdFinal;
+            _sess.KpSE = 0; _sess.TiSE = 0; _sess.TdSE = 0;  // ARX 는 G 의 SE 만 제공
+            _sess.FitRmse = plant.FitRmse;
 
             _autoState = AutoTuneState.Done;
-            string conv = best.Converged ? "converged" : "max-iter";
-            string warn = string.IsNullOrEmpty(best.Warning) ? "" : " [⚠ " + best.Warning + "]";
+            double tauPct = plant.Tau1 > 0 ? (plant.TauSE / plant.Tau1 * 100.0) : 0;
             _sess.LastMessage =
-                $"Done | Ts={bestTs:0.000}s seed={bestSeedLabel} (safe {safeCount}/{totalTrials}) " +
-                $"({conv}, {best.Iterations} iter) " +
-                $"Kp={best.Kp:0.000} Ti={best.Ti:0.0} Td={best.Td:0.00} rmse={best.Rmse:0.0000}{warn}{safetyWarn}";
+                $"Done | {simc.Form} | τ_1={plant.Tau1:0.000}s±{tauPct:0}% " +
+                $"τ_2={plant.Tau2:0.000}s K={plant.K:0.000} → Ts={targetTs:0.000}s " +
+                $"Kp={kpFinal:0.000} Ti={tiFinal:0.0} Td={tdFinal:0.00} " +
+                $"(ARX rmse={plant.FitRmse:0.0000})";
         }
 
         private void ValidateAxes()
@@ -1809,27 +1717,27 @@ namespace PIDSupporter
         }
 
         /// <summary>
-        /// 매 틱마다 PID 의 출력 u 에 가진 신호를 직접 더한다 (additive perturbation).
-        /// VariableControllerOutputPatch (Harmony) 가 NewMeasurement postfix 에서 우리가 등록한
-        /// 가진값을 __result 와 LastControlVariable 에 더해줌. plant 는 PID 강도와 무관하게
-        /// 일정한 자극을 받으므로 closed-loop ID 의 PID 의존성 문제 해결.
+        /// 매 틱마다 SetPoint 에 가진 신호를 더한다 (SP-direct).
+        /// PID 가 가진된 SP 를 추종하느라 u 를 만들고, plant 가 응답.
+        /// ARX 식별이 이 (u, y) 에서 plant G 를 추출.
         ///
-        /// 과거의 SP-기반 가진 (SetPointAdjust 변경) 은:
-        /// - PID 약함 → u 안 움직임 → 데이터 무정보
-        /// - PID 강함 → 가진 reject → 데이터 무정보
-        /// 어느 쪽이든 데이터 품질이 PID 강도에 의존. u-direct 는 이 문제 우회.
+        /// 왜 SP-direct (u-direct 가 아니라):
+        /// - FRIT 의 r̃(θ) = y + u/C(θ) 수식이 "u 는 순수 PID 출력" 가정
+        /// - u-direct 로 외부 ε 주입 시 ε/C(θ) 여분항이 cost surface 왜곡 → LM 이상 PID 수렴
+        /// - SP-direct 는 가정 만족 → cost 깔끔 + ARX 도 well-conditioned closed-loop OLS
+        /// - ARX 의 invariance: G 는 plant 고유 → C₀ 변해도 같은 G 추출 → iteration 자연 수렴
         /// </summary>
-        /// <summary>현재 틱 가진값 (telemetry/디버그 용). u 에 직접 주입되므로 SP 에는 안 더함.</summary>
+        /// <summary>현재 틱 가진값 (telemetry).</summary>
         private double _lastExciteValue = 0.0;
 
         private void ApplyExcitation(float dt)
         {
             _lastExciteValue = 0.0;
-            // u 인젝션 해제 (가진 꺼진 상태에선 patch 가 no-op)
-            FritExcitationInjector.Clear(this._focus);
+            FritExcitationInjector.Clear(this._focus);  // u-direct patch 무력화
 
             if (!_s.ExciteEnabled) return;
             if (_s.ExciteWave == WaveType.Off) return;
+            if (!_hasBaseSetPointAdjust) return;
 
             double t = _sess.T;  // 녹화 시작부터의 경과 시간 (블록 분리 제거됨)
             double amp = Math.Max(0.0, _s.ExciteAmp); // 진폭 (음수 방지)
@@ -1908,7 +1816,7 @@ namespace PIDSupporter
             }
 
             _lastExciteValue = x;
-            FritExcitationInjector.Set(this._focus, (float)x);
+            try { this._focus.SetPointAdjust.Us = _baseSetPointAdjust + (float)x; } catch { }
         }
 
         // ============================================================
@@ -2563,6 +2471,235 @@ namespace PIDSupporter
                 sum += d * d;
             }
             return Math.Sqrt(sum / (data.Length - 1));
+        }
+
+        // ════════════════════════════════════════════════════════════════════════
+        // ARX(2,1) Plant Identification + SIMC PID Design
+        // ════════════════════════════════════════════════════════════════════════
+        //
+        // 표준 closed-loop ID 정공법 (indirect method):
+        //   1. (u, y) 데이터에 ARX(2,1) OLS 로 plant G 직접 식별
+        //   2. G 의 극점/시정수/게인 추출
+        //   3. SIMC 공식 (Skogestad) 으로 PID 산출
+        //
+        // FRIT 와의 차이:
+        //   - FRIT: 비선형 LM, local minima 위험, cost surface 가 C₀ 의존
+        //   - ARX+SIMC: linear LS, 단일 해, plant G 만 추출하면 C₀ 무관
+        //
+        // 왜 controller-invariant 한가:
+        //   - G 는 plant 의 물리적 property (질량, 관성, 공력 etc.)
+        //   - 컨트롤러가 무엇이든 같은 plant 면 같은 G
+        //   - ARX OLS 가 (u, y) 의 회귀 관계에서 G 추출 → C₀ 무관
+        //   - white innovation 노이즈 가정 하에 closed-loop 에서도 OLS unbiased
+        //     (Ljung "System Identification" §10 등 표준 결과)
+        // ════════════════════════════════════════════════════════════════════════
+
+        /// <summary>식별된 plant model 결과.</summary>
+        public struct PlantModel
+        {
+            public double Tau1;     // 첫 번째 시정수 (큰 쪽, dominant slow pole)
+            public double Tau2;     // 두 번째 시정수 (작은 쪽, fast pole), 0 이면 1차 plant
+            public double K;        // DC gain (단위 입력당 정상상태 출력)
+            public double Theta;    // 순수 지연 (초)
+            public double FitRmse;  // ARX fit 잔차 RMS (작을수록 모델 정확)
+            public double TauSE;    // dominant τ_1 의 standard error (불확실성)
+            public bool HasIntegrator; // |z₁| ≈ 1 (적분기 plant)
+            public bool Valid;      // 식별 성공 여부
+            public string Diagnosis; // 실패 시 이유 / 성공 시 정보
+        }
+
+        /// <summary>
+        /// (u, y) 데이터에 ARX(2,1) OLS 로 plant G 식별.
+        ///   y[k] = a₁·y[k-1] + a₂·y[k-2] + b·u[k-1-δ]
+        /// 특성다항식 z² - a₁ z - a₂ = 0 의 근 → 이산 극점 → 연속 시정수.
+        /// b 와 극점에서 DC gain K 계산.
+        /// </summary>
+        private static PlantModel IdentifyPlantArx(double[] u, double[] y, bool[] sat, double dt, double theta)
+        {
+            PlantModel m = new PlantModel { Theta = theta };
+            int N = Math.Min(u.Length, Math.Min(y.Length, sat.Length));
+            if (N < 64) { m.Diagnosis = "data too short"; return m; }
+
+            int delayN = Math.Max(0, (int)Math.Round(theta / dt));
+            int kStart = 2 + delayN;
+            if (kStart >= N - 4) { m.Diagnosis = "delay > data"; return m; }
+
+            double yStd = StdDev(y);
+            if (yStd < 1e-4) { m.Diagnosis = "y barely moves — excitation too weak?"; return m; }
+
+            // Detrend
+            double[] yd = new double[N]; Array.Copy(y, yd, N); Detrend(yd);
+            double[] ud = new double[N]; Array.Copy(u, ud, N); Detrend(ud);
+
+            // ARX(2,1) 정규방정식 (3×3): regressors = [y[k-1], y[k-2], u[k-1-δ]]
+            double s11 = 0, s12 = 0, s13 = 0, s22 = 0, s23 = 0, s33 = 0;
+            double t1 = 0, t2 = 0, t3 = 0;
+            int count = 0;
+            for (int k = kStart; k < N; k++)
+            {
+                if (sat[k] || sat[k - 1] || sat[k - 2] || sat[k - 1 - delayN]) continue;
+                double yt = yd[k];
+                double y1 = yd[k - 1];
+                double y2 = yd[k - 2];
+                double u1 = ud[k - 1 - delayN];
+                s11 += y1 * y1; s12 += y1 * y2; s13 += y1 * u1;
+                s22 += y2 * y2; s23 += y2 * u1;
+                s33 += u1 * u1;
+                t1 += yt * y1; t2 += yt * y2; t3 += yt * u1;
+                count++;
+            }
+            if (count < 32) { m.Diagnosis = $"too few clean samples ({count})"; return m; }
+
+            // 3×3 inversion (Cramer)
+            double M11 = s22 * s33 - s23 * s23;
+            double M12 = s12 * s33 - s23 * s13;
+            double M13 = s12 * s23 - s22 * s13;
+            double det = s11 * M11 - s12 * M12 + s13 * M13;
+            if (Math.Abs(det) < 1e-12) { m.Diagnosis = "regressors collinear"; return m; }
+
+            double a1 = (t1 * M11 - s12 * (t2 * s33 - s23 * t3) + s13 * (t2 * s23 - s22 * t3)) / det;
+            double a2 = (s11 * (t2 * s33 - s23 * t3) - t1 * (s12 * s33 - s23 * s13) + s13 * (s12 * t3 - t2 * s13)) / det;
+            double b  = (s11 * (s22 * t3 - s23 * t2) - s12 * (s12 * t3 - s13 * t2) + t1 * (s12 * s23 - s22 * s13)) / det;
+            if (double.IsNaN(a1) || double.IsNaN(a2) || double.IsNaN(b))
+            { m.Diagnosis = "NaN in fit"; return m; }
+
+            // 잔차 RMSE
+            double sqResid = 0;
+            int cResid = 0;
+            for (int k = kStart; k < N; k++)
+            {
+                if (sat[k] || sat[k - 1] || sat[k - 2] || sat[k - 1 - delayN]) continue;
+                double pred = a1 * yd[k - 1] + a2 * yd[k - 2] + b * ud[k - 1 - delayN];
+                double e = yd[k] - pred;
+                sqResid += e * e;
+                cResid++;
+            }
+            m.FitRmse = Math.Sqrt(sqResid / Math.Max(1, cResid));
+
+            // SE on a1 (proxy for τ_1 uncertainty): σ² · (M⁻¹)₁₁ / count
+            double sigma2 = m.FitRmse * m.FitRmse;
+            double seA1 = Math.Sqrt(sigma2 * M11 / Math.Max(1e-12, det));
+
+            // 특성다항식 z² - a₁ z - a₂ = 0 → 이산 극점
+            double disc = a1 * a1 + 4.0 * a2;
+            double z1, z2;
+            bool complex = disc < 0;
+            if (!complex)
+            {
+                double sq = Math.Sqrt(disc);
+                z1 = (a1 + sq) / 2.0;
+                z2 = (a1 - sq) / 2.0;
+            }
+            else
+            {
+                // 복소 conjugate. |z|² = -a₂. 진동 plant — 우리는 dominant magnitude 시정수만 봄.
+                double mag2 = -a2;
+                if (mag2 <= 0) { m.Diagnosis = "complex poles, -a₂ ≤ 0"; return m; }
+                double mag = Math.Sqrt(mag2);
+                z1 = mag; z2 = mag;  // 둘 다 magnitude 만, 진동 frequency 는 무시
+            }
+
+            double az1 = Math.Abs(z1), az2 = Math.Abs(z2);
+
+            // 큰 |z| = 느린 극점 (dominant), 작은 |z| = 빠른 극점
+            double zSlow = Math.Max(az1, az2);
+            double zFast = Math.Min(az1, az2);
+
+            // 적분기 감지: |z| ≈ 1
+            const double INTEGRATOR_THRESHOLD = 0.9999;
+            m.HasIntegrator = zSlow > INTEGRATOR_THRESHOLD;
+
+            if (zSlow <= 0 || zSlow >= 1)
+            { m.Diagnosis = $"slow pole |z|={zSlow:0.000} unstable (>1) or invalid"; return m; }
+
+            m.Tau1 = -dt / Math.Log(zSlow);
+            m.Tau2 = (zFast > 0.001 && zFast < INTEGRATOR_THRESHOLD)
+                ? -dt / Math.Log(zFast)
+                : 0.0;  // 빠른 극점 무시 가능하면 1차 plant 로 취급
+
+            // DC gain K = b / (1 - a₁ - a₂)  for ARX(2,1)
+            // (적분기 plant 면 1-a₁-a₂ ≈ 0 이라 K → ∞, 별도 처리)
+            double denom = 1.0 - a1 - a2;
+            if (Math.Abs(denom) < 1e-4)
+            {
+                // 적분기 plant: K' = b / dt (rate gain)
+                m.K = b / Math.Max(1e-6, dt);
+                m.HasIntegrator = true;
+            }
+            else
+            {
+                m.K = b / denom;
+            }
+
+            // τ_1 SE 근사: dτ/da₁ × σ_a₁  (chain rule)
+            // z₁ = (a₁ + √(a₁² + 4a₂)) / 2 가 a₁ 에 대해 ∂z₁/∂a₁ = 0.5 + a₁/(2√disc)
+            // τ = -dt / ln(z) → ∂τ/∂z = dt/(z·ln²z)
+            double dtau_dz = (zSlow > 1e-6 && zSlow < 1) ? dt / (zSlow * Math.Log(zSlow) * Math.Log(zSlow)) : 0;
+            double dz_da = !complex ? 0.5 + a1 / (2.0 * Math.Max(1e-12, Math.Sqrt(disc))) : 0.5;
+            m.TauSE = Math.Abs(dtau_dz * dz_da * seA1);
+
+            m.Valid = true;
+            m.Diagnosis = m.HasIntegrator
+                ? $"integrator plant, τ_other={m.Tau2:0.000}s, K={m.K:0.000}"
+                : (m.Tau2 > 0.01
+                    ? $"2nd-order: τ_1={m.Tau1:0.000}s τ_2={m.Tau2:0.000}s K={m.K:0.000}"
+                    : $"1st-order: τ_p={m.Tau1:0.000}s K={m.K:0.000}");
+            return m;
+        }
+
+        /// <summary>식별된 plant 에 SIMC PID 공식 적용.</summary>
+        public struct SimcResult
+        {
+            public double Kp, Ti, Td;
+            public string Form;        // "PI", "PID", "PI for integrator"
+        }
+
+        /// <summary>
+        /// Skogestad SIMC 공식.
+        ///   1차 plant K/(τ_p s + 1):    Kp = τ_p / (K·(τ_c+θ)),  Ti = min(τ_p, 4(τ_c+θ))
+        ///   2차 plant K/((τ_1 s+1)(τ_2 s+1)): Kp = τ_1/(K·(τ_c+θ)), Ti = min(τ_1, 4(τ_c+θ)), Td = τ_2
+        ///   적분기 K_i/s:               Kp = 1/(K_i·(τ_c+θ)),     Ti = 4(τ_c+θ),              Td = 0
+        /// </summary>
+        private static SimcResult DesignSimcPid(PlantModel m, double targetTs)
+        {
+            double tauC = Math.Max(targetTs, m.Theta);  // closed-loop τ_c ≥ θ
+            double kInv = 1.0 / Math.Max(1e-6, Math.Abs(m.K));
+            int sign = Math.Sign(m.K);
+            if (sign == 0) sign = 1;
+
+            SimcResult r;
+
+            if (m.HasIntegrator)
+            {
+                // K_i / (s(τ_2 s + 1))  또는  K_i / s
+                r.Kp = sign * kInv / (tauC + m.Theta);
+                r.Ti = 4.0 * (tauC + m.Theta);
+                r.Td = m.Tau2;  // 0 이면 PI
+                r.Form = m.Tau2 > 0.01 ? "PID for integrator" : "PI for integrator";
+            }
+            else if (m.Tau2 > 0.01)
+            {
+                // 2차 plant
+                r.Kp = sign * m.Tau1 * kInv / (tauC + m.Theta);
+                r.Ti = Math.Min(m.Tau1, 4.0 * (tauC + m.Theta));
+                r.Td = m.Tau2;
+                r.Form = "PID";
+            }
+            else
+            {
+                // 1차 plant
+                r.Kp = sign * m.Tau1 * kInv / (tauC + m.Theta);
+                r.Ti = Math.Min(m.Tau1, 4.0 * (tauC + m.Theta));
+                r.Td = 0.0;
+                r.Form = "PI";
+            }
+
+            // FTD 입력 사정 (Ti 무한대 표현은 250)
+            if (r.Ti > 250.0) r.Ti = 250.0;
+            if (r.Ti < 0.1) r.Ti = 0.1;
+            if (r.Td < 0) r.Td = 0;
+            if (r.Td > 10.0) r.Td = 10.0;
+            return r;
         }
 
     }

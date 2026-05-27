@@ -4,30 +4,36 @@
 
 ## 1. 개요
 
-이 모드는 **FRIT (Fictitious Reference Iterative Tuning)** 기반 PID 자동 튜닝 파이프라인을 제공합니다. 구현은 **시간 영역** + **가중 LS** + **Levenberg-Marquardt**.
+이 모드는 **ARX(2,1) plant identification + SIMC PID design** 기반 자동 튜닝을 제공합니다. classical closed-loop indirect ID 방법 (Ljung, Skogestad 계열).
 
 **식별 체인:**
 ```
 [Auto Tune]
   → 사전 진단 3초 (가진 OFF, |u| 통계만 관찰)
-       · Limit cycle 또는 지속 포화 감지 → 즉시 fail + 권장 Kp 표시
+       · Limit cycle 또는 지속 포화 감지 → 즉시 fail + 의심 원인 표시
        · 정상이면 다음 단계
-  → 가진 신호 (멀티사인 + 저주파 square) 를 SetPoint 에 주입
-  → 현재 PID C₀ 로 폐루프 데이터 (u, y) + 포화 플래그 연속 수집 (블록 분리 없음)
-  → EffectiveValidCount (= transient-tail 밖 깨끗 샘플) ≥ MinSamples 까지 대기
-       · 적응형 진폭이 자동 조정 → 결국 비포화 영역으로 수렴
-       · 시간 상한 없음 (사용자가 멈추기 전까지 계속 수집)
-  → 절대 Ts 그리드 sweep — Ts ∈ {3, 5, 7, 10, 15, 20, 30, 50, 80, 200}·dt
-                후보 10개 (dt=0.025 기준 0.075s~5s), FRIT 10번 돌려서
-                Td/Ti < 0.3 + Td/dt < 10 충족하는 가장 공격적인 후보 채택.
-                (τ_p 추정 단계 없음 — closed-loop 결합으로 unreliable 해서 제거.)
-  → FRIT 1회 (시간 영역 IIR + 가중 LS + LM)
-       · 포화 인덱스만 w = ε 로 down-weight (IIR 회복 transient 는 IRLS Huber 가 자동 처리)
-       · 1/C(z) 안정성 미충족 시 soft barrier
+  → 가진 신호 (Multi-width doublet) 를 SetPoint 에 주입
+  → 현재 PID C₀ 로 폐루프 데이터 (u, y) + 포화 플래그 연속 수집
+  → EffectiveValidCount ≥ MinSamples 까지 대기 (적응형 진폭이 자동 조정)
+  → ARX(2,1) OLS 로 plant G 직접 식별:
+       y[k] = a₁·y[k-1] + a₂·y[k-2] + b·u[k-1-δ]
+       → 극점 z₁, z₂ → 연속 시정수 τ_1, τ_2
+       → DC gain K
+       → 적분기 감지 (|z|≈1)
+  → SIMC 공식 으로 PID 산출:
+       1차 plant: PI    (Kp = τ_p/(K(τ_c+θ)), Ti = min(τ_p, 4(τ_c+θ)))
+       2차 plant: PID   (Td = τ_2)
+       적분기 plant: PI for integrator
   → Apply
 ```
 
-기존에 있던 PEM (PBSID + Gauss-Newton 시간도메인 식별), BLA (Welch-IV 주파수도메인 식별), VRFT (선형 회귀), 그리고 FRIT 의 초기 주파수 영역 구현은 모두 제거됐고, 시간 영역 FRIT 한 가지로 통일했습니다.
+**기존 FRIT 의 한계와 ARX+SIMC 로 전환한 이유:**
+- FRIT 의 비선형 LM 이 cost surface 의 local minimum 함정에 빠짐 (특히 우리 사용자의 비행기 roll axis 케이스에서)
+- Cost surface 가 C₀ (현재 PID) 에 의존하는 형태로 변형되어 iteration drift
+- 모델 미스매치 (M = (1+aMs)^nM 와 실제 plant 차이) 시 weird PID 자신있게 산출
+- **ARX 는 linear LS — 단일 해**, plant G 는 controller-invariant (물리 property) → iteration 자연 수렴
+
+이전 시도 (PEM, BLA, VRFT, FRIT) 들은 다 제거됐고, 현재는 ARX(2,1) + SIMC 한 경로.
 
 ---
 
