@@ -195,7 +195,7 @@ UI 에 `Kp = 0.0523 ± 0.0012 (2%)` 형태로 자동 표시.
 
 $$M(s) = \frac{e^{-s \tau_M}}{(1 + s \cdot 0.2 T_s)^{n_M}}$$
 
-- `T_s` : 목표 정착시간 (Ts sweep 10개 후보 `k·max(τ_p, τ_M)` for k ∈ {1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 3.0, 3.5, 4.0}, 클램프 [3·dt, 1.0])
+- `T_s` : 목표 정착시간 (Ts sweep 10개 후보 `k·max(τ_p, τ_M)` for k ∈ {1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 3.0, 3.5, 4.0}, 클램프 [3·dt, 5.0])
 - `n_M` : 모델 차수 (FTD 제어 대상 대부분 2차 → `n_M = 2` 고정)
 - `τ_M` : 지연 (FTD 순수 지연 ≈ 1틱 → `τ_M = dt` 고정)
 
@@ -256,7 +256,7 @@ $$y[k] = \frac{x[k] + x[k-1] - \beta_1 y[k-1]}{\beta_0}$$
 factors = {1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 3.0, 3.5, 4.0}  ← 공격 → 보수, 10개
 best = null;  safeCount = 0;  fallback = null
 for k in factors:
-    ts_k = clamp(max(k·τ_p, k·τ_M), 3·dt, 1.0)
+    ts_k = clamp(max(k·τ_p, k·τ_M), 3·dt, 5.0)
     r = ComputeFritPid(ts = ts_k)
     if r 정상:
         fallback = r                ← 항상 갱신 (마지막 성공 = 가장 보수적)
@@ -287,7 +287,7 @@ return best ?? fallback  (best 없으면 fallback + ⚠ 경고)
 
 ### 단계 0: Ts sweep (자세히는 §4.4)
 1. **τ_p 추정** — FOPDT fit (주) → 자기상관 1/e (폴백) (자세히는 §4.4)
-2. **10개 후보 sweep** — `k ∈ {1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 3, 3.5, 4}` 로 `Ts_k = clamp(max(k·τ_p, k·τ_M), 3·dt, 1.0)`
+2. **10개 후보 sweep** — `k ∈ {1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 3, 3.5, 4}` 로 `Ts_k = clamp(max(k·τ_p, k·τ_M), 3·dt, 5.0)`
 3. **각 Ts_k 마다 ComputeFritPid 호출** → 안전 체크 (`Td/Ti < 0.3 ∧ Td/dt < 10`) 통과한 가장 공격적인 결과 채택. 끝까지 돌면서 `safeCount` 카운트
 4. **모두 실패 시** 마지막 성공 후보 (가장 보수적) + 경고 메시지 폴백
 

@@ -700,14 +700,14 @@ namespace PIDSupporter
             float dtF = (float)Time.fixedDeltaTime;
             if (dtF <= 0f) dtF = 0.02f;
 
-            // t_s : dt 단위 (1·dt ~ 50·dt = 1.0s).
+            // t_s : dt 단위 (1·dt ~ 5.0s). 5.0 상한은 무거운 함선까지 커버.
             // 내부 ComputeFritPid 가 추가로 2.5·dt 하한을 적용해 LP 안정성 보장.
             table.AddInterpretter(MakeSliderFloat(
                 "Settling time t_s (s)",
-                "Target settling time. Smaller = faster response.\nGrid is dt (FTD tick); min 1·dt, max 1s.\nAuto-tuning estimates this automatically.\n---\n목표 정착시간. 작을수록 빠른 응답.\n그리드 단위는 dt(FTD 틱); 최소 1·dt, 최대 1초.\n자동 튜닝 시 자동 추정됩니다.",
+                "Target settling time. Smaller = faster response.\nGrid is dt (FTD tick); min 1·dt, max 5s.\nAuto-tuning estimates this automatically.\n---\n목표 정착시간. 작을수록 빠른 응답.\n그리드 단위는 dt(FTD 틱); 최소 1·dt, 최대 5초.\n자동 튜닝 시 자동 추정됩니다.",
                 () => _s.SettlingTimeTs,
-                f => _s.SettlingTimeTs = Clamp(f, dtF, 1.0f),
-                dtF, 1.0f, dtF, "0.000", "Ts"
+                f => _s.SettlingTimeTs = Clamp(f, dtF, 5.0f),
+                dtF, 5.0f, dtF, "0.000", "Ts"
             ));
 
             // tau_M : dt 단위 그리드 (자동 튜닝이 τ = dt 로 세팅하므로 정확히 표시되게).
@@ -1483,7 +1483,7 @@ namespace PIDSupporter
             {
                 double k = factors[i];
                 double ts = Math.Max(k * tau_p, k * tauM);
-                ts = Math.Max(3.0 * dt, Math.Min(1.0, ts));
+                ts = Math.Max(3.0 * dt, Math.Min(5.0, ts));
                 _s.SettlingTimeTs = (float)ts;
 
                 FritResult r;
@@ -2775,8 +2775,10 @@ namespace PIDSupporter
 
                 // integrator 근 (|z|≈1) 은 제외, 안정 근 중 큰 쪽 채택.
                 // 큰 쪽 = 느린 극점 = 지배 시정수.
-                bool z1Stable = az1 > 0 && az1 < 0.99;
-                bool z2Stable = az2 > 0 && az2 < 0.99;
+                // 0.9999 까지는 정상 plant 극점으로 인정 (|z|=0.99 는 τ≈2.5s, 무거운 함선 가능).
+                // 그 이상은 사실상 pure integrator (z=1).
+                bool z1Stable = az1 > 0 && az1 < 0.9999;
+                bool z2Stable = az2 > 0 && az2 < 0.9999;
 
                 if (z1Stable && z2Stable) dominantAbsZ = Math.Max(az1, az2);
                 else if (z1Stable) dominantAbsZ = az1;
@@ -2789,7 +2791,7 @@ namespace PIDSupporter
                 // 복소 conjugate (진동 plant): |z|² = -a₂
                 if (-a2 <= 0) { _fopdtLastFailReason = "complex poles, -a₂≤0"; return double.NaN; }
                 dominantAbsZ = Math.Sqrt(-a2);
-                if (dominantAbsZ >= 0.99) { _fopdtLastFailReason = $"complex poles |z|={dominantAbsZ:0.000}≈1"; return double.NaN; }
+                if (dominantAbsZ >= 0.9999) { _fopdtLastFailReason = $"complex poles |z|={dominantAbsZ:0.000}≈1"; return double.NaN; }
             }
 
             if (dominantAbsZ <= 0 || dominantAbsZ >= 1)
@@ -2800,7 +2802,9 @@ namespace PIDSupporter
             { _fopdtLastFailReason = "τ_p invalid"; return double.NaN; }
 
             _fopdtLastFailReason = "";
-            return Math.Max(3.0 * dt, Math.Min(1.0, tau_p));
+            // 상한 5.0s: 매우 느린 무거운 함선까지 커버 (이전 1.0 은 FTD 일반 환경 가정으로
+            // 너무 빡빡했음). 5s 넘어가면 보통 estimator 실패라 차라리 reject.
+            return Math.Max(3.0 * dt, Math.Min(5.0, tau_p));
         }
 
         /// <summary>
@@ -2837,9 +2841,8 @@ namespace PIDSupporter
             {
                 if (AC[i].Real < threshold) { tauIdx = i; break; }
             }
-            // 3·dt ~ 1초 클램프. 과거 5초 상한은 저주파 드리프트로 인한 과대추정 시
-            // Ts 도 함께 폭주해 LM 이 발산했던 사례가 있어 1초로 좁힘.
-            return Math.Max(3.0 * dt, Math.Min(1.0, tauIdx * dt));
+            // FOPDT 와 동일하게 [3·dt, 5.0] 클램프. 5s 넘어가면 보통 estimator 실패.
+            return Math.Max(3.0 * dt, Math.Min(5.0, tauIdx * dt));
         }
 
         private static double EstimateSettlingTime(double[] y, double dt)
