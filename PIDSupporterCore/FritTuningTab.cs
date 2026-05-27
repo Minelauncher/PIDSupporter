@@ -1584,9 +1584,10 @@ namespace PIDSupporter
             {
                 _autoState = AutoTuneState.Failed;
                 _sess.LastMessage =
-                    $"⚠ Limit cycle 감지 (u={_sess.DiagUMin:0.00}~{_sess.DiagUMax:0.00}, " +
-                    $"{crossRate:0.0}회/s, sat={satRate:P0}). " +
-                    $"의심 원인: Kp 과대 / Ti 과소 (windup) / Td 과대. 게인 낮춰 재시도.";
+                    $"⚠ Limit cycle detected (u={_sess.DiagUMin:0.00}~{_sess.DiagUMax:0.00}, " +
+                    $"{crossRate:0.0}/s, sat={satRate:P0}). " +
+                    $"Likely causes: Kp too high / Ti too low (windup) / Td too high. Reduce gains and retry. " +
+                    $"/ Limit cycle 감지. 의심 원인: Kp 과대 / Ti 과소 (windup) / Td 과대. 게인 낮춰 재시도.";
                 return;
             }
 
@@ -1595,8 +1596,9 @@ namespace PIDSupporter
             {
                 _autoState = AutoTuneState.Failed;
                 _sess.LastMessage =
-                    $"⚠ 지속 포화 (sat={satRate:P0}, uPeak={uPeak:0.00}). " +
-                    $"의심 원인: Kp/Ki 과대 또는 SetPoint 가 액추에이터 한계 초과. 점검 후 재시도.";
+                    $"⚠ Persistent saturation (sat={satRate:P0}, uPeak={uPeak:0.00}). " +
+                    $"Likely causes: Kp/Ki too high, or SetPoint beyond actuator range. Check and retry. " +
+                    $"/ 지속 포화. 의심 원인: Kp/Ki 과대 또는 SetPoint 가 액추에이터 한계 초과. 점검 후 재시도.";
                 return;
             }
 
