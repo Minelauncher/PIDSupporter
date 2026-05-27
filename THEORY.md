@@ -17,11 +17,11 @@
   → EffectiveValidCount (= transient-tail 밖 깨끗 샘플) ≥ MinSamples 까지 대기
        · 적응형 진폭이 자동 조정 → 결국 안정 영역으로 수렴
        · 안전 상한 (MaxRecordingSec, 기본 60초) 초과 시 fail
-  → Ts 자동 스캔 (10단계)
-  → 각 Ts 마다 FRIT (시간 영역 IIR + 가중 LS + LM)
+  → τ_p 추정 (y 자기상관 → 1/e drop)
+  → Ts = 2·τ_p (SIMC balanced, 클램프 [0.1, 5.0])
+  → FRIT 1회 (시간 영역 IIR + 가중 LS + LM)
        · 포화 인덱스만 w = ε 로 down-weight (IIR 회복 transient 는 IRLS Huber 가 자동 처리)
        · 1/C(z) 안정성 미충족 시 soft barrier
-  → 인접 Ts 간 파라미터 안정성 기반 best Ts 선택
   → Apply
 ```
 
@@ -193,7 +193,7 @@ UI 에 `Kp = 0.0523 ± 0.0012 (2%)` 형태로 자동 표시.
 
 $$M(s) = \frac{e^{-s \tau_M}}{(1 + s \cdot 0.2 T_s)^{n_M}}$$
 
-- `T_s` : 목표 정착시간 (Ts 자동 스캔 0.1~1.0초)
+- `T_s` : 목표 정착시간 (SIMC 기반 자동 결정: `2·τ_p`, 클램프 [0.1, 5.0])
 - `n_M` : 모델 차수 (FTD 제어 대상 대부분 2차 → `n_M = 2` 고정)
 - `τ_M` : 지연 (FTD 순수 지연 ≈ 1틱 → `τ_M = dt` 고정)
 
@@ -213,15 +213,44 @@ $$y[k] = \frac{x[k] + x[k-1] - \beta_1 y[k-1]}{\beta_0}$$
 
 `n_M = 2` 인 시스템의 4% 정착시간 (4·시정수) 이 `T_s` 가 되려면 시정수 = `T_s / 4 = 0.25 T_s`. 약간 보수적으로 `0.2 T_s` 사용 → 5% 정착시간 기준.
 
-### 4.4 Ts 자동 스캔
+### 4.4 Ts 자동 결정 — SIMC 기반
 
-작은 Ts 는 공격적인 제어기를 요구 → Kp 가 큼. 큰 Ts 는 보수적. "물리적으로 달성 가능한" Ts 영역에서는 파라미터가 안정.
+**Skogestad SIMC 규칙** (산업 표준 PID 튜닝 룰):
+```
+τ_c = τ_p       : aggressive (빠른 응답)
+τ_c = 2·τ_p     : balanced (기본)
+τ_c = 4·τ_p     : conservative (안전 ↑, 굼뜸)
+```
 
-전략: 0.1 ~ 1.0초를 로그 간격 10단계로 스캔, 각 Ts 에서 LM 한 번 돌림, 인접 Ts 간 `max(|ΔKp/Kp|, |ΔTi/Ti|, |ΔTd/Td|) < 0.3` 인 가장 작은 Ts 선택.
+여기서 `τ_p` 는 plant 의 지배 시정수. **고관성 plant 일수록 τ_p 가 크고 → Ts 도 자연히 큼** → 부드러운 PID 자동 산출.
+
+**τ_p 추정** (`EstimateDominantTau`):
+y(t) 의 자기상관 (PSD → IFFT, Wiener-Khinchin) 에서 **1/e 떨어지는 시각** 이 τ_p 의 1차 근사.
+
+```
+yd = detrend(y)
+Y = FFT(yd)
+AC = IFFT(|Y|²)              ← autocorrelation
+τ_p = argmin_t |AC[t] - AC[0]/e|
+```
+
+**최종 Ts**:
+```
+Ts = clamp(2 · τ_p, 0.1, 5.0)   ← SIMC balanced, 안전 클램프
+```
+
+이전의 magic-number 30% 휴리스틱 + 10단계 스캔 + 인접 stability 체크 → **데이터 기반 단일 Ts 결정** 으로 단순화. 학문적으로 grounded (SIMC 는 수십 년 검증된 산업 표준).
+
+**왜 1/e 인가**: 1st-order 시스템 `R(t) = σ²·exp(-t/τ_p)` 의 자기상관은 `t = τ_p` 에서 `R(0)/e` 로 떨어짐. 이 정의가 시정수의 표준.
+
+**한계**: 단일 τ_p 추정이라 multi-mode plant 에선 부정확할 수 있음. FtD 게임 환경은 대부분 효과적 1st-order 근사가 OK.
 
 ---
 
 ## 5. 계산 파이프라인 (FRIT 시간 영역)
+
+### 단계 0: Ts 자동 결정 (SIMC)
+`τ_p = EstimateDominantTau(y, dt)` (자기상관 1/e drop) → `Ts = clamp(2·τ_p, 0.1, 5.0)`. 단일 Ts 로 ComputeFritPid 한 번만 호출.
 
 ### 단계 1: 디트렌드
 DC + 선형 추세 제거 (전체 데이터 기준). 짧은 포화 샘플 영향은 미미.

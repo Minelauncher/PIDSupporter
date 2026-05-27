@@ -104,7 +104,8 @@
 //   [자체] RoundToStep(v, step)                step 단위 반올림
 //   [자체] Clamp / ClampInt                    범위 제한
 //   [자체] WaveToKo(w)                         WaveType → 한국어
-//   [자체] EstimateDelay / EstimateSettlingTime  자동 추정 (대부분 미사용)
+//   [자체] EstimateDominantTau(y, dt)          자기상관 (1/e drop) 으로 plant τ_p 추정 (SIMC 용)
+//   [자체] EstimateDelay / EstimateSettlingTime  레거시 (미사용, 제거 보류)
 //
 // ── 외부 의존성 ──
 //   [FTD]     SuperScreen<T> / VariableControllerMaster / IVariableController
@@ -1436,75 +1437,34 @@ namespace PIDAutoTuner
             double ti0 = this._focus.Pid.kI.Us;
             double td0 = this._focus.Pid.kD.Us;
 
-            // ── Ts 자동 스캔 (10단계, 로그 간격 0.1 ~ 1.0초) ──
-            // FRIT 는 LM 비선형 최적화 → VRFT(선형 LS) 대비 비싸므로 40→10단계 축소.
-            // 인접 Ts 간 파라미터 변화율이 작은 가장 작은 Ts 선택 (안정 영역).
-            const int tsSteps = 10;
-            double[] tsArr = new double[tsSteps + 1];
-            FritResult[] results = new FritResult[tsSteps + 1];
-            bool[] validArr = new bool[tsSteps + 1];
+            // ── SIMC 기반 Ts 자동 결정 ──
+            // y(t) 자기상관 → 지배 plant 시정수 τ_p 추정 → Ts = 2·τ_p (SIMC balanced)
+            //   τ_c = τ_p     : aggressive (빠른 응답, 위험 ↑)
+            //   τ_c = 2·τ_p   : balanced (기본)
+            //   τ_c = 4·τ_p   : conservative (안전 ↑, 굼뜸)
+            // Skogestad SIMC 규칙 (산업 표준). 고관성 plant 일수록 τ_p 크고 → Ts 도 자연히 큼.
+            double tau_p = EstimateDominantTau(y, dt);
+            double bestTs = Math.Max(0.1, Math.Min(5.0, 2.0 * tau_p));   // SIMC balanced + 안전 클램프
+            _s.SettlingTimeTs = (float)bestTs;
 
-            for (int si = 0; si <= tsSteps; si++)
+            FritResult best;
+            try
             {
-                tsArr[si] = 0.1 * Math.Pow(10.0, (double)si / tsSteps); // 0.1 ~ 1.0
-                _s.SettlingTimeTs = (float)tsArr[si];
-                try
-                {
-                    results[si] = ComputeFritPid(u, y, sat, dt, _s, kp0, ti0, td0);
-                    validArr[si] = results[si].Kp > 0 && !double.IsNaN(results[si].Rmse);
-                }
-                catch { validArr[si] = false; }
+                best = ComputeFritPid(u, y, sat, dt, _s, kp0, ti0, td0);
             }
-
-            // 인접 Ts 간 max(|ΔKp/Kp|, |ΔTi/Ti|, |ΔTd/Td|) 가 임계값 이하인 가장 작은 Ts
-            const double stabilityThreshold = 0.3;
-            FritResult bestResult = default;
-            double bestTs = 1.0;
-            bool anyFound = false;
-            for (int si = 0; si < tsSteps; si++)
-            {
-                if (!validArr[si] || !validArr[si + 1]) continue;
-
-                double dKp = Math.Abs(results[si + 1].Kp - results[si].Kp) / Math.Max(Math.Abs(results[si].Kp), 1e-6);
-                double dTi = Math.Abs(results[si + 1].Ti - results[si].Ti) / Math.Max(Math.Abs(results[si].Ti), 1e-6);
-                double dTd = Math.Abs(results[si + 1].Td - results[si].Td) / Math.Max(Math.Abs(results[si].Td), 1e-6);
-                double maxChange = Math.Max(dKp, Math.Max(dTi, dTd));
-
-                if (maxChange < stabilityThreshold)
-                {
-                    bestResult = results[si];
-                    bestTs = tsArr[si];
-                    anyFound = true;
-                    break;
-                }
-            }
-
-            // 안정 영역 못 찾으면 RMSE 최소 Ts fallback
-            if (!anyFound)
-            {
-                double bestRmse = double.MaxValue;
-                for (int si = 0; si <= tsSteps; si++)
-                {
-                    if (!validArr[si]) continue;
-                    if (results[si].Rmse < bestRmse)
-                    {
-                        bestRmse = results[si].Rmse;
-                        bestResult = results[si];
-                        bestTs = tsArr[si];
-                        anyFound = true;
-                    }
-                }
-            }
-
-            if (!anyFound)
+            catch (Exception ex)
             {
                 _autoState = AutoTuneState.Failed;
-                _sess.LastMessage = "Auto-tune failed: FRIT did not converge for any Ts / 모든 Ts 에서 FRIT 수렴 실패";
+                _sess.LastMessage = $"FRIT failed at Ts={bestTs:0.00}: {ex.Message} / FRIT 실패";
                 return;
             }
 
-            _s.SettlingTimeTs = (float)bestTs;
-            FritResult best = bestResult;
+            if (best.Kp <= 0 || double.IsNaN(best.Rmse))
+            {
+                _autoState = AutoTuneState.Failed;
+                _sess.LastMessage = $"FRIT degenerate at Ts={bestTs:0.00} (Kp={best.Kp:0.000}) / FRIT 결과 비정상";
+                return;
+            }
 
             _sess.HasResult = true;
             _sess.Kp = best.Kp; _sess.Ti = best.Ti; _sess.Td = best.Td;
@@ -1514,7 +1474,10 @@ namespace PIDAutoTuner
             _autoState = AutoTuneState.Done;
             string conv = best.Converged ? "converged" : "max-iter";
             string warn = string.IsNullOrEmpty(best.Warning) ? "" : " [⚠ " + best.Warning + "]";
-            _sess.LastMessage = $"Done | FRIT Ts={bestTs:0.00} ({conv}, {best.Iterations} iter) Kp={best.Kp:0.000} Ti={best.Ti:0.1} Td={best.Td:0.00} rmse={best.Rmse:0.0000}{warn}";
+            _sess.LastMessage =
+                $"Done | τ_p≈{tau_p:0.00}s → Ts={bestTs:0.00}s (SIMC balanced) " +
+                $"({conv}, {best.Iterations} iter) " +
+                $"Kp={best.Kp:0.000} Ti={best.Ti:0.1} Td={best.Td:0.00} rmse={best.Rmse:0.0000}{warn}";
         }
 
         private void ValidateAxes()
@@ -2623,6 +2586,44 @@ namespace PIDAutoTuner
             // τ = -slope (위상 기울기가 음수면 양의 지연)
             double tau = -slope;
             return Math.Max(0.0, Math.Min(tau, 0.2)); // FTD 환경: 순수 지연 최대 0.2초 (10틱)
+        }
+
+        /// <summary>
+        /// y(t) 자기상관 (autocorrelation) 으로 지배 plant 시정수 τ_p 추정.
+        ///
+        /// 1st-order 시스템: R(t) = σ²·exp(-t/τ_p) → AC 가 1/e 로 떨어지는 시각이 ≈ τ_p.
+        /// PSD → IFFT 로 자기상관 계산 (Wiener-Khinchin).
+        ///
+        /// SIMC 기반 Ts 자동 결정에 사용 (Ts = 2·τ_p, balanced).
+        /// </summary>
+        private static double EstimateDominantTau(double[] y, double dt)
+        {
+            int N = y.Length;
+            if (N < 16) return 0.3;
+
+            double[] yd = new double[N]; Array.Copy(y, yd, N); Detrend(yd);
+            int Nfft = NextPow2(2 * N);
+            Complex[] Yc = new Complex[Nfft];
+            for (int i = 0; i < N; i++) Yc[i] = new Complex(yd[i], 0);
+            Fourier.Forward(Yc, FourierOptions.Matlab);
+
+            // PSD = |Y|² → autocorrelation = IFFT(PSD)
+            Complex[] AC = new Complex[Nfft];
+            for (int k = 0; k < Nfft; k++) AC[k] = Yc[k] * Complex.Conjugate(Yc[k]);
+            Fourier.Inverse(AC, FourierOptions.Matlab);
+
+            double peak = AC[0].Real;
+            if (peak < 1e-12) return 0.3;
+
+            // 1/e 떨어지는 지점 → τ_p (1차 근사)
+            double threshold = peak / Math.E;
+            int tauIdx = N / 8;   // fallback
+            for (int i = 1; i < N / 2; i++)
+            {
+                if (AC[i].Real < threshold) { tauIdx = i; break; }
+            }
+            // 0.05초 (FtD 1틱 × 2.5) ~ 5초 클램프
+            return Math.Max(0.05, Math.Min(5.0, tauIdx * dt));
         }
 
         private static double EstimateSettlingTime(double[] y, double dt)
