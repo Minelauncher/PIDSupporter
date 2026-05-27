@@ -971,6 +971,7 @@ namespace PIDSupporter
         {
             _sess.Recording = false;
             RestoreSetPointAdjustIfNeeded();
+            FritExcitationInjector.Clear(this._focus);   // u-인젝션 반드시 해제
             ReleaseOtherAxesFixture();
 
             if (_autoState == AutoTuneState.Recording)
@@ -1077,8 +1078,9 @@ namespace PIDSupporter
 
                 if (_pitchTargetAxis == this._focus)
                 {
-                    // 피치가 튜닝 대상: excitation 위에 offset 더함 (SetPointAdjust 로)
-                    _pitchTargetAxis.SetPointAdjust.Us = _baseSetPointAdjust + (float)_lastExciteValue + (float)offset;
+                    // 피치가 튜닝 대상: u-direct 가진이라 SP 는 baseline + 고도 offset 만.
+                    // (가진은 NewMeasurement postfix 에서 u 에 직접 더해짐)
+                    _pitchTargetAxis.SetPointAdjust.Us = _baseSetPointAdjust + (float)offset;
                 }
                 else
                 {
@@ -1784,23 +1786,27 @@ namespace PIDSupporter
         }
 
         /// <summary>
-        /// 매 틱마다 SetPoint에 가진 신호를 더함.
-        /// SP = 원래SP + x(t) 형태로, PID가 이 변화에 반응하게 만들어서
-        /// 플랜트의 동특성 정보를 u/y 데이터에 담기 위한 것.
+        /// 매 틱마다 PID 의 출력 u 에 가진 신호를 직접 더한다 (additive perturbation).
+        /// VariableControllerOutputPatch (Harmony) 가 NewMeasurement postfix 에서 우리가 등록한
+        /// 가진값을 __result 와 LastControlVariable 에 더해줌. plant 는 PID 강도와 무관하게
+        /// 일정한 자극을 받으므로 closed-loop ID 의 PID 의존성 문제 해결.
         ///
-        /// 가진이 왜 필요한가?
-        /// - PID가 안정적으로 잘 작동하면 u/y가 거의 일정 → 플랜트 정보 없음
-        /// - 외부에서 SP를 흔들어야 PID가 반응하고, 그 반응에서 플랜트 특성이 드러남
+        /// 과거의 SP-기반 가진 (SetPointAdjust 변경) 은:
+        /// - PID 약함 → u 안 움직임 → 데이터 무정보
+        /// - PID 강함 → 가진 reject → 데이터 무정보
+        /// 어느 쪽이든 데이터 품질이 PID 강도에 의존. u-direct 는 이 문제 우회.
         /// </summary>
-        /// <summary>현재 틱 가진값 (피치 고도유지 offset 계산에 사용). 비활성/조건 미충족 시 0.</summary>
+        /// <summary>현재 틱 가진값 (telemetry/디버그 용). u 에 직접 주입되므로 SP 에는 안 더함.</summary>
         private double _lastExciteValue = 0.0;
 
         private void ApplyExcitation(float dt)
         {
             _lastExciteValue = 0.0;
-            if (!_s.ExciteEnabled) return;        // 가진 꺼져있으면 무시
+            // u 인젝션 해제 (가진 꺼진 상태에선 patch 가 no-op)
+            FritExcitationInjector.Clear(this._focus);
+
+            if (!_s.ExciteEnabled) return;
             if (_s.ExciteWave == WaveType.Off) return;
-            if (!_hasBaseSetPointAdjust) return;   // 원래 SP를 백업 못 했으면 무시
 
             double t = _sess.T;  // 녹화 시작부터의 경과 시간 (블록 분리 제거됨)
             double amp = Math.Max(0.0, _s.ExciteAmp); // 진폭 (음수 방지)
@@ -1821,14 +1827,14 @@ namespace PIDSupporter
 
             double x = 0.0;
 
-            // ── Step prelude: 최초 STEP_PRELUDE_SEC 동안 일정 SP offset 유지 (DC 정보 주입) ──
+            // ── Step prelude: 최초 STEP_PRELUDE_SEC 동안 u 에 일정 offset 주입 (DC 정보) ──
             // 멀티사인은 DC 성분 없음 → FRIT 의 DC 동작 매칭이 외삽 영역이 됨.
-            // step 구간은 DC 방향 Fisher information 보강 + τ_p 직접 추정용 데이터.
+            // step 구간은 DC 방향 Fisher information 보강용.
             if (_s.ExciteWave == WaveType.MultiSine && _sess.T < STEP_PRELUDE_SEC)
             {
-                x = amp; // 일정 양의 offset
+                x = amp;
                 _lastExciteValue = x;
-                try { this._focus.SetPointAdjust.Us = _baseSetPointAdjust + (float)x; } catch { }
+                FritExcitationInjector.Set(this._focus, (float)x);
                 return;
             }
 
@@ -1897,11 +1903,7 @@ namespace PIDSupporter
             }
 
             _lastExciteValue = x;
-            try
-            {
-                this._focus.SetPointAdjust.Us = _baseSetPointAdjust + (float)x;
-            }
-            catch { }
+            FritExcitationInjector.Set(this._focus, (float)x);
         }
 
         // ============================================================
