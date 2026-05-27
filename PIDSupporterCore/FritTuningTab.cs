@@ -104,8 +104,6 @@
 //   [자체] RoundToStep(v, step)                step 단위 반올림
 //   [자체] Clamp / ClampInt                    범위 제한
 //   [자체] WaveToKo(w)                         WaveType → 한국어
-//   [자체] EstimateDominantTau(y, dt)          자기상관 (1/e drop) 으로 plant τ_p 추정 (SIMC 용)
-//   [자체] EstimateDelay / EstimateSettlingTime  레거시 (미사용, 제거 보류)
 //
 // ── 외부 의존성 ──
 //   [FTD]     SuperScreen<T> / VariableControllerMaster / IVariableController
@@ -384,7 +382,7 @@ namespace PIDSupporter
         private const int NaturalBufSize = 60; // 약 1.2초 분량
 
         // Step prelude 길이 (초). MultiSine 가진 시 최초 이 시간 동안 일정 SP offset 유지.
-        // ApplyExcitation 및 EstimateTauFromFopdtFit 에서 공유.
+        // DC 정보 주입으로 FRIT 의 DC 매칭이 외삽 영역이 되는 걸 방지.
         private const double STEP_PRELUDE_SEC = 0.5;
         private readonly double[] _naturalYBuf = new double[NaturalBufSize];
         private int _naturalYIdx = 0;
@@ -1428,63 +1426,41 @@ namespace PIDSupporter
             double ti0 = this._focus.Pid.kI.Us;
             double td0 = this._focus.Pid.kD.Us;
 
-            // ── τ_p 추정 ──
-            // 주: FOPDT fit (prelude (u,y) 에 ARX(1,1) OLS → plant 고유 τ_p, PID 무관 unbiased).
-            // 폴백: 자기상관 1/e (MultiSine 가진 아니거나 FOPDT fit 실패 시).
-            double tauFopdt = (_s.ExciteWave == WaveType.MultiSine)
-                ? EstimateTauFromFopdtFit(u, y, sat, dt, (double)_s.ModelDelayTau)
-                : double.NaN;
-            double tau_p;
-            string tauSrc;
-            if (!double.IsNaN(tauFopdt))
-            {
-                tau_p = tauFopdt;
-                tauSrc = "fopdt";
-            }
-            else
-            {
-                tau_p = EstimateDominantTau(y, dt);
-                tauSrc = (_s.ExciteWave == WaveType.MultiSine && !string.IsNullOrEmpty(_fopdtLastFailReason))
-                    ? $"autocorr — fopdt failed: {_fopdtLastFailReason}"
-                    : "autocorr";
-            }
-
             // ── Ts sweep + Td 안전 체크 ──
-            // SIMC 일반화 형태: Ts = max(k·τ_p, k·τ_M).
-            // FTD 표준 케이스에선 τ_M ≈ dt 라 k·τ_p 가 항상 우세하지만,
-            // 사용자가 τ_M 슬라이더를 올려놓은 경우엔 k·τ_M 이 하한이 됨.
+            // τ_p 추정 (FOPDT, autocorr) 은 closed-loop 결합/노이즈로 인해 unreliable.
+            // 어차피 추정값은 Ts 후보 만드는 anchor 일 뿐이라, **τ_p 단계를 제거**하고
+            // **dt 단위 log-spaced 절대 Ts 그리드**를 직접 sweep 함.
             //
-            // 후보를 공격적(k=1) → 보수적(k=4) 순으로 시도해서, 첫 번째 "안전" 후보 채택.
+            // dt-multiple 그리드 (10 후보): {3, 5, 7, 10, 15, 20, 30, 50, 80, 200}·dt
+            //   dt=0.025 기준: {0.075, 0.125, 0.175, 0.25, 0.375, 0.5, 0.75, 1.25, 2.0, 5.0}s
+            // log-spaced 라 빠른 plant ~ 느린 plant 모두 커버.
+            //
+            // 후보를 공격(작은 Ts) → 보수(큰 Ts) 순으로 시도해서:
+            //   · 첫 번째 "안전" 후보 채택 (= 가장 공격적인 작동 가능 PID)
+            //   · 끝까지 sweep 해서 safe 후보 갯수 카운트 (= 결정의 robustness 지표)
+            //
             // 안전 기준 (D 진동 방지):
             //   · LM 수렴 + Kp > 0 + RMSE 정상
             //   · Td/Ti < 0.3   (산업 표준 PID 비율)
             //   · Td/dt < 10    (이산 미분의 per-sample 노이즈 게인 상한)
-            // 모든 후보가 실패하면 가장 보수적인 후보의 결과로 폴백 (경고 표시).
+            // 모든 후보가 실패하면 가장 보수적인 (큰 Ts) 후보의 결과로 폴백 (경고 표시).
             double tauM = Math.Max(dt, (double)_s.ModelDelayTau);
-            // k 범위 [0.1, 4.0] 로 sub-1.0 후보까지 포함.
-            // 이유: τ_p 추정기가 closed-loop 결합/노이즈로 인해 과대추정하는 경우가 있음
-            //   (예: 비행기 롤축은 τ_p ≈ 0.2s 인데 ARX 가 1.8s 추정).
-            // k < 1 후보가 있으면 추정이 N배 부풀려져도 그만큼 작은 k 로 보상해서
-            // 실제 plant 한계에 맞는 Ts 가 sweep 안에 들어옴. 안전 체크가 비현실적 후보를 거름.
-            double[] factors = { 0.1, 0.2, 0.4, 0.6, 1.0, 1.5, 2.0, 2.5, 3.0, 4.0 };
+            int[] dtMultiples = { 3, 5, 7, 10, 15, 20, 30, 50, 80, 200 };
 
             FritResult best = default;
             bool hasBest = false;
             double bestTs = 0.0;
-            double bestFactor = 0.0;
             FritResult fallback = default;
             bool hasFallback = false;
             double fallbackTs = 0.0;
-            double fallbackFactor = 0.0;
             int safeCount = 0;
             string lastFailReason = "";
 
-            // 모든 후보를 끝까지 평가해서 안전 후보 갯수까지 카운트.
-            // best = 가장 공격적인 안전 후보 (= 처음 만난 safe), fallback = 가장 보수적인 성공 후보 (= 마지막 성공).
-            for (int i = 0; i < factors.Length; i++)
+            for (int i = 0; i < dtMultiples.Length; i++)
             {
-                double k = factors[i];
-                double ts = Math.Max(k * tau_p, k * tauM);
+                double ts = dtMultiples[i] * dt;
+                // 사용자가 τ_M 슬라이더를 올려놓은 경우: closed-loop 은 delay 보다 빠를 수 없음 → 하한.
+                ts = Math.Max(tauM, ts);
                 ts = Math.Max(3.0 * dt, Math.Min(5.0, ts));
                 _s.SettlingTimeTs = (float)ts;
 
@@ -1495,21 +1471,20 @@ namespace PIDSupporter
                 }
                 catch (Exception ex)
                 {
-                    lastFailReason = $"k={k:0.00}: {ex.Message}";
+                    lastFailReason = $"Ts={ts:0.000}: {ex.Message}";
                     continue;
                 }
 
                 if (r.Kp <= 0 || double.IsNaN(r.Rmse))
                 {
-                    lastFailReason = $"k={k:0.00}: degenerate (Kp={r.Kp:0.000})";
+                    lastFailReason = $"Ts={ts:0.000}: degenerate (Kp={r.Kp:0.000})";
                     continue;
                 }
 
-                // 가장 보수적인 성공 후보 (k 큰 쪽) 갱신: 매 성공마다 덮어쓰기.
+                // 가장 보수적인 성공 후보 (큰 Ts) 갱신: 매 성공마다 덮어쓰기.
                 fallback = r;
                 hasFallback = true;
                 fallbackTs = ts;
-                fallbackFactor = k;
 
                 // 안전 체크
                 double tdOverTi = r.Td / Math.Max(1e-6, r.Ti);
@@ -1518,13 +1493,11 @@ namespace PIDSupporter
                 if (tdOverTi < 0.3 && tdOverDt < 10.0)
                 {
                     safeCount++;
-                    // 가장 공격적인 안전 후보는 첫 번째 만남에서만 기록.
                     if (!hasBest)
                     {
                         best = r;
                         hasBest = true;
                         bestTs = ts;
-                        bestFactor = k;
                     }
                 }
             }
@@ -1541,7 +1514,6 @@ namespace PIDSupporter
                 // 폴백 사용 + 경고
                 best = fallback;
                 bestTs = fallbackTs;
-                bestFactor = fallbackFactor;
                 safetyWarn = " ⚠ no safe Ts found, using conservative fallback";
             }
 
@@ -1556,7 +1528,7 @@ namespace PIDSupporter
             string conv = best.Converged ? "converged" : "max-iter";
             string warn = string.IsNullOrEmpty(best.Warning) ? "" : " [⚠ " + best.Warning + "]";
             _sess.LastMessage =
-                $"Done | τ_p≈{tau_p:0.00}s ({tauSrc}) → Ts={bestTs:0.00}s (k={bestFactor:0.00}, safe {safeCount}/{factors.Length}) " +
+                $"Done | Ts={bestTs:0.000}s (safe {safeCount}/{dtMultiples.Length}) " +
                 $"({conv}, {best.Iterations} iter) " +
                 $"Kp={best.Kp:0.000} Ti={best.Ti:0.0} Td={best.Td:0.00} rmse={best.Rmse:0.0000}{warn}{safetyWarn}";
         }
@@ -2586,307 +2558,5 @@ namespace PIDSupporter
             return Math.Sqrt(sum / (data.Length - 1));
         }
 
-        /// <summary>
-        /// 플랜트 지연 추정: 위상 기울기 기반.
-        ///
-        /// H(jω) = Y/U의 위상에서 순수 지연을 추출.
-        /// 순수 지연 exp(-jωτ)는 위상 = -ωτ (주파수에 비례하는 선형 위상).
-        /// 저주파 영역의 위상 기울기 = -τ → τ = -dφ/dω.
-        /// 저주파만 사용하여 플랜트 동특성(극점/영점)의 위상과 분리.
-        /// </summary>
-        private static double EstimateDelay(double[] u, double[] y, double dt)
-        {
-            int N = Math.Min(u.Length, y.Length);
-            if (N < 16) return 0.0;
-
-            double[] ud = new double[N]; Array.Copy(u, ud, N); Detrend(ud);
-            double[] yd = new double[N]; Array.Copy(y, yd, N); Detrend(yd);
-
-            int Nfft = NextPow2(2 * N);
-            double fs = 1.0 / dt;
-
-            Complex[] Uf = new Complex[Nfft];
-            Complex[] Yf = new Complex[Nfft];
-            for (int i = 0; i < N; i++)
-            {
-                Uf[i] = new Complex(ud[i], 0);
-                Yf[i] = new Complex(yd[i], 0);
-            }
-
-            Fourier.Forward(Uf, FourierOptions.Matlab);
-            Fourier.Forward(Yf, FourierOptions.Matlab);
-
-            // H(jω) = Y/U (Wiener 정규화)
-            double maxUmag2 = 0;
-            for (int k = 0; k < Nfft; k++)
-            {
-                double m2 = Uf[k].Real * Uf[k].Real + Uf[k].Imaginary * Uf[k].Imaginary;
-                if (m2 > maxUmag2) maxUmag2 = m2;
-            }
-            double reg = maxUmag2 * 1e-4;
-
-            // 저주파 빈에서 위상 수집 (DC 제외, ~fs/8까지) + 위상 언래핑
-            int maxBin = Math.Max(2, Nfft / 8);
-            double sumWF = 0, sumWP = 0, sumWW = 0, sumW = 0;
-            double prevPhase = 0;
-            double cumUnwrap = 0;
-
-            for (int k = 1; k <= maxBin; k++)
-            {
-                double m2 = Uf[k].Real * Uf[k].Real + Uf[k].Imaginary * Uf[k].Imaginary;
-                Complex H = (Complex.Conjugate(Uf[k]) * Yf[k]) / (m2 + reg);
-
-                double w = 2.0 * Math.PI * k * fs / Nfft; // 각주파수
-                double rawPhase = Math.Atan2(H.Imaginary, H.Real); // (-π, π]
-
-                // 위상 언래핑: 인접 빈 간 점프가 π를 넘으면 2π 보정
-                if (k > 1)
-                {
-                    double diff = rawPhase - prevPhase;
-                    if (diff > Math.PI) cumUnwrap -= 2.0 * Math.PI;
-                    else if (diff < -Math.PI) cumUnwrap += 2.0 * Math.PI;
-                }
-                prevPhase = rawPhase;
-                double phase = rawPhase + cumUnwrap;
-
-                double weight = m2 / (m2 + reg); // SNR 기반 가중치
-
-                // 가중 선형 회귀: phase ≈ offset + slope * w
-                // slope = -τ
-                sumWF += weight * w * phase;
-                sumWP += weight * phase;
-                sumWW += weight * w * w;
-                sumW  += weight * w;
-            }
-
-            // slope = (Σw·wf - Σw·Σwp/Σ1) / (Σw·ww - (Σw)²/Σ1)
-            // 간소화: 가중 최소자승으로 기울기 추출
-            double denom = sumWW * sumW - sumW * sumW; // 이건 항상 0이 아님 (w가 다 다르니까)
-            // 더 안정적인 형태: 직접 Σw*phase*w / Σw*w*w (절편 무시, DC 제외했으니)
-            double slope = sumWW > 1e-12 ? sumWF / sumWW : 0.0;
-
-            // τ = -slope (위상 기울기가 음수면 양의 지연)
-            double tau = -slope;
-            return Math.Max(0.0, Math.Min(tau, 0.2)); // FTD 환경: 순수 지연 최대 0.2초 (10틱)
-        }
-
-        /// <summary>
-        /// 전체 (u, y) 시계열에 **ARX(2,1) OLS** 로 2차 plant 모델을 fit, 지배 시정수 τ_p 를
-        /// 추출한다. 1차/2차 plant 와 integrator 동특성을 모두 처리.
-        ///
-        /// 모델:
-        ///   y[k] = a₁·y[k-1] + a₂·y[k-2] + b·u[k-1-delayN]
-        ///   → 특성 다항식 z² - a₁·z - a₂ = 0 의 근 = 이산 plant 극점
-        ///   → τ_i = -dt / ln(|z_i|)  (각 극점의 시정수)
-        ///
-        /// 지배 시정수 선택:
-        ///   · 양 극점 모두 안정 (|z|<1) → 큰 쪽을 τ_p
-        ///   · 한 극점이 z≈1 (integrator) → 나머지 극점 사용 (integrator 는 τ_p 무한대라 의미 없음)
-        ///   · 복소 conjugate (진동 plant) → |z| 로부터 τ_p
-        ///   · 양 극점 불안정 → NaN (폴백)
-        ///
-        /// 1차 plant 일 때도 작동:  a₂≈0 이면 한 극점이 ≈0 (즉시 응답) + 나머지 극점이 τ_p.
-        /// closed-loop 편향 작음 (FRIT 와 같은 이유: plant 식 자체가 PID 무관).
-        /// </summary>
-        // FOPDT fit 실패 시 마지막 사유 (UI 메시지에 표시).
-        private static string _fopdtLastFailReason = "";
-
-        private static double EstimateTauFromFopdtFit(double[] u, double[] y, bool[] sat, double dt, double theta)
-        {
-            int N = Math.Min(u.Length, Math.Min(y.Length, sat.Length));
-            if (N < 64) { _fopdtLastFailReason = "data too short"; return double.NaN; }
-
-            int delayN = Math.Max(0, (int)Math.Round(theta / dt));
-            int kStart = 2 + delayN;
-            if (kStart >= N - 4) { _fopdtLastFailReason = "delay > data"; return double.NaN; }
-
-            // 응답 크기 sanity
-            double yStd = StdDev(y);
-            if (yStd < 1e-4) { _fopdtLastFailReason = $"weak response (yStd={yStd:0.0000})"; return double.NaN; }
-
-            // 디트렌드 (DC + 선형 추세 제거) — 전체 데이터 사용하므로 필수
-            double[] yd = new double[N]; Array.Copy(y, yd, N); Detrend(yd);
-            double[] ud = new double[N]; Array.Copy(u, ud, N); Detrend(ud);
-
-            // ARX(2,1) OLS: y[k] = a₁·y[k-1] + a₂·y[k-2] + b·u[k-1-delayN]
-            // 정규방정식 3x3:
-            //   M = [[s11, s12, s13], [s12, s22, s23], [s13, s23, s33]]
-            //   b = [t1, t2, t3]
-            // 여기서 s_ij = Σ x_i·x_j, t_i = Σ x_i·y[k]
-            //   x_1 = y[k-1], x_2 = y[k-2], x_3 = u[k-1-delayN]
-            double s11 = 0, s12 = 0, s13 = 0;
-            double s22 = 0, s23 = 0;
-            double s33 = 0;
-            double t1 = 0, t2 = 0, t3 = 0;
-            int count = 0;
-            for (int k = kStart; k < N; k++)
-            {
-                if (sat[k] || sat[k - 1] || sat[k - 2] || sat[k - 1 - delayN]) continue;
-                double yt = yd[k];
-                double y1 = yd[k - 1];
-                double y2 = yd[k - 2];
-                double u1 = ud[k - 1 - delayN];
-                s11 += y1 * y1;
-                s12 += y1 * y2;
-                s13 += y1 * u1;
-                s22 += y2 * y2;
-                s23 += y2 * u1;
-                s33 += u1 * u1;
-                t1 += yt * y1;
-                t2 += yt * y2;
-                t3 += yt * u1;
-                count++;
-            }
-            if (count < 32)
-            { _fopdtLastFailReason = $"too few clean samples ({count})"; return double.NaN; }
-
-            // 3x3 역행렬 (Cramer's rule)
-            double m11 = s22 * s33 - s23 * s23;
-            double m12 = s12 * s33 - s23 * s13;
-            double m13 = s12 * s23 - s22 * s13;
-            double det = s11 * m11 - s12 * m12 + s13 * m13;
-            if (Math.Abs(det) < 1e-12)
-            { _fopdtLastFailReason = "singular (regressors collinear)"; return double.NaN; }
-
-            // a1 = det1 / det, where det1 replaces column 1 of M with target vector
-            double det1 = t1 * m11
-                        - s12 * (t2 * s33 - s23 * t3)
-                        + s13 * (t2 * s23 - s22 * t3);
-            // a2 = det2 / det, where det2 replaces column 2
-            double det2 = s11 * (t2 * s33 - s23 * t3)
-                        - t1 * (s12 * s33 - s23 * s13)
-                        + s13 * (s12 * t3 - t2 * s13);
-
-            double a1 = det1 / det;
-            double a2 = det2 / det;
-            if (double.IsNaN(a1) || double.IsNaN(a2))
-            { _fopdtLastFailReason = "NaN in fit"; return double.NaN; }
-
-            // 특성 다항식 z² - a1·z - a2 = 0 의 근.
-            double disc = a1 * a1 + 4.0 * a2;
-            double dominantAbsZ;
-
-            if (disc >= 0)
-            {
-                // 실근 2개
-                double sq = Math.Sqrt(disc);
-                double z1 = (a1 + sq) / 2.0;
-                double z2 = (a1 - sq) / 2.0;
-                double az1 = Math.Abs(z1);
-                double az2 = Math.Abs(z2);
-
-                // integrator 근 (|z|≈1) 은 제외, 안정 근 중 큰 쪽 채택.
-                // 큰 쪽 = 느린 극점 = 지배 시정수.
-                // 0.9999 까지는 정상 plant 극점으로 인정 (|z|=0.99 는 τ≈2.5s, 무거운 함선 가능).
-                // 그 이상은 사실상 pure integrator (z=1).
-                bool z1Stable = az1 > 0 && az1 < 0.9999;
-                bool z2Stable = az2 > 0 && az2 < 0.9999;
-
-                if (z1Stable && z2Stable) dominantAbsZ = Math.Max(az1, az2);
-                else if (z1Stable) dominantAbsZ = az1;
-                else if (z2Stable) dominantAbsZ = az2;
-                else
-                { _fopdtLastFailReason = $"poles outside unit circle (|z|={az1:0.000},{az2:0.000})"; return double.NaN; }
-            }
-            else
-            {
-                // 복소 conjugate (진동 plant): |z|² = -a₂
-                if (-a2 <= 0) { _fopdtLastFailReason = "complex poles, -a₂≤0"; return double.NaN; }
-                dominantAbsZ = Math.Sqrt(-a2);
-                if (dominantAbsZ >= 0.9999) { _fopdtLastFailReason = $"complex poles |z|={dominantAbsZ:0.000}≈1"; return double.NaN; }
-            }
-
-            if (dominantAbsZ <= 0 || dominantAbsZ >= 1)
-            { _fopdtLastFailReason = $"dominant pole |z|={dominantAbsZ:0.000} invalid"; return double.NaN; }
-
-            double tau_p = -dt / Math.Log(dominantAbsZ);
-            if (double.IsNaN(tau_p) || tau_p <= 0)
-            { _fopdtLastFailReason = "τ_p invalid"; return double.NaN; }
-
-            _fopdtLastFailReason = "";
-            // 상한 5.0s: 매우 느린 무거운 함선까지 커버 (이전 1.0 은 FTD 일반 환경 가정으로
-            // 너무 빡빡했음). 5s 넘어가면 보통 estimator 실패라 차라리 reject.
-            return Math.Max(3.0 * dt, Math.Min(5.0, tau_p));
-        }
-
-        /// <summary>
-        /// y(t) 자기상관 (autocorrelation) 으로 지배 plant 시정수 τ_p 추정.
-        ///
-        /// 1st-order 시스템: R(t) = σ²·exp(-t/τ_p) → AC 가 1/e 로 떨어지는 시각이 ≈ τ_p.
-        /// PSD → IFFT 로 자기상관 계산 (Wiener-Khinchin).
-        ///
-        /// SIMC 기반 Ts 자동 결정에 사용 (Ts = 2·τ_p, balanced).
-        /// </summary>
-        private static double EstimateDominantTau(double[] y, double dt)
-        {
-            int N = y.Length;
-            if (N < 16) return 0.3;
-
-            double[] yd = new double[N]; Array.Copy(y, yd, N); Detrend(yd);
-            int Nfft = NextPow2(2 * N);
-            Complex[] Yc = new Complex[Nfft];
-            for (int i = 0; i < N; i++) Yc[i] = new Complex(yd[i], 0);
-            Fourier.Forward(Yc, FourierOptions.Matlab);
-
-            // PSD = |Y|² → autocorrelation = IFFT(PSD)
-            Complex[] AC = new Complex[Nfft];
-            for (int k = 0; k < Nfft; k++) AC[k] = Yc[k] * Complex.Conjugate(Yc[k]);
-            Fourier.Inverse(AC, FourierOptions.Matlab);
-
-            double peak = AC[0].Real;
-            if (peak < 1e-12) return 0.3;
-
-            // 1/e 떨어지는 지점 → τ_p (1차 근사)
-            double threshold = peak / Math.E;
-            int tauIdx = N / 8;   // fallback
-            for (int i = 1; i < N / 2; i++)
-            {
-                if (AC[i].Real < threshold) { tauIdx = i; break; }
-            }
-            // FOPDT 와 동일하게 [3·dt, 5.0] 클램프. 5s 넘어가면 보통 estimator 실패.
-            return Math.Max(3.0 * dt, Math.Min(5.0, tauIdx * dt));
-        }
-
-        private static double EstimateSettlingTime(double[] y, double dt)
-        {
-            int N = y.Length;
-            if (N < 16) return 2.0;
-
-            // 디트렌드(DC + 선형 추세 제거) → 드리프트에 의한 시정수 과대추정 방지
-            double[] yd = new double[N]; Array.Copy(y, yd, N); Detrend(yd);
-
-            int Nfft = NextPow2(2 * N);
-            Complex[] Yc = new Complex[Nfft];
-            for (int i = 0; i < N; i++)
-                Yc[i] = new Complex(yd[i], 0);
-
-            Fourier.Forward(Yc, FourierOptions.Matlab);
-
-            // PSD → 자기상관
-            Complex[] AC = new Complex[Nfft];
-            for (int k = 0; k < Nfft; k++)
-                AC[k] = Yc[k] * Complex.Conjugate(Yc[k]);
-
-            Fourier.Inverse(AC, FourierOptions.Matlab);
-
-            double peak = AC[0].Real;
-            if (peak < 1e-12) return 2.0;
-
-            // 자기상관이 피크의 5% 아래로 떨어지는 지점 → 주요 시정수
-            double threshold = 0.05 * peak;
-            int tauIdx = N / 4; // fallback
-            for (int i = 1; i < N / 2; i++)
-            {
-                if (AC[i].Real < threshold)
-                {
-                    tauIdx = i;
-                    break;
-                }
-            }
-
-            // 정착시간 ≈ 4 × 시정수
-            double settlingTime = 4.0 * tauIdx * dt;
-            return Math.Max(0.5, settlingTime);
-        }
     }
 }

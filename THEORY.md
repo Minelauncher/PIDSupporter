@@ -17,11 +17,10 @@
   → EffectiveValidCount (= transient-tail 밖 깨끗 샘플) ≥ MinSamples 까지 대기
        · 적응형 진폭이 자동 조정 → 결국 비포화 영역으로 수렴
        · 시간 상한 없음 (사용자가 멈추기 전까지 계속 수집)
-  → τ_p 추정 (주: FOPDT fit on (u,y) prelude, 폴백: 자기상관 1/e)
-  → Ts sweep — k ∈ {0.1, 0.2, 0.4, 0.6, 1.0, 1.5, 2.0, 2.5, 3.0, 4.0} 로
-                max(k·τ_p, k·τ_M) 후보 10개 생성, FRIT 10번 돌려서
+  → 절대 Ts 그리드 sweep — Ts ∈ {3, 5, 7, 10, 15, 20, 30, 50, 80, 200}·dt
+                후보 10개 (dt=0.025 기준 0.075s~5s), FRIT 10번 돌려서
                 Td/Ti < 0.3 + Td/dt < 10 충족하는 가장 공격적인 후보 채택.
-                k<1 은 추정기가 과대추정 한 경우의 안전망.
+                (τ_p 추정 단계 없음 — closed-loop 결합으로 unreliable 해서 제거.)
   → FRIT 1회 (시간 영역 IIR + 가중 LS + LM)
        · 포화 인덱스만 w = ε 로 down-weight (IIR 회복 transient 는 IRLS Huber 가 자동 처리)
        · 1/C(z) 안정성 미충족 시 soft barrier
@@ -196,7 +195,7 @@ UI 에 `Kp = 0.0523 ± 0.0012 (2%)` 형태로 자동 표시.
 
 $$M(s) = \frac{e^{-s \tau_M}}{(1 + s \cdot 0.2 T_s)^{n_M}}$$
 
-- `T_s` : 목표 정착시간 (Ts sweep 10개 후보 `k·max(τ_p, τ_M)` for k ∈ {1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 3.0, 3.5, 4.0}, 클램프 [3·dt, 5.0])
+- `T_s` : 목표 정착시간 (절대 Ts 그리드 10개 `dtMult·dt` for dtMult ∈ {3, 5, 7, 10, 15, 20, 30, 50, 80, 200}, 클램프 [3·dt, 5.0])
 - `n_M` : 모델 차수 (FTD 제어 대상 대부분 2차 → `n_M = 2` 고정)
 - `τ_M` : 지연 (FTD 순수 지연 ≈ 1틱 → `τ_M = dt` 고정)
 
@@ -216,52 +215,37 @@ $$y[k] = \frac{x[k] + x[k-1] - \beta_1 y[k-1]}{\beta_0}$$
 
 `n_M = 2` 인 시스템의 4% 정착시간 (4·시정수) 이 `T_s` 가 되려면 시정수 = `T_s / 4 = 0.25 T_s`. 약간 보수적으로 `0.2 T_s` 사용 → 5% 정착시간 기준.
 
-### 4.4 Ts 자동 결정 — Ts sweep + Td 안전 체크
+### 4.4 Ts 자동 결정 — 절대 Ts 그리드 sweep + Td 안전 체크
 
-**1단계: τ_p 추정**
+**왜 τ_p 추정 단계가 없나**
 
-1. **FOPDT fit** (`EstimateTauFromFopdtFit`) — **주 추정기, plant 고유 τ_p (PID 무관 unbiased)**:
-   MultiSine 가진의 전체 (u, y) 시계열에 **ARX(2,1) OLS** 로 2차 plant 모델 fit.
-   ```
-   y[k] = a₁ · y[k-1] + a₂ · y[k-2] + b · u[k-1-delayN]
-   특성 다항식: z² - a₁·z - a₂ = 0  →  근 z₁, z₂
-   τ_p = -dt / ln(|z|)  (지배 극점의 시정수)
-   ```
-   ARX(2,1) 은 1차/2차/integrator 동특성 모두 처리:
-   - 1차 plant: a₂≈0, 한 근이 ≈0 (즉시), 나머지 = exp(-dt/τ_p)
-   - 2차 plant: 두 안정 근 → 큰 쪽 (느린 극점) = τ_p
-   - integrator: 한 근이 ≈1 → 제외, 나머지 근으로 τ_p
-   - 진동 plant: 복소 conjugate 근, |z| 로 τ_p
-   
-   plant 방정식이 PID 와 무관하게 성립한다는 사실 활용. 포화 샘플 제외, ARX(2,1) 적합 실패 시 NaN 반환 → 폴백.
+이전에는 plant 시정수 τ_p 를 자기상관 / ARX(2,1) FOPDT fit 으로 추정해서 `Ts = k·τ_p` 형태로 후보를 만들었음. 하지만:
+- 어떤 추정기도 **closed-loop 결합** (다른 축, 중력, 외력 등) 으로 인한 환경 모드 침입을 완전히 제거 못함.
+- 특히 multi-axis 결합이 강한 시스템 (비행기 롤축 등) 에선 plant 의 빠른 모드가 환경의 느린 모드에 가려져 9배 이상 과대추정되는 경우가 흔함.
+- 추정값이 어차피 unreliable 한데 그걸 anchor 삼아 sweep 후보를 만드는 건 첫 단추부터 틀어지는 셈.
 
-2. **자기상관 1/e** (`EstimateDominantTau`) — **단일 폴백**:
-   y(t) 의 자기상관 (PSD → IFFT, Wiener-Khinchin) 에서 1/e 떨어지는 시각.
-   Sine/Chirp 가진 (prelude 없음) 또는 FOPDT fit 실패 시.
-   closed-loop biased 라 정확도는 떨어지지만 어떤 가진 신호든 작동하는 안전망.
+해결: **τ_p 단계를 제거하고 dt 단위 log-spaced 절대 Ts 그리드를 직접 sweep**. plant 가 빠르든 느리든 후보 안에 적절한 Ts 가 존재하면 안전 체크가 잡아냄.
 
-**왜 FOPDT 가 closed-loop 데이터에서도 unbiased 인가** — plant 미분방정식은 PID 와 무관하게 항상 성립. (u, y) 쌍에서 plant 파라미터를 추정하는 건 OLS 의 표준 절차. PID 가 만들어내는 u 는 노이즈와 약하게 상관될 수 있지만 (closed-loop ID bias), prelude step 의 deterministic 변화가 압도해서 편향이 작음.
-
-**왜 캐시 안 쓰나** — FOPDT 가 unbiased 라 매번 같은 plant 에서 거의 같은 τ_p 가 나옴. 반복 AutoTune 의 closed-loop drift 문제가 원천 차단되므로 캐싱이 필요 없음. Reset 부담도 사라짐.
-
-**캐싱의 이유** — τ_p 는 원리적으로 plant 고유 정보이지만, 우리 추정기는 closed-loop y 데이터에서 얻으니까 현재 PID 의 영향이 섞임. 반복 호출하면:
-1. 현재 PID 가 sluggish → closed-loop 응답 느림 → 추정 τ_p 큼
-2. 큰 τ_p → Ts 크게 → 더 sluggish 한 PID
-3. positive feedback → τ_p 가 상한 1.0 에 박힘 → PID 가 항상 보수적 폴백
-
-캐싱하면 첫 1회 추정값으로 고정되어 이 drift 가 끊김. 단점: vehicle/axis 가 바뀌면 stale 한 캐시 → 사용자가 Reset 으로 재추정 트리거해야 함.
-
-**2단계: Ts sweep** (SIMC 일반화 + τ_M 고려)
+**Ts 그리드**
 
 ```
-factors = {0.1, 0.2, 0.4, 0.6, 1.0, 1.5, 2.0, 2.5, 3.0, 4.0}  ← 공격 → 보수, 10개
+dtMultiples = {3, 5, 7, 10, 15, 20, 30, 50, 80, 200}
+Ts_i = clamp(max(dtMultiples[i] · dt, τ_M), 3·dt, 5.0)
+```
+
+dt=0.025 기준: `{0.075, 0.125, 0.175, 0.25, 0.375, 0.5, 0.75, 1.25, 2.0, 5.0}` 초. log-spaced 라 빠른 plant (≤0.2s) 와 느린 plant (수초) 모두 cover.
+
+**왜 max(Ts, τ_M) 인가** — closed-loop 은 plant delay 보다 빠를 수 없음. 사용자가 τ_M 슬라이더를 올려놓은 경우 그게 하한이 됨.
+
+**sweep 루프**
+
+```
 best = null;  safeCount = 0;  fallback = null
-for k in factors:
-    ts_k = clamp(max(k·τ_p, k·τ_M), 3·dt, 5.0)
-    r = ComputeFritPid(ts = ts_k)
+for ts in Ts_i (작은 → 큰):
+    r = ComputeFritPid(ts)
     if r 정상:
-        fallback = r                ← 항상 갱신 (마지막 성공 = 가장 보수적)
-        if Td/Ti < 0.3 + Td/dt < 10:
+        fallback = r                ← 매 성공마다 갱신 (마지막 = 가장 보수적)
+        if Td/Ti < 0.3 AND Td/dt < 10:
             safeCount++
             if best == null:
                 best = r            ← 처음 만난 안전 후보 = 가장 공격적
@@ -270,27 +254,22 @@ return best ?? fallback  (best 없으면 fallback + ⚠ 경고)
 
 **왜 break 안 하고 끝까지 도는가** — `safeCount` 를 사용자에게 보여줘서 결정의 robustness 를 알리기 위함. `safe 8/10` 이면 매우 안정적, `safe 1/10` 이면 fragile 한 채택. 비용은 FRIT 10회 ≈ 0.5초.
 
-**왜 max(k·τ_p, k·τ_M) 인가** — SIMC 의 표준 하한: closed-loop 은 plant delay 보다 빠를 수 없음. FTD 일반 케이스에선 τ_M = dt 라 `k·τ_p` 가 우세하지만, 사용자가 τ_M 슬라이더 올리면 그쪽이 하한이 됨.
-
 **안전 체크 기준** (D 진동 방지):
 - `Td/Ti < 0.3` — 산업 표준 PID 비율. 넘으면 D 항이 너무 우세
 - `Td/dt < 10` — 이산 미분의 per-sample 노이즈 게인. 넘으면 측정 잡음 폭증
 
-**왜 sweep 인가** — 단일 SIMC factor (예: 2·τ_p balanced) 로는 D 진동 회피와 빠른 응답을 동시 달성 못함. plant 별로 안전한 τ_c 범위가 달라서, 사용자가 1클릭으로 "안전한 가장 빠른 응답" 받게 하려면 자동 sweep 필요.
+**왜 sweep 인가** — 단일 Ts 자동 추정으로는 D 진동 회피와 빠른 응답을 동시 달성 못함. plant 별로 안전한 Ts 범위가 달라서, 사용자가 1클릭으로 "안전한 가장 빠른 응답" 받게 하려면 자동 sweep 필요.
 
 **왜 sweep 비용이 안 부담인가** — FRIT 1회 ≈ 30~80ms, 10회 ≈ 0.3~0.8s. 사용자가 체감 못함.
-
-**한계**: 단일 τ_p 추정이라 multi-mode plant 에선 부정확할 수 있음. FTD 게임 환경은 대부분 효과적 1st-order 근사가 OK.
 
 ---
 
 ## 5. 계산 파이프라인 (FRIT 시간 영역)
 
 ### 단계 0: Ts sweep (자세히는 §4.4)
-1. **τ_p 추정** — FOPDT fit (주) → 자기상관 1/e (폴백) (자세히는 §4.4)
-2. **10개 후보 sweep** — `k ∈ {0.1, 0.2, 0.4, 0.6, 1.0, 1.5, 2.0, 2.5, 3.0, 4.0}` 로 `Ts_k = clamp(max(k·τ_p, k·τ_M), 3·dt, 5.0)`. k<1 후보는 τ_p 과대추정 보호용 (closed-loop bias, 노이즈 등으로 추정기가 부풀려도 작은 k로 보상).
-3. **각 Ts_k 마다 ComputeFritPid 호출** → 안전 체크 (`Td/Ti < 0.3 ∧ Td/dt < 10`) 통과한 가장 공격적인 결과 채택. 끝까지 돌면서 `safeCount` 카운트
-4. **모두 실패 시** 마지막 성공 후보 (가장 보수적) + 경고 메시지 폴백
+1. **10개 절대 Ts 후보** — `dtMult ∈ {3, 5, 7, 10, 15, 20, 30, 50, 80, 200}` 로 `Ts_i = clamp(max(dtMult·dt, τ_M), 3·dt, 5.0)`. (τ_p 추정 단계 없음 — closed-loop 결합으로 unreliable 해서 제거.)
+2. **각 Ts_i 마다 ComputeFritPid 호출** → 안전 체크 (`Td/Ti < 0.3 ∧ Td/dt < 10`) 통과한 가장 공격적인 결과 채택. 끝까지 돌면서 `safeCount` 카운트
+3. **모두 실패 시** 마지막 성공 후보 (가장 보수적) + 경고 메시지 폴백
 
 ### 단계 1: 디트렌드
 DC + 선형 추세 제거 (전체 데이터 기준). 짧은 포화 샘플 영향은 미미.
