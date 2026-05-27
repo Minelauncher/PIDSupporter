@@ -1436,11 +1436,24 @@ namespace PIDSupporter
                 return;
             }
 
-            // 목표 Ts 선택: 사용자가 SettlingTimeTs 슬라이더로 지정 가능.
-            // 자동 default: τ_1 (1·τ_p, SIMC aggressive). 너무 빠르면 사용자가 슬라이더로 조정.
-            double targetTs = (double)_s.SettlingTimeTs;
-            if (targetTs <= 0 || targetTs > 5.0)
-                targetTs = plant.Tau1; // 자동 default
+            // 목표 Ts 자동 결정 (plant 특성 기반):
+            //   적분기 plant: τ_2 (rate damping) 이 자연스러운 시정수 — closed-loop 가
+            //     rate dynamics 만큼 빠르게 응답하도록.
+            //   1차/2차 plant: τ_1 (지배 시정수) — SIMC aggressive 룰.
+            // 사용자 슬라이더 값은 무시하고 자동값을 사용. AutoTune 끝나면 슬라이더에
+            // 선택된 값을 반영해 사용자가 확인 가능. 직접 다른 Ts 원하면 슬라이더 조정 후
+            // 별도로 (Compute FRIT 등) 시도.
+            double targetTs;
+            if (plant.HasIntegrator)
+            {
+                // 적분기 plant: τ_2 (rate damping) 가 자연 closed-loop 시정수.
+                // τ_2 가 너무 작으면 (pure double integrator 등) 10·dt 정도가 합리적 default.
+                targetTs = (plant.Tau2 > 3.0 * dt) ? plant.Tau2 : 10.0 * dt;
+            }
+            else
+            {
+                targetTs = plant.Tau1;
+            }
             targetTs = Math.Max(3.0 * dt, Math.Min(5.0, targetTs));
 
             SimcResult simc = DesignSimcPid(plant, targetTs);
