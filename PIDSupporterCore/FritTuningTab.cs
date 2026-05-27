@@ -236,7 +236,6 @@ namespace PIDSupporter
             //   대부분 데이터를 살림 → CRLB 정밀도 ↑.
             // 100 = 보수적 (≈2초) — 포화 이후 모든 샘플 down-weight. 데이터 손실 큼.
             public int   TransientTailSamples = 0;
-            public float MaxRecordingSec = 60.0f;       // 수집 안전 상한 (이 시간 넘으면 fail or 강제 종료)
 
             // ===== 가진(Excitation): 플랜트를 흔들어서 데이터를 만드는 신호 =====
             public bool ExciteEnabled = true;       // 가진 켤지
@@ -461,7 +460,7 @@ namespace PIDSupporter
         //
         //   8) 종료 판정:
         //      EffectiveValidCount ≥ MinSamples  →  Computing 전환
-        //      T > MaxRecordingSec               →  최소 256 이상이면 진행 / 아니면 Fail
+        //      (시간 상한 없음 — 적응형 진폭이 비포화로 수렴할 때까지 계속 수집)
         //
         // ─────────────────────────────────────────────────────────────────────
         // 핵심 컨셉: "수집 vs 활용" 분리
@@ -622,31 +621,14 @@ namespace PIDSupporter
                     _sess.LastMessage = $"Collecting... valid {_sess.EffectiveValidCount}/{_s.MinSamples}  (total {_sess.U.Count}, sat {_sess.SaturatedCount}, boost {_sess.AdaptiveBoostCount}) / 수집중... 유효 {_sess.EffectiveValidCount}/{_s.MinSamples}";
                 }
 
-                // 자동 튜닝 종료 조건
-                if (_autoState == AutoTuneState.Recording)
+                // 자동 튜닝 종료 조건: 비포화 유효 샘플이 MinSamples 에 도달하면 종료.
+                // 시간 상한 없음 — 포화율이 높아도 적응형 진폭이 결국 가진을 줄여 비포화로 수렴.
+                if (_autoState == AutoTuneState.Recording
+                    && _sess.EffectiveValidCount >= _s.MinSamples)
                 {
-                    if (_sess.EffectiveValidCount >= _s.MinSamples)
-                    {
-                        StopRecording();
-                        _autoState = AutoTuneState.Computing;
-                        _sess.LastMessage = "Auto-tune: analyzing... / 자동 튜닝: 데이터 분석 중...";
-                    }
-                    else if (_sess.T > _s.MaxRecordingSec)
-                    {
-                        // 안전 상한 초과 — 최소 유효 샘플 256 이상이면 그래도 진행, 아니면 실패.
-                        if (_sess.EffectiveValidCount >= 256)
-                        {
-                            StopRecording();
-                            _autoState = AutoTuneState.Computing;
-                            _sess.LastMessage = $"Timeout {_s.MaxRecordingSec:0}s — proceeding with {_sess.EffectiveValidCount} valid samples / 타임아웃, {_sess.EffectiveValidCount}개로 진행";
-                        }
-                        else
-                        {
-                            StopRecording();
-                            _autoState = AutoTuneState.Failed;
-                            _sess.LastMessage = $"Auto-tune failed: only {_sess.EffectiveValidCount} valid samples in {_s.MaxRecordingSec:0}s. Check PID / 자동 튜닝 실패: {_s.MaxRecordingSec:0}초 내 유효 샘플 {_sess.EffectiveValidCount}개. PID 점검 필요.";
-                        }
-                    }
+                    StopRecording();
+                    _autoState = AutoTuneState.Computing;
+                    _sess.LastMessage = "Auto-tune: analyzing... / 자동 튜닝: 데이터 분석 중...";
                 }
             }
             catch (Exception e)

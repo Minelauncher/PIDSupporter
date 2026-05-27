@@ -15,8 +15,8 @@
   → 가진 신호 (멀티사인 + 저주파 square) 를 SetPoint 에 주입
   → 현재 PID C₀ 로 폐루프 데이터 (u, y) + 포화 플래그 연속 수집 (블록 분리 없음)
   → EffectiveValidCount (= transient-tail 밖 깨끗 샘플) ≥ MinSamples 까지 대기
-       · 적응형 진폭이 자동 조정 → 결국 안정 영역으로 수렴
-       · 안전 상한 (MaxRecordingSec, 기본 60초) 초과 시 fail
+       · 적응형 진폭이 자동 조정 → 결국 비포화 영역으로 수렴
+       · 시간 상한 없음 (사용자가 멈추기 전까지 계속 수집)
   → τ_p 추정 (y 자기상관 → 1/e drop)
   → Ts = 2·τ_p (SIMC balanced, 클램프 [0.1, 5.0])
   → FRIT 1회 (시간 영역 IIR + 가중 LS + LM)
@@ -470,12 +470,7 @@ LM 2차 → 반복
 - 매우 긴 포화 (>50틱) → 진단 단계가 차단했어야 함. 진단 통과 후 발생하면 IRLS 보호 약하지만 매우 드문 케이스.
 
 ### 9.6 EffectiveValidCount 기반 종료
-수집은 `EffectiveValidCount ≥ MinSamples` 까지 계속. 적응형 진폭이 자동으로 진폭을 줄여서 결국 비포화 영역으로 수렴 → 깨끗한 샘플이 쌓임.
-
-### 9.7 안전 상한
-`_sess.T > MaxRecordingSec` (기본 60초) 시점:
-- `EffectiveValidCount ≥ 256` → 그 데이터로 진행
-- `< 256` → fail (기체가 정상 비행 상태가 아닌 것으로 판단)
+수집은 `EffectiveValidCount ≥ MinSamples` 까지 계속. 적응형 진폭이 자동으로 진폭을 줄여서 결국 비포화 영역으로 수렴 → 깨끗한 샘플이 쌓임. 시간 상한은 없음 — 사용자가 직접 멈추지 않는 한 비포화 샘플이 모일 때까지 계속 녹화.
 
 ---
 
