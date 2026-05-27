@@ -1444,7 +1444,9 @@ namespace PIDSupporter
             else
             {
                 tau_p = EstimateDominantTau(y, dt);
-                tauSrc = "autocorr";
+                tauSrc = (_s.ExciteWave == WaveType.MultiSine && !string.IsNullOrEmpty(_fopdtLastFailReason))
+                    ? $"autocorr — fopdt failed: {_fopdtLastFailReason}"
+                    : "autocorr";
             }
 
             // ── Ts sweep + Td 안전 체크 ──
@@ -1491,13 +1493,13 @@ namespace PIDSupporter
                 }
                 catch (Exception ex)
                 {
-                    lastFailReason = $"k={k:0.2f}: {ex.Message}";
+                    lastFailReason = $"k={k:0.00}: {ex.Message}";
                     continue;
                 }
 
                 if (r.Kp <= 0 || double.IsNaN(r.Rmse))
                 {
-                    lastFailReason = $"k={k:0.2f}: degenerate (Kp={r.Kp:0.000})";
+                    lastFailReason = $"k={k:0.00}: degenerate (Kp={r.Kp:0.000})";
                     continue;
                 }
 
@@ -1552,7 +1554,7 @@ namespace PIDSupporter
             string conv = best.Converged ? "converged" : "max-iter";
             string warn = string.IsNullOrEmpty(best.Warning) ? "" : " [⚠ " + best.Warning + "]";
             _sess.LastMessage =
-                $"Done | τ_p≈{tau_p:0.00}s ({tauSrc}) → Ts={bestTs:0.00}s (k={bestFactor:0.2f}, safe {safeCount}/{factors.Length}) " +
+                $"Done | τ_p≈{tau_p:0.00}s ({tauSrc}) → Ts={bestTs:0.00}s (k={bestFactor:0.00}, safe {safeCount}/{factors.Length}) " +
                 $"({conv}, {best.Iterations} iter) " +
                 $"Kp={best.Kp:0.000} Ti={best.Ti:0.1} Td={best.Td:0.00} rmse={best.Rmse:0.0000}{warn}{safetyWarn}";
         }
@@ -2684,15 +2686,19 @@ namespace PIDSupporter
         /// 포화 샘플은 ARX regressor 에서 제외.
         /// 응답이 너무 작거나 (signal/noise) ARX 적합 실패 시 NaN 반환 → 호출측 폴백.
         /// </summary>
+        // FOPDT fit 실패 시 마지막 사유 (UI 메시지에 표시).
+        private static string _fopdtLastFailReason = "";
+
         private static double EstimateTauFromFopdtFit(double[] u, double[] y, bool[] sat, double dt, double theta)
         {
             int nPrelude = (int)Math.Round(STEP_PRELUDE_SEC / dt);
             if (u.Length < nPrelude || y.Length < nPrelude || sat.Length < nPrelude || nPrelude < 12)
-                return double.NaN;
+            { _fopdtLastFailReason = "data short"; return double.NaN; }
 
             int delayN = Math.Max(0, (int)Math.Round(theta / dt));
             int kStart = 1 + delayN;
-            if (kStart >= nPrelude - 2) return double.NaN;
+            if (kStart >= nPrelude - 2)
+            { _fopdtLastFailReason = "delay > prelude"; return double.NaN; }
 
             // 응답 크기 sanity (잡음 수준 변동이면 fit 무의미)
             double yMax = y[0], yMin = y[0];
@@ -2703,7 +2709,7 @@ namespace PIDSupporter
             }
             double yStd = StdDev(y);
             if ((yMax - yMin) < Math.Max(1e-4, 0.1 * yStd))
-                return double.NaN;
+            { _fopdtLastFailReason = $"weak response (Δy={yMax - yMin:0.000})"; return double.NaN; }
 
             double y0 = y[0];
             double u0 = u[0];
@@ -2726,20 +2732,27 @@ namespace PIDSupporter
                 sYtU += yt * u1;
                 count++;
             }
-            if (count < 6) return double.NaN;
+            if (count < 6)
+            { _fopdtLastFailReason = $"too few clean samples ({count}/{nPrelude - kStart})"; return double.NaN; }
 
             double det = sYY * sUU - sYU * sYU;
-            if (Math.Abs(det) < 1e-12) return double.NaN;
+            if (Math.Abs(det) < 1e-12)
+            { _fopdtLastFailReason = "singular (u and y collinear)"; return double.NaN; }
 
             double a = (sUU * sYtY - sYU * sYtU) / det;
             // b = (sYY*sYtU - sYU*sYtY) / det;  // K 추정에는 쓰지만 τ_p 만 필요하면 생략
 
             // a ∈ (0, 1) 이어야 1st-order 안정 plant. 벗어나면 모델 부적합 → 폴백.
-            if (double.IsNaN(a) || a <= 0.0 || a >= 1.0) return double.NaN;
+            if (double.IsNaN(a))
+            { _fopdtLastFailReason = "NaN in fit"; return double.NaN; }
+            if (a <= 0.0 || a >= 1.0)
+            { _fopdtLastFailReason = $"non-1st-order plant (a={a:0.000}, not in (0,1))"; return double.NaN; }
 
             double tau_p = -dt / Math.Log(a);
-            if (double.IsNaN(tau_p) || tau_p <= 0) return double.NaN;
+            if (double.IsNaN(tau_p) || tau_p <= 0)
+            { _fopdtLastFailReason = "τ_p invalid"; return double.NaN; }
 
+            _fopdtLastFailReason = "";
             return Math.Max(3.0 * dt, Math.Min(1.0, tau_p));
         }
 
