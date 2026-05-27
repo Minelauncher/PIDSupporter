@@ -1428,44 +1428,101 @@ namespace PIDSupporter
             double ti0 = this._focus.Pid.kI.Us;
             double td0 = this._focus.Pid.kD.Us;
 
-            // ── SIMC 기반 Ts 자동 결정 ──
-            // 우선 step prelude (MultiSine 첫 0.5초) 의 63.2% rise 시간으로 τ_p 직접 측정.
+            // ── τ_p 추정 ──
+            // MultiSine 가진 시: step prelude (첫 0.5초) 의 63.2% rise 시간으로 τ_p 직접 측정.
             // prelude 가 없거나 응답이 약하면 y 자기상관 1/e 방식으로 폴백.
-            //
-            // SIMC 규칙 (Skogestad):
-            //   τ_c = τ_p   : aggressive (FTD 환경 기본 - 액추에이터 빠름)
-            //   τ_c = 2·τ_p : balanced
-            //   τ_c = 4·τ_p : conservative
-            // 과거: 2·τ_p balanced + 상한 5.0s 사용했으나 자기상관 추정기가 저주파 드리프트에
-            // 약해서 τ_p 과대추정 → Ts 과대 → LM 이 파라미터 상한 (Ti=250, Td=10) 으로 밀려나는
-            // 사례 발생. 현재: 1·τ_p aggressive + 상한 1.0s + 안전 하한 3·dt.
             double tau_p_prelude = (_s.ExciteWave == WaveType.MultiSine)
                 ? EstimateTauFromStepPrelude(y, dt)
                 : double.NaN;
             double tau_p = !double.IsNaN(tau_p_prelude) ? tau_p_prelude : EstimateDominantTau(y, dt);
             string tauSrc = !double.IsNaN(tau_p_prelude) ? "prelude" : "autocorr";
 
-            double bestTs = Math.Max(3.0 * dt, Math.Min(1.0, 1.0 * tau_p));   // SIMC aggressive + 안전 클램프
-            _s.SettlingTimeTs = (float)bestTs;
+            // ── Ts sweep + Td 안전 체크 ──
+            // SIMC 일반화 형태: Ts = max(k·τ_p, k·τ_M).
+            // FTD 표준 케이스에선 τ_M ≈ dt 라 k·τ_p 가 항상 우세하지만,
+            // 사용자가 τ_M 슬라이더를 올려놓은 경우엔 k·τ_M 이 하한이 됨.
+            //
+            // 후보를 공격적(k=1) → 보수적(k=4) 순으로 시도해서, 첫 번째 "안전" 후보 채택.
+            // 안전 기준 (D 진동 방지):
+            //   · LM 수렴 + Kp > 0 + RMSE 정상
+            //   · Td/Ti < 0.3   (산업 표준 PID 비율)
+            //   · Td/dt < 10    (이산 미분의 per-sample 노이즈 게인 상한)
+            // 모든 후보가 실패하면 가장 보수적인 후보의 결과로 폴백 (경고 표시).
+            double tauM = Math.Max(dt, (double)_s.ModelDelayTau);
+            double[] factors = { 1.0, 1.5, 2.0, 3.0, 4.0 };
 
-            FritResult best;
-            try
+            FritResult best = default;
+            bool hasBest = false;
+            double bestTs = 0.0;
+            double bestFactor = 0.0;
+            FritResult fallback = default;
+            bool hasFallback = false;
+            double fallbackTs = 0.0;
+            double fallbackFactor = 0.0;
+            string lastFailReason = "";
+
+            for (int i = 0; i < factors.Length; i++)
             {
-                best = ComputeFritPid(u, y, sat, dt, _s, kp0, ti0, td0);
-            }
-            catch (Exception ex)
-            {
-                _autoState = AutoTuneState.Failed;
-                _sess.LastMessage = $"FRIT failed at Ts={bestTs:0.00}: {ex.Message} / FRIT 실패";
-                return;
+                double k = factors[i];
+                double ts = Math.Max(k * tau_p, k * tauM);
+                ts = Math.Max(3.0 * dt, Math.Min(1.0, ts));
+                _s.SettlingTimeTs = (float)ts;
+
+                FritResult r;
+                try
+                {
+                    r = ComputeFritPid(u, y, sat, dt, _s, kp0, ti0, td0);
+                }
+                catch (Exception ex)
+                {
+                    lastFailReason = $"k={k:0.0}: {ex.Message}";
+                    continue;
+                }
+
+                if (r.Kp <= 0 || double.IsNaN(r.Rmse))
+                {
+                    lastFailReason = $"k={k:0.0}: degenerate (Kp={r.Kp:0.000})";
+                    continue;
+                }
+
+                // 가장 보수적인 (마지막) 결과는 fallback 으로 보관
+                fallback = r;
+                hasFallback = true;
+                fallbackTs = ts;
+                fallbackFactor = k;
+
+                // 안전 체크
+                double tdOverTi = r.Td / Math.Max(1e-6, r.Ti);
+                double tdOverDt = r.Td / dt;
+
+                if (tdOverTi < 0.3 && tdOverDt < 10.0)
+                {
+                    // 첫 번째 안전 후보 채택 (= 가장 공격적인 안전 후보)
+                    best = r;
+                    hasBest = true;
+                    bestTs = ts;
+                    bestFactor = k;
+                    break;
+                }
             }
 
-            if (best.Kp <= 0 || double.IsNaN(best.Rmse))
+            string safetyWarn = "";
+            if (!hasBest)
             {
-                _autoState = AutoTuneState.Failed;
-                _sess.LastMessage = $"FRIT degenerate at Ts={bestTs:0.00} (Kp={best.Kp:0.000}) / FRIT 결과 비정상";
-                return;
+                if (!hasFallback)
+                {
+                    _autoState = AutoTuneState.Failed;
+                    _sess.LastMessage = $"All Ts candidates failed. Last: {lastFailReason} / 모든 Ts 후보 실패";
+                    return;
+                }
+                // 폴백 사용 + 경고
+                best = fallback;
+                bestTs = fallbackTs;
+                bestFactor = fallbackFactor;
+                safetyWarn = " ⚠ no safe Ts found, using conservative fallback";
             }
+
+            _s.SettlingTimeTs = (float)bestTs;  // UI 슬라이더에 최종 선택 반영
 
             _sess.HasResult = true;
             _sess.Kp = best.Kp; _sess.Ti = best.Ti; _sess.Td = best.Td;
@@ -1476,9 +1533,9 @@ namespace PIDSupporter
             string conv = best.Converged ? "converged" : "max-iter";
             string warn = string.IsNullOrEmpty(best.Warning) ? "" : " [⚠ " + best.Warning + "]";
             _sess.LastMessage =
-                $"Done | τ_p≈{tau_p:0.00}s ({tauSrc}) → Ts={bestTs:0.00}s (SIMC aggressive) " +
+                $"Done | τ_p≈{tau_p:0.00}s ({tauSrc}) → Ts={bestTs:0.00}s (k={bestFactor:0.0}·max(τ_p,τ_M)) " +
                 $"({conv}, {best.Iterations} iter) " +
-                $"Kp={best.Kp:0.000} Ti={best.Ti:0.1} Td={best.Td:0.00} rmse={best.Rmse:0.0000}{warn}";
+                $"Kp={best.Kp:0.000} Ti={best.Ti:0.1} Td={best.Td:0.00} rmse={best.Rmse:0.0000}{warn}{safetyWarn}";
         }
 
         private void ValidateAxes()
