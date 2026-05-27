@@ -1437,62 +1437,91 @@ namespace PIDSupporter
             // 안전 기준 (D 진동 방지):
             //   · LM 수렴 + Kp > 0 + RMSE 정상
             //   · Td/Ti < 0.3   (산업 표준 PID 비율)
-            //   · Td/dt < 10    (이산 미분의 per-sample 노이즈 게인 상한)
+            //   · Td/Ts < 0.5   (SIMC 물리 한계: Td 가 Ts 절반 이하)
             // 모든 후보가 실패하면 가장 보수적인 (큰 Ts) 후보의 결과로 폴백 (경고 표시).
+            //
+            // ── Multistart LM ──
+            // FRIT cost 가 비선형 (non-convex) 이라 LM 시작점에 따라 다른 local minimum 으로 수렴.
+            // 사용자 현재 PID 가 weird 한 영역에 있으면 거기 근처 weird local min 잡힘
+            // (iteration drift 의 근본 원인). 해결책: 매 Ts 후보마다 여러 시드로 LM 돌리고
+            // 안전 통과한 것 중 RMSE 최저 선택.
+            // 시드: (1) 사용자 PID  (2) 표준 default  (3) conservative
             double tauM = Math.Max(dt, (double)_s.ModelDelayTau);
             int[] dtMultiples = { 3, 5, 7, 10, 15, 20, 30, 50, 80, 200 };
 
             FritResult best = default;
             bool hasBest = false;
             double bestTs = 0.0;
+            string bestSeedLabel = "";
             FritResult fallback = default;
             bool hasFallback = false;
             double fallbackTs = 0.0;
+            string fallbackSeedLabel = "";
             int safeCount = 0;
+            int totalTrials = 0;
             string lastFailReason = "";
 
             for (int i = 0; i < dtMultiples.Length; i++)
             {
                 double ts = dtMultiples[i] * dt;
-                // 사용자가 τ_M 슬라이더를 올려놓은 경우: closed-loop 은 delay 보다 빠를 수 없음 → 하한.
                 ts = Math.Max(tauM, ts);
                 ts = Math.Max(3.0 * dt, Math.Min(5.0, ts));
                 _s.SettlingTimeTs = (float)ts;
 
-                FritResult r;
-                try
+                // Multistart 시드 3종 (이 Ts 에 맞춰 ts 의존 시드 포함).
+                // (Kp, Ti, Td, label) tuples — value tuple
+                var seeds = new (double Kp, double Ti, double Td, string label)[]
                 {
-                    r = ComputeFritPid(u, y, sat, dt, _s, kp0, ti0, td0);
-                }
-                catch (Exception ex)
+                    (kp0, ti0, td0, "user"),
+                    (0.10, Math.Max(0.5, ts * 2.0), 0.05, "default"),
+                    (0.05, Math.Max(0.5, ts * 4.0), 0.02, "conservative"),
+                };
+
+                foreach (var seed in seeds)
                 {
-                    lastFailReason = $"Ts={ts:0.000}: {ex.Message}";
-                    continue;
-                }
-
-                if (r.Kp <= 0 || double.IsNaN(r.Rmse))
-                {
-                    lastFailReason = $"Ts={ts:0.000}: degenerate (Kp={r.Kp:0.000})";
-                    continue;
-                }
-
-                // 가장 보수적인 성공 후보 (큰 Ts) 갱신: 매 성공마다 덮어쓰기.
-                fallback = r;
-                hasFallback = true;
-                fallbackTs = ts;
-
-                // 안전 체크
-                double tdOverTi = r.Td / Math.Max(1e-6, r.Ti);
-                double tdOverDt = r.Td / dt;
-
-                if (tdOverTi < 0.3 && tdOverDt < 10.0)
-                {
-                    safeCount++;
-                    if (!hasBest)
+                    totalTrials++;
+                    FritResult r;
+                    try
                     {
-                        best = r;
-                        hasBest = true;
-                        bestTs = ts;
+                        r = ComputeFritPid(u, y, sat, dt, _s, seed.Kp, seed.Ti, seed.Td);
+                    }
+                    catch (Exception ex)
+                    {
+                        lastFailReason = $"Ts={ts:0.000} seed={seed.label}: {ex.Message}";
+                        continue;
+                    }
+
+                    if (r.Kp <= 0 || double.IsNaN(r.Rmse))
+                    {
+                        lastFailReason = $"Ts={ts:0.000} seed={seed.label}: degenerate";
+                        continue;
+                    }
+
+                    // 가장 보수적인 성공 후보 (큰 Ts) 갱신: 마지막 성공 = 가장 큰 Ts × 마지막 시드.
+                    fallback = r;
+                    hasFallback = true;
+                    fallbackTs = ts;
+                    fallbackSeedLabel = seed.label;
+
+                    // 안전 체크 (Td/Ts 비율 기반, ts-aware)
+                    double tdOverTi = r.Td / Math.Max(1e-6, r.Ti);
+                    double tdOverTs = r.Td / Math.Max(1e-6, ts);
+
+                    if (tdOverTi < 0.3 && tdOverTs < 0.5)
+                    {
+                        safeCount++;
+                        // 안전 통과한 것 중 RMSE 최저 채택.
+                        // (현재 best 없거나, 이 후보 RMSE 가 더 작거나, 같은 RMSE 면 더 작은 ts 선호)
+                        bool isBetter = !hasBest
+                            || r.Rmse < best.Rmse * 0.99
+                            || (Math.Abs(r.Rmse - best.Rmse) < best.Rmse * 0.01 && ts < bestTs);
+                        if (isBetter)
+                        {
+                            best = r;
+                            hasBest = true;
+                            bestTs = ts;
+                            bestSeedLabel = seed.label;
+                        }
                     }
                 }
             }
@@ -1503,16 +1532,17 @@ namespace PIDSupporter
                 if (!hasFallback)
                 {
                     _autoState = AutoTuneState.Failed;
-                    _sess.LastMessage = $"All Ts candidates failed. Last: {lastFailReason} / 모든 Ts 후보 실패";
+                    _sess.LastMessage = $"All trials failed. Last: {lastFailReason} / 모든 시도 실패";
                     return;
                 }
                 // 폴백 사용 + 경고
                 best = fallback;
                 bestTs = fallbackTs;
+                bestSeedLabel = fallbackSeedLabel;
                 safetyWarn = " ⚠ no safe Ts found, using conservative fallback";
             }
 
-            _s.SettlingTimeTs = (float)bestTs;  // UI 슬라이더에 최종 선택 반영
+            _s.SettlingTimeTs = (float)bestTs;
 
             _sess.HasResult = true;
             _sess.Kp = best.Kp; _sess.Ti = best.Ti; _sess.Td = best.Td;
@@ -1523,7 +1553,7 @@ namespace PIDSupporter
             string conv = best.Converged ? "converged" : "max-iter";
             string warn = string.IsNullOrEmpty(best.Warning) ? "" : " [⚠ " + best.Warning + "]";
             _sess.LastMessage =
-                $"Done | Ts={bestTs:0.000}s (safe {safeCount}/{dtMultiples.Length}) " +
+                $"Done | Ts={bestTs:0.000}s seed={bestSeedLabel} (safe {safeCount}/{totalTrials}) " +
                 $"({conv}, {best.Iterations} iter) " +
                 $"Kp={best.Kp:0.000} Ti={best.Ti:0.0} Td={best.Td:0.00} rmse={best.Rmse:0.0000}{warn}{safetyWarn}";
         }
