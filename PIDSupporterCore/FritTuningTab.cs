@@ -710,13 +710,13 @@ namespace PIDSupporter
                 dtF, 1.0f, dtF, "0.000", "Ts"
             ));
 
-            // tau_M
+            // tau_M : dt 단위 그리드 (자동 튜닝이 τ = dt 로 세팅하므로 정확히 표시되게).
             table.AddInterpretter(MakeSliderFloat(
                 "Delay τ_M (s)",
-                "Plant delay (dead-time). 0 = no delay.\nAuto-tuning estimates this automatically.\n---\n플랜트 지연. 0이면 지연 없음.\n자동 튜닝 시 자동 추정됩니다.",
+                "Plant delay (dead-time). 0 = no delay.\nGrid is dt (FTD tick).\nAuto-tuning estimates this automatically.\n---\n플랜트 지연. 0이면 지연 없음.\n그리드 단위는 dt(FTD 틱).\n자동 튜닝 시 자동 추정됩니다.",
                 () => _s.ModelDelayTau,
                 f => _s.ModelDelayTau = Clamp(f, 0f, 5f),
-                0f, 5f, 0.01f, "0.00", "tau"
+                0f, 5f, dtF, "0.000", "tau"
             ));
 
             // min samples
