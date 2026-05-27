@@ -27,7 +27,7 @@
 // │                                                                          │
 // │   [Auto Tune] → 멀티사인 + square wave 주입                              │
 // │              → 폐루프 (u, y, Saturated) 연속 수집                         │
-// │              → EffectiveValidCount ≥ MinSamples (60s 안전 상한)          │
+// │              → EffectiveValidCount ≥ MinSamples (시간 상한 없음)         │
 // │              → Ts 자동 스캔 (10단계 0.1~1.0초)                            │
 // │              → 각 Ts: IRLS (3 iter) × LM (30 iter) + CRLB                │
 // │              → 파라미터 안정성 기반 best Ts 선택                          │
