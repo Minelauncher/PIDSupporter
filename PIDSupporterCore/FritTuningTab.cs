@@ -383,6 +383,10 @@ namespace PIDSupporter
 
         // 자연 변동 측정: 녹화 전 y를 링버퍼에 모아서 std 계산
         private const int NaturalBufSize = 60; // 약 1.2초 분량
+
+        // Step prelude 길이 (초). MultiSine 가진 시 최초 이 시간 동안 일정 SP offset 유지.
+        // ApplyExcitation 및 EstimateTauFromStepPrelude 에서 공유.
+        private const double STEP_PRELUDE_SEC = 0.5;
         private readonly double[] _naturalYBuf = new double[NaturalBufSize];
         private int _naturalYIdx = 0;
         private int _naturalYCount = 0;
@@ -710,13 +714,18 @@ namespace PIDSupporter
             table.SpaceBelow = 10f;
             table.SqueezeTable = false;
 
-            // t_s
+            // dt 를 슬라이더 그리드 단위로 사용 (FTD 50Hz 기준 ~0.02s)
+            float dtF = (float)Time.fixedDeltaTime;
+            if (dtF <= 0f) dtF = 0.02f;
+
+            // t_s : dt 단위 (1·dt ~ 50·dt = 1.0s).
+            // 내부 ComputeFritPid 가 추가로 2.5·dt 하한을 적용해 LP 안정성 보장.
             table.AddInterpretter(MakeSliderFloat(
                 "Settling time t_s (s)",
-                "Target settling time. Smaller = faster response.\nAuto-tuning estimates this automatically.\n---\n목표 정착시간. 작을수록 빠른 응답.\n자동 튜닝 시 자동 추정됩니다.",
+                "Target settling time. Smaller = faster response.\nGrid is dt (FTD tick); min 1·dt, max 1s.\nAuto-tuning estimates this automatically.\n---\n목표 정착시간. 작을수록 빠른 응답.\n그리드 단위는 dt(FTD 틱); 최소 1·dt, 최대 1초.\n자동 튜닝 시 자동 추정됩니다.",
                 () => _s.SettlingTimeTs,
-                f => _s.SettlingTimeTs = Clamp(f, 0.2f, 60f),
-                0.2f, 60f, 0.1f, "0.0", "Ts"
+                f => _s.SettlingTimeTs = Clamp(f, dtF, 1.0f),
+                dtF, 1.0f, dtF, "0.000", "Ts"
             ));
 
             // tau_M
@@ -1438,13 +1447,23 @@ namespace PIDSupporter
             double td0 = this._focus.Pid.kD.Us;
 
             // ── SIMC 기반 Ts 자동 결정 ──
-            // y(t) 자기상관 → 지배 plant 시정수 τ_p 추정 → Ts = 2·τ_p (SIMC balanced)
-            //   τ_c = τ_p     : aggressive (빠른 응답, 위험 ↑)
-            //   τ_c = 2·τ_p   : balanced (기본)
-            //   τ_c = 4·τ_p   : conservative (안전 ↑, 굼뜸)
-            // Skogestad SIMC 규칙 (산업 표준). 고관성 plant 일수록 τ_p 크고 → Ts 도 자연히 큼.
-            double tau_p = EstimateDominantTau(y, dt);
-            double bestTs = Math.Max(0.1, Math.Min(5.0, 2.0 * tau_p));   // SIMC balanced + 안전 클램프
+            // 우선 step prelude (MultiSine 첫 0.5초) 의 63.2% rise 시간으로 τ_p 직접 측정.
+            // prelude 가 없거나 응답이 약하면 y 자기상관 1/e 방식으로 폴백.
+            //
+            // SIMC 규칙 (Skogestad):
+            //   τ_c = τ_p   : aggressive (FTD 환경 기본 - 액추에이터 빠름)
+            //   τ_c = 2·τ_p : balanced
+            //   τ_c = 4·τ_p : conservative
+            // 과거: 2·τ_p balanced + 상한 5.0s 사용했으나 자기상관 추정기가 저주파 드리프트에
+            // 약해서 τ_p 과대추정 → Ts 과대 → LM 이 파라미터 상한 (Ti=250, Td=10) 으로 밀려나는
+            // 사례 발생. 현재: 1·τ_p aggressive + 상한 1.0s + 안전 하한 3·dt.
+            double tau_p_prelude = (_s.ExciteWave == WaveType.MultiSine)
+                ? EstimateTauFromStepPrelude(y, dt)
+                : double.NaN;
+            double tau_p = !double.IsNaN(tau_p_prelude) ? tau_p_prelude : EstimateDominantTau(y, dt);
+            string tauSrc = !double.IsNaN(tau_p_prelude) ? "prelude" : "autocorr";
+
+            double bestTs = Math.Max(3.0 * dt, Math.Min(1.0, 1.0 * tau_p));   // SIMC aggressive + 안전 클램프
             _s.SettlingTimeTs = (float)bestTs;
 
             FritResult best;
@@ -1475,7 +1494,7 @@ namespace PIDSupporter
             string conv = best.Converged ? "converged" : "max-iter";
             string warn = string.IsNullOrEmpty(best.Warning) ? "" : " [⚠ " + best.Warning + "]";
             _sess.LastMessage =
-                $"Done | τ_p≈{tau_p:0.00}s → Ts={bestTs:0.00}s (SIMC balanced) " +
+                $"Done | τ_p≈{tau_p:0.00}s ({tauSrc}) → Ts={bestTs:0.00}s (SIMC aggressive) " +
                 $"({conv}, {best.Iterations} iter) " +
                 $"Kp={best.Kp:0.000} Ti={best.Ti:0.1} Td={best.Td:0.00} rmse={best.Rmse:0.0000}{warn}";
         }
@@ -1767,10 +1786,9 @@ namespace PIDSupporter
 
             double x = 0.0;
 
-            // ── Step prelude: 최초 0.5초 동안 일정 SP offset 유지 (DC 정보 주입) ──
+            // ── Step prelude: 최초 STEP_PRELUDE_SEC 동안 일정 SP offset 유지 (DC 정보 주입) ──
             // 멀티사인은 DC 성분 없음 → FRIT 의 DC 동작 매칭이 외삽 영역이 됨.
-            // 0.5초 step 은 DC 방향 Fisher information 보강 → 세 방법 모두 DC 분산 감소.
-            const double STEP_PRELUDE_SEC = 0.5;
+            // step 구간은 DC 방향 Fisher information 보강 + τ_p 직접 추정용 데이터.
             if (_s.ExciteWave == WaveType.MultiSine && _sess.T < STEP_PRELUDE_SEC)
             {
                 x = amp; // 일정 양의 offset
@@ -2020,7 +2038,8 @@ namespace PIDSupporter
             // 1차 LP H₁(z) = (1 + z⁻¹) / (β₀ + β₁ z⁻¹)
             //   β₀ = 1 + 2aM/dt,  β₁ = 1 - 2aM/dt
             // nM 번 캐스케이드. 순수 지연은 정수 틱 shift 로 처리.
-            double ts = Math.Max(0.05, s.SettlingTimeTs);
+            // 안전 하한: 2.5·dt (β₁ ≤ 0 보장, LP 안정성). dt=0.02 일 때 0.05s.
+            double ts = Math.Max(2.5 * dt, s.SettlingTimeTs);
             int nM = ClampInt(s.ModelOrderNm, 1, 10);
             double tauM = Math.Max(0.0, s.ModelDelayTau);
             double aM = 0.2 * ts;
@@ -2589,6 +2608,58 @@ namespace PIDSupporter
         }
 
         /// <summary>
+        /// Step prelude (MultiSine 가진 최초 STEP_PRELUDE_SEC 구간) 의 y 응답에서
+        /// 63.2% rise 시점을 찾아 τ_p 를 직접 측정한다.
+        /// 자기상관 방식보다 저주파 드리프트에 강함.
+        ///
+        /// 알고리즘:
+        ///   baseline = y[0]
+        ///   ss       = mean(y[0.7·N .. N-1])              ← prelude 후반 평균
+        ///   threshold = baseline + 0.632·(ss - baseline)
+        ///   τ_p = 첫 번째 y[i] 가 threshold 를 통과한 시각
+        ///
+        /// 응답 진폭이 너무 작거나 (|ss - baseline| < 잡음) prelude 길이가 충분치 않으면
+        /// NaN 을 반환하여 호출측이 자기상관 방식으로 폴백하게 한다.
+        /// </summary>
+        private static double EstimateTauFromStepPrelude(double[] y, double dt)
+        {
+            int nPrelude = (int)Math.Round(STEP_PRELUDE_SEC / dt);
+            if (y.Length < nPrelude || nPrelude < 8) return double.NaN;
+
+            double baseline = y[0];
+
+            // prelude 후반 30% 평균 = 추정 steady-state
+            int tailStart = (int)(nPrelude * 0.7);
+            double sum = 0.0;
+            int cnt = 0;
+            for (int i = tailStart; i < nPrelude; i++) { sum += y[i]; cnt++; }
+            if (cnt == 0) return double.NaN;
+            double ss = sum / cnt;
+
+            double delta = ss - baseline;
+
+            // 응답 진폭이 잡음 수준이면 추정 불가 → 폴백
+            // (전체 y 의 표준편차의 10% 이상은 변해야 step response 로 인정)
+            double yStd = StdDev(y);
+            if (Math.Abs(delta) < Math.Max(1e-4, 0.1 * yStd)) return double.NaN;
+
+            double threshold = baseline + 0.632 * delta;
+            bool rising = delta > 0;
+
+            for (int i = 1; i < nPrelude; i++)
+            {
+                bool crossed = rising ? (y[i] >= threshold) : (y[i] <= threshold);
+                if (crossed)
+                {
+                    return Math.Max(3.0 * dt, Math.Min(1.0, i * dt));
+                }
+            }
+
+            // prelude 안에 63.2% 도달 못하면 τ_p > STEP_PRELUDE_SEC 인 셈 → 상한 반환.
+            return 1.0;
+        }
+
+        /// <summary>
         /// y(t) 자기상관 (autocorrelation) 으로 지배 plant 시정수 τ_p 추정.
         ///
         /// 1st-order 시스템: R(t) = σ²·exp(-t/τ_p) → AC 가 1/e 로 떨어지는 시각이 ≈ τ_p.
@@ -2622,8 +2693,9 @@ namespace PIDSupporter
             {
                 if (AC[i].Real < threshold) { tauIdx = i; break; }
             }
-            // 0.05초 (FtD 1틱 × 2.5) ~ 5초 클램프
-            return Math.Max(0.05, Math.Min(5.0, tauIdx * dt));
+            // 3·dt ~ 1초 클램프. 과거 5초 상한은 저주파 드리프트로 인한 과대추정 시
+            // Ts 도 함께 폭주해 LM 이 발산했던 사례가 있어 1초로 좁힘.
+            return Math.Max(3.0 * dt, Math.Min(1.0, tauIdx * dt));
         }
 
         private static double EstimateSettlingTime(double[] y, double dt)
