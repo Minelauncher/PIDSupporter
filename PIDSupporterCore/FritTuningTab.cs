@@ -68,7 +68,7 @@
 //   [자체] AutoTuneCompute()                   녹화 완료 → Ts 스캔 → FRIT 결정
 //
 // ── 가진 신호 (ApplyExcitation) ──
-//   [자체] ApplyExcitation(dt)                 임펄스 패턴 (짧은 자극 + 긴 회복, 부호 교대)
+//   [자체] ApplyExcitation(dt)                 Multi-width doublet 패턴 (광대역 자극 + 평균 zero)
 //   [자체] CaptureSetPointAdjustBase()         원래 SP 백업
 //   [자체] RestoreSetPointAdjustIfNeeded()     SP 복원
 //   [자체] enum WaveType                       Off/Sine/Chirp/MultiSine
@@ -1846,24 +1846,33 @@ namespace PIDSupporter
                     }
                 case WaveType.MultiSine:
                     {
-                        // 임펄스 패턴: 짧은 임펄스 + 긴 회복 구간 N회 반복.
-                        // 각 임펄스 사이에 PID 가 plant 를 정상 자세로 회복시켜 integrator drift 누적 안 됨.
-                        // 부호 교대 (+, -, +, -, ...) 로 평균 zero 보장 → 장기 drift 0.
-                        // closed-loop 안정성 유지하면서 (u, y) 에 풍부한 transient 정보 확보.
+                        // Multi-width doublet 패턴 (aerospace 3-2-1-1 계열).
+                        // 폭이 다른 doublet (+ 직후 - pulse) 을 순서대로 적용:
+                        //   넓은 doublet  → 낮은 주파수 자극 (느린 plant 모드)
+                        //   좁은 doublet  → 높은 주파수 자극 (빠른 plant 모드)
+                        // 각 doublet 이 평균 zero 라 integrator drift 즉시 상쇄.
+                        // 그 후 긴 정적 구간에 closed-loop 자연 응답 관찰.
                         //
-                        // 한 사이클 = IMPULSE_WIDTH (자극) + (IMPULSE_PERIOD - IMPULSE_WIDTH) (회복).
-                        // 5초 주기 × 5번 = 25초 동안 5개 step-response 데이터 포인트 수집.
-                        const double IMPULSE_PERIOD = 5.0;
-                        const double IMPULSE_WIDTH = 0.3;
-                        int impulseIdx = (int)(t / IMPULSE_PERIOD);
-                        double tInPeriod = t - impulseIdx * IMPULSE_PERIOD;
-
-                        if (tInPeriod < IMPULSE_WIDTH)
-                        {
-                            double sign = (impulseIdx % 2 == 0) ? 1.0 : -1.0;
-                            x = sign * amp;
-                        }
-                        // else: 회복 구간 — x = 0, PID 가 정상 작동
+                        // 폭 W 인 doublet 의 주 자극 주파수 ≈ 1/(2W):
+                        //   1.5s → 0.33 Hz (slow modes, τ ~ 0.5-2s 인 plant)
+                        //   0.7s → 0.7 Hz  (medium, τ ~ 0.2-0.5s)
+                        //   0.3s → 1.7 Hz  (fast, τ ~ 0.1-0.2s)
+                        //
+                        // 다양한 폭으로 광대역 Fisher information → plant 시정수 모르는 상태에서도
+                        // 일부 doublet 이 plant 모드에 맞아 식별성 확보. 그래도 평균 zero 유지로 안정.
+                        //
+                        // 스케줄 (초): 6.6초 동안 자극, 이후 ~18초 정적/관찰.
+                        if (t < 1.5)        x = +amp;   // doublet 1 + (low)
+                        else if (t < 3.0)   x = -amp;   // doublet 1 -
+                        // 3.0 ~ 4.0: 1초 휴식
+                        else if (t < 4.0)   x = 0;
+                        else if (t < 4.7)   x = +amp;   // doublet 2 + (mid)
+                        else if (t < 5.4)   x = -amp;   // doublet 2 -
+                        // 5.4 ~ 6.0: 0.6초 휴식
+                        else if (t < 6.0)   x = 0;
+                        else if (t < 6.3)   x = +amp;   // doublet 3 + (high)
+                        else if (t < 6.6)   x = -amp;   // doublet 3 -
+                        // 6.6 이후: 모두 0 (긴 회복 + 정적 관찰)
                         break;
                     }
             }

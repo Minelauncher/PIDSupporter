@@ -351,24 +351,32 @@ disc < 0:  복소 conjugate 한 쌍
 ### 7.1 왜 필요한가
 PID 가 안정적으로 잘 작동하면 `u/y` 가 거의 일정 → 플랜트 정보 없음. 외부 가진으로 plant 를 흔들어 정보를 만듭니다.
 
-### 7.2 u-direct 임펄스 패턴 (현재 방식)
+### 7.2 u-direct multi-width doublet 패턴 (현재 방식)
 
-**핵심 디자인** — 가진 신호를 PID 출력 `u` 에 직접 더하고 (additive perturbation), 짧은 자극 + 긴 회복을 부호 교대로 반복.
+**핵심 디자인** — 가진 신호를 PID 출력 `u` 에 직접 더하고 (additive perturbation), 폭이 다른 doublet (+ 직후 -) 을 순차 적용해 광대역 자극 + 즉시 평균 zero.
 
 ```
-[0.0 ~ 0.3s]  u += +A   ← 임펄스 1 (양)
-[0.3 ~ 5.0s]  자극 OFF  ← PID 가 plant 복원
-[5.0 ~ 5.3s]  u += -A   ← 임펄스 2 (음, 평균 zero)
-[5.3 ~ 10.0s] 자극 OFF
-[10.0 ~ 10.3s] u += +A  ← 임펄스 3
-...
+[0.0 ~ 1.5s]   u += +A   ← doublet 1 + (slow, ~0.33Hz)
+[1.5 ~ 3.0s]   u += -A   ← doublet 1 - (mean-zero 완성)
+[3.0 ~ 4.0s]   자극 OFF
+[4.0 ~ 4.7s]   u += +A   ← doublet 2 + (medium, ~0.7Hz)
+[4.7 ~ 5.4s]   u += -A
+[5.4 ~ 6.0s]   자극 OFF
+[6.0 ~ 6.3s]   u += +A   ← doublet 3 + (fast, ~1.7Hz)
+[6.3 ~ 6.6s]   u += -A
+[6.6 ~ end ]   자극 OFF (PID 회복 + 정적 관찰)
 ```
 
-**파라미터** (코드 상수)
-- `IMPULSE_PERIOD = 5.0s` — 한 사이클 길이
-- `IMPULSE_WIDTH = 0.3s` — 임펄스 폭
-- 부호 교대 (+ - + - ...) → 평균 0 → 장기 drift 0
-- 25초 녹화 → 임펄스 5번 + 회복 구간 4번
+**왜 다양한 폭인가** — 폭 W 인 doublet 의 주 자극 주파수 ≈ 1/(2W):
+- 1.5s → 0.33Hz: 느린 plant (τ ~ 0.5-2s, 무거운 함선 같은)
+- 0.7s → 0.7Hz: 중간 (τ ~ 0.2-0.5s, 일반 항공기 roll)
+- 0.3s → 1.7Hz: 빠른 (τ ~ 0.1-0.2s, 작은 비행체 또는 fast actuator)
+
+→ plant 시정수를 모르는 상태에서도 **셋 중 하나는 plant 모드와 매칭** → Fisher Information matrix conditioning 개선 → 식별 정확도 ↑.
+
+이는 항공계 표준 3-2-1-1 maneuver 와 같은 원리. 단일 폭 가진은 정보가 한 주파수에 몰려 plant 종류 못 맞히면 식별 실패.
+
+**왜 doublet (+ 직후 -)** — pulse 쌍이 즉시 평균 zero → integrator plant 도 drift 누적 안 됨. 각 doublet 끝나는 시점에 plant 가 nominal 가까이.
 
 **왜 이게 정통인가** (산업/항공계 표준 step response autotuning 과 동일 원리)
 1. **PE (Persistent Excitation) 충분** — 각 임펄스가 broadband 임펄스 응답을 자극 → 모든 plant mode 활성화
