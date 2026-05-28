@@ -135,6 +135,7 @@ using BrilliantSkies.Ui.Consoles.Styles;    // ConsoleStyles (UI 스타일/테�
 using BrilliantSkies.Ui.Tips;               // ToolTip (마우스 올리면 나오는 설명)
 using MathNet.Numerics.IntegralTransforms;  // Fourier (FFT/IFFT)
 using MathNet.Numerics.LinearAlgebra;       // Matrix, Vector (선형대수 — SVD, QR 등)
+using System.Numerics;                       // Complex (Two-stage 의 G(z) 극점 추출)
 using UnityEngine;                          // Time.fixedDeltaTime (Unity 물리 틱 간격)
 
 namespace PIDSupporter
@@ -275,13 +276,24 @@ namespace PIDSupporter
             public int SamplesSinceLastSat;   // 마지막 포화 이후 경과 샘플 수
             public int EffectiveValidCount;   // transient tail 밖에 있는 깨끗한 샘플 누적
 
-            // 사전 진단 상태 (Diagnosing 단계, 3초 가진 OFF 관찰)
+            // 사전 진단 상태 (Diagnosing 단계, 2-phase)
+            //   Phase 0 (0-3s): 가진 OFF — limit cycle / 지속 포화 검출
+            //   Phase 1 (3-6s): 작은 perturbation — "이미 완벽 PID" 검출 (tracking_ratio < 0.05)
+            public int    DiagPhase;        // 0 또는 1
             public double DiagT;            // 진단 누적 시간 (초)
             public int    DiagSampleCount;
             public double DiagUMax, DiagUMin;
             public int    DiagSatCount;     // |u| ≥ 임계 카운트
             public int    DiagSignChanges;  // u 부호 변환 횟수
             public double DiagPrevU;        // 직전 u (부호 변환 검출용)
+
+            // Phase 1 (perturbation test) 용:
+            public double DiagYBaseline;    // Phase 0 의 y 평균 (perturbation 기준)
+            public double DiagYBaselineSum; // Phase 0 의 y 합 (mean 계산용)
+            public int    DiagYBaselineCnt;
+            public double DiagYSum;         // Phase 1 의 (y - baseline) 합
+            public double DiagYSumSq;       // Phase 1 의 (y - baseline)^2 합
+            public int    DiagYCountP1;     // Phase 1 샘플 수
 
             public double LastU;                    // 마지막 제어 출력 (참고용)
             public double NaturalYStd;              // 가진 전 자연 변동 (참고용)
@@ -308,6 +320,20 @@ namespace PIDSupporter
             public double PrbsHpfInPrev;            // 이전 input (HPF state)
             public double PrbsHpfOutPrev;           // 이전 output (HPF state)
 
+            // Adaptive PRBS bit duration — data-driven spectrum coverage.
+            //   매 K초 마다 y/r sensitivity 분석 → 부족한 band 식별 → bit_ticks 동적 조정.
+            //   bit_ticks 가 작으면 high-freq 자극, 크면 low-freq.
+            public int    PrbsBitTicks = 4;         // 현재 bit duration (틱). 초기값 = 0.1초.
+            public int    TicksSinceSpectralCheck;  // 마지막 spectral check 후 경과
+
+            // Hybrid 가진 — u-direct 보조 amp (headroom-based)
+            public double UAmpDyn;                  // 현재 u-direct base amplitude (dyn 조정)
+
+            // Information-driven termination state
+            //   매 6초 max(S) 측정 → 연속 3 windows < ε 이면 well-tuned 종료
+            public int    WellTunedConsecutiveCount;
+            public double LastMaxSensitivity;        // 가장 최근 측정된 max(S) (status 표시용)
+
             public bool HasResult;
             public double Kp, Ti, Td;
             public double KpSE, TiSE, TdSE;     // Cramér-Rao 표준오차 (NaN if 계산 실패)
@@ -330,12 +356,19 @@ namespace PIDSupporter
                 SaturatedCount = 0;
                 SamplesSinceLastSat = int.MaxValue / 2;   // 시작 시 "이미 충분히 오래 깨끗" 상태
                 EffectiveValidCount = 0;
+                DiagPhase = 0;
                 DiagT = 0;
                 DiagSampleCount = 0;
                 DiagUMax = DiagUMin = 0;
                 DiagSatCount = 0;
                 DiagSignChanges = 0;
                 DiagPrevU = 0;
+                DiagYBaseline = 0;
+                DiagYBaselineSum = 0;
+                DiagYBaselineCnt = 0;
+                DiagYSum = 0;
+                DiagYSumSq = 0;
+                DiagYCountP1 = 0;
                 LastU = 0;
                 NaturalYStd = 0;
                 // PRBS 초기화: state = 1 (어떤 non-zero seed 든 OK, 결정론적)
@@ -343,9 +376,14 @@ namespace PIDSupporter
                 PrbsTicksInBit = 0;
                 PrbsCurrentValue = 1.0;   // 첫 bit = state & 1 = 1 → +A
                 AmpDyn = 0;               // StartRecording 에서 _s.ExciteAmp 으로 설정.
+                UAmpDyn = 0;              // StartRecording 에서 초기화
                 TicksSinceAmpAdjust = 0;
                 PrbsHpfInPrev = 0;
                 PrbsHpfOutPrev = 0;
+                PrbsBitTicks = 4;         // 초기 = 0.1초 bit (broadband)
+                TicksSinceSpectralCheck = 0;
+                WellTunedConsecutiveCount = 0;
+                LastMaxSensitivity = 1.0;  // 초기 unknown
                 HasResult = false;
                 Kp = Ti = Td = FitRmse = 0;
                 KpSE = TiSE = TdSE = double.NaN;
@@ -388,6 +426,11 @@ namespace PIDSupporter
         // SetPointAdjust = FTD에서 PID의 목표값을 외부에서 조절하는 파라미터.
         private bool _hasBaseSetPointAdjust;
         private float _baseSetPointAdjust;
+
+        // u-direct excitation 용 y baseline.
+        // Diagnose Phase 0 (가진 OFF 3초) 에서 측정된 y 평균. 수집 동안 plant 가 base 에서
+        // 너무 벗어나면 (= 비행기 자세 무너지면) amp 줄여서 안전 확보.
+        private double _recordingYBaseline;
 
         // 자연 변동 측정: 녹화 전 y를 링버퍼에 모아서 std 계산
         private const int NaturalBufSize = 60; // 약 1.2초 분량
@@ -575,46 +618,63 @@ namespace PIDSupporter
 
                 _sess.T += dt;
 
-                // 자동 튜닝 종료 조건 (SE-게이트):
-                //   1. 최소: N >= MinSamples (충분한 데이터 보장)
-                //   2. SE/τ_1 < 0.2 도달 시 종료 (20% 상대 정확도 — 통계적 기준)
-                //   3. 하드 cap: N >= MinSamples * 4 도달 시 무조건 종료 (boundary 안전)
-                // 매 240 틱 (~6초) 마다 intermediate ID 실행해서 SE 검사.
+                // ── 데이터 driven 종료 (information-based) ──
+                //   매 6초 spectral monitor:
+                //     1) PRBS bit_ticks 조정 (sensitivity 큰 band 자극)
+                //     2) max(|S|) 측정
+                //   종료 조건:
+                //     A) max(S) < ε_well_tuned for 3 consecutive windows → 종료 ("well-tuned")
+                //     B) 60초 hard timeout → 종료 (정보 충분, FRIT 실행)
+                //   초기 최소: 256 samples (FFT 가능)
+                _sess.TicksSinceSpectralCheck++;
+                if (_sess.TicksSinceSpectralCheck >= SPECTRAL_INTERVAL && _sess.U.Count >= SPECTRAL_FFT_LEN)
+                {
+                    double maxS = UpdatePrbsBitTicksFromSpectrum();
+                    _sess.TicksSinceSpectralCheck = 0;
+                    if (maxS >= 0)
+                    {
+                        _sess.LastMaxSensitivity = maxS;
+                        if (maxS < WELL_TUNED_S_THRESHOLD)
+                            _sess.WellTunedConsecutiveCount++;
+                        else
+                            _sess.WellTunedConsecutiveCount = 0;
+                    }
+                }
+
+                if (_sess.U.Count % 240 == 0)
+                {
+                    _sess.LastMessage =
+                        $"Collecting... N={_sess.U.Count} ({_sess.T:0.0}s/{MAX_COLLECT_SEC:0.0}s), " +
+                        $"max|S|={_sess.LastMaxSensitivity:0.000}, well-tuned count={_sess.WellTunedConsecutiveCount}/{WELL_TUNED_CONSEC_REQUIRED}, " +
+                        $"sat={_sess.SaturatedCount}, amp={_sess.AmpDyn:0.000}/u={_sess.UAmpDyn:0.000}, bit={_sess.PrbsBitTicks} / 수집중";
+                }
+
+                // 종료 결정
                 if (_autoState == AutoTuneState.Recording)
                 {
-                    int nNow = _sess.U.Count;
-                    int hardCap = _s.MinSamples * 4;
-                    bool shouldStop = false;
-                    string stopReason = null;
+                    bool wellTuned = _sess.WellTunedConsecutiveCount >= WELL_TUNED_CONSEC_REQUIRED;
+                    bool timeout = _sess.T >= MAX_COLLECT_SEC;
 
-                    if (nNow >= hardCap)
+                    if (wellTuned)
                     {
-                        shouldStop = true;
-                        stopReason = $"hard cap ({hardCap})";
+                        // controller 가 거의 완벽 → FRIT 의미 없음
+                        StopRecording();
+                        _autoState = AutoTuneState.Done;
+                        _sess.HasResult = true;
+                        _sess.Kp = this._focus.Pid.kP.Us;
+                        _sess.Ti = this._focus.Pid.kI.Us;
+                        _sess.Td = this._focus.Pid.kD.Us;
+                        _sess.LastMessage =
+                            $"✓ Well-tuned (max|S|={_sess.LastMaxSensitivity:0.000} < {WELL_TUNED_S_THRESHOLD} for {WELL_TUNED_CONSEC_REQUIRED} windows). " +
+                            $"Controller rejects all bands → closed-loop identifiability limit. " +
+                            $"No improvement possible. / 이미 잘 튜닝됨.";
                     }
-                    else if (nNow >= _s.MinSamples && nNow % 240 == 0)
+                    else if (timeout)
                     {
-                        double seRatio = QuickIdSeRatio();
-                        if (seRatio < 0.2)
-                        {
-                            shouldStop = true;
-                            stopReason = $"SE/τ={seRatio:0.00}";
-                        }
-                        else
-                        {
-                            _sess.LastMessage = $"Collecting... N={nNow}, SE/τ={seRatio:0.00} (need <0.2), sat={_sess.SaturatedCount}, amp={_sess.AmpDyn:0.000} / 수집중";
-                        }
-                    }
-                    else if (nNow % 240 == 0)
-                    {
-                        _sess.LastMessage = $"Collecting... N={nNow}/{_s.MinSamples} (min), sat={_sess.SaturatedCount}, amp={_sess.AmpDyn:0.000} / 수집중";
-                    }
-
-                    if (shouldStop)
-                    {
+                        // 60초 도달 — 정보 풍부 (S 큼) → FRIT 실행
                         StopRecording();
                         _autoState = AutoTuneState.Computing;
-                        _sess.LastMessage = $"Auto-tune: {stopReason} reached, analyzing... / 자동 튜닝: 분석 중";
+                        _sess.LastMessage = $"Collection {MAX_COLLECT_SEC}s complete (max|S|={_sess.LastMaxSensitivity:0.000}), analyzing... / 수집 완료, 분석 중";
                     }
                 }
             }
@@ -950,7 +1010,11 @@ namespace PIDSupporter
         {
             _sess.Clear();
             _sess.Recording = true;
-            _sess.AmpDyn = Math.Max(0.001, _s.ExciteAmp);  // u-target adaptive amp: 사용자 슬라이더로 초기화
+            // Hybrid 가진 초기 amp:
+            //   SP_amp = 사용자 슬라이더 (사용자 의도 반영, sat-aware adaptive 가 자동 조정)
+            //   u_amp = 보수적 0.03 (headroom envelope 안에서 추가 안전)
+            _sess.AmpDyn = Math.Max(AMP_DYN_MIN, Math.Min(AMP_DYN_MAX, _s.ExciteAmp));
+            _sess.UAmpDyn = 0.03;
             _sess.LastMessage = "Recording started / 녹화 시작";
 
             CaptureSetPointAdjustBase();
@@ -1411,61 +1475,46 @@ namespace PIDSupporter
             double ti0 = this._focus.Pid.kI.Us;
             double td0 = this._focus.Pid.kD.Us;
 
-            // ── IV-ARX/OE (Refined Instrumental Variables) plant ID + SIMC PID ──
-            // Closed-loop ID 의 정통 표준 (Young 1980, Söderström-Stoica §8):
-            //   1. ARX OLS 로 초기 (a₁, a₂, b) 추정
-            //   2. RIV: y_sim 시뮬레이션 + r 을 instrument 로 → 편향 제거
-            //   3. 2~3회 iteration 수렴 → 점근적 OE-PEM efficiency
-            //   4. plant G 의 극점/게인 → SIMC PID
+            // ── FRIT (Fictitious Reference Iterative Tuning) — Soma/Kaneko 2004 ──
+            // Model-free PID tuning. (u, y, currentPid) 로 직접 PID 산출.
+            //   Cost: J(θ) = Σ (y - M(z)·r̃(θ))², r̃(θ) = y + C(θ)⁻¹·u
+            //   LM 최적화, 27-grid multistart (Kp/Ti/Td log-spaced).
+            //   Ts 는 사용자 슬라이더 (SettlingTimeTs) 직접 사용 — sweep 없음.
             double tauM = Math.Max(dt, (double)_s.ModelDelayTau);
+            double userTs = Math.Max(3.0 * dt, Math.Min(5.0, _s.SettlingTimeTs));
+            int nM = 2;
 
-            PlantModel plant = IdentifyPlantArx(u, y, r, sat, dt, tauM);
+            FritOptResult fr = RunFritMultistart(u, y, sat, dt, userTs, nM, tauM, kp0, ti0, td0);
 
-            if (!plant.Valid)
+            if (double.IsInfinity(fr.Cost) || double.IsNaN(fr.Cost))
             {
                 _autoState = AutoTuneState.Failed;
-                _sess.LastMessage = $"Plant ID failed: {plant.Diagnosis} / plant 식별 실패";
+                _sess.LastMessage = "FRIT failed (no valid seed converged) / FRIT 실패";
                 return;
             }
 
-            // 목표 Ts — SIMC variant 선택:
-            //   Skogestad SIMC paper 의 세 변형:
-            //     aggressive  : τ_c = τ_p  (1차) 또는 τ_2 (적분기 plant 의 rate damping)
-            //     balanced    : τ_c = 2·τ_p (또는 2·τ_2)  ← default 선택
-            //     conservative: τ_c = 4·τ_p
-            //   더 큰 τ_c = 더 보수적 = 더 안정 = 더 느린 응답.
-            //   사용자가 더 공격적 원하면 슬라이더로 작게 설정.
-            //
-            // SIMC 의 유일한 강제 한계: τ_c ≥ θ (지연 한계)
-            double charTau = plant.HasIntegrator
-                ? (plant.Tau2 > 0 ? plant.Tau2 : dt)  // 적분기엔 rate damping 이 자연 시정수
-                : plant.Tau1;
-            double targetTs = 2.0 * charTau;             // SIMC balanced
-            targetTs = Math.Max(targetTs, plant.Theta);  // SIMC physical: τ_c ≥ θ
-            // FTD slider range bound (UI constraint, not tuning heuristic)
-            targetTs = Math.Max(dt, Math.Min(5.0, targetTs));
-
-            SimcResult simc = DesignSimcPid(plant, targetTs);
-
             // FTD slider 단위로 반올림
-            double kpFinal = Math.Max(0.001, Math.Round(simc.Kp * 1000.0) / 1000.0);
-            double tiFinal = Math.Round(simc.Ti * 10.0) / 10.0;
-            double tdFinal = Math.Round(simc.Td * 100.0) / 100.0;
+            double kpFinal = Math.Max(0.001, Math.Round(fr.Kp * 1000.0) / 1000.0);
+            double tiFinal = Math.Round(fr.Ti * 10.0) / 10.0;
+            double tdFinal = Math.Round(fr.Td * 100.0) / 100.0;
 
-            _s.SettlingTimeTs = (float)targetTs;
+            // FTD slider 강제 cap
+            if (kpFinal > 1.0) kpFinal = 1.0;
+            if (tiFinal > 250.0) tiFinal = 250.0;
+            if (tiFinal < 0.1) tiFinal = 0.1;
+            if (tdFinal < 0) tdFinal = 0;
+            if (tdFinal > 10.0) tdFinal = 10.0;
 
             _sess.HasResult = true;
             _sess.Kp = kpFinal; _sess.Ti = tiFinal; _sess.Td = tdFinal;
-            _sess.KpSE = 0; _sess.TiSE = 0; _sess.TdSE = 0;  // ARX 는 G 의 SE 만 제공
-            _sess.FitRmse = plant.FitRmse;
+            _sess.KpSE = 0; _sess.TiSE = 0; _sess.TdSE = 0;
+            _sess.FitRmse = Math.Sqrt(Math.Max(0, fr.Cost));
 
             _autoState = AutoTuneState.Done;
-            double tauPct = plant.Tau1 > 0 ? (plant.TauSE / plant.Tau1 * 100.0) : 0;
             _sess.LastMessage =
-                $"Done | {simc.Form} | τ_1={plant.Tau1:0.000}s±{tauPct:0}% " +
-                $"τ_2={plant.Tau2:0.000}s K={plant.K:0.000} → Ts={targetTs:0.000}s " +
+                $"Done | FRIT (28 seeds, Ts={userTs:0.000}s) → " +
                 $"Kp={kpFinal:0.000} Ti={tiFinal:0.0} Td={tdFinal:0.00} " +
-                $"(ARX rmse={plant.FitRmse:0.0000})";
+                $"(cost={fr.Cost:0.0000}, {fr.Diag})";
         }
 
         private void ValidateAxes()
@@ -1495,27 +1544,34 @@ namespace PIDSupporter
         }
 
         // ════════════════════════════════════════════════════════════════════════
-        // OnDiagnoseTick — Auto Tune 직후 3초 사전 진단
+        // OnDiagnoseTick — Auto Tune 직후 2-phase 사전 진단 (총 6초)
         // ════════════════════════════════════════════════════════════════════════
         //
-        // 목적: 가진을 켜기 전에 현재 PID 가 "튜닝 가능한 상태" 인지 확인.
-        // 가진 OFF 상태에서 |u| 통계 만 모음 → 3초 후 판정.
+        // Phase 0 (0-3s, 가진 OFF): 현재 PID 가 *튜닝 가능 상태* 인지 확인.
+        //   판정:
+        //     1. Limit cycle: satRate > 40%, crossRate > 0.5/s, uSwing > 1.6
+        //     2. 지속 포화: satRate > 40% (진동 적음)
+        //     3. 살짝 포화: satRate 15~40% → 경고 후 phase 1 진행
+        //     4. 정상: satRate < 15% → phase 1 진행
+        //   Phase 0 의 y 평균 = baseline (phase 1 의 perturbation 기준)
         //
-        // 판정 기준 (윈도우 끝에서):
-        //   1. Limit cycle: satRate > 40%, crossRate > 0.5회/s, uSwing > 1.6
-        //      → u 가 ±포화 사이 진동. 보통 Kp 너무 큼.
-        //   2. 지속 포화: satRate > 40% (진동 적음)
-        //      → u 가 한쪽 rail 에 박혀있음.
-        //   3. 살짝 포화: satRate 15~40% → 경고 후 진행
-        //   4. 정상: satRate < 15% → 정상 진행
+        // Phase 1 (3-6s, 작은 PRBS perturbation): 현재 PID 가 *너무 완벽한지* 확인.
+        //   작은 amplitude (=0.05) PRBS 적용 → y_std 측정 → tracking_ratio = y_std/amp
+        //     - ratio < 0.05  : 완벽 추종 → "정보 부족, 튜닝 의미 없음" 종료
+        //     - 0.05 ≤ < 0.3  : 잘 작동, 정상 진행
+        //     - ratio ≥ 0.3   : 약한 PID, 정보 풍부, 정상 진행
         //
-        // 실패 시 권장 Kp = currentKp × 0.4 (limit cycle) 또는 × 0.5 (지속 포화).
+        // 학계: closed-loop identifiability — 강한 controller 일수록 tracking error 작아
+        //   plant 정보 적음 (Forssell-Ljung 1999). FRIT 도 동일 한계.
         // ════════════════════════════════════════════════════════════════════════
+        private const double DIAG_PHASE0_DUR = 3.0;
+        private const double DIAG_PHASE1_DUR = 3.0;
+        private const double DIAG_PERTURB_AMP = 0.05;
+        private const double DIAG_WELL_TUNED_THRESHOLD = 0.05;  // tracking_ratio 임계: 완벽 추종
+
         private void OnDiagnoseTick(double dt)
         {
             if (_autoState != AutoTuneState.Diagnosing) return;
-
-            const double DIAG_DURATION = 3.0;
 
             if (this._focus == null)
             {
@@ -1532,70 +1588,131 @@ namespace PIDSupporter
             }
 
             double u = c.LastControlVariable;
+            double y = c.LastProcessVariable;
 
-            // 통계 누적
-            if (_sess.DiagSampleCount == 0)
+            if (_sess.DiagPhase == 0)
             {
-                _sess.DiagUMax = u;
-                _sess.DiagUMin = u;
+                // ── Phase 0: 가진 OFF, |u| 통계 + y baseline 누적 ──
+                if (_sess.DiagSampleCount == 0)
+                {
+                    _sess.DiagUMax = u;
+                    _sess.DiagUMin = u;
+                }
+                else
+                {
+                    if (u > _sess.DiagUMax) _sess.DiagUMax = u;
+                    if (u < _sess.DiagUMin) _sess.DiagUMin = u;
+                }
+                if (Math.Abs(u) >= _s.SaturationThreshold) _sess.DiagSatCount++;
+                if (_sess.DiagSampleCount > 0 && _sess.DiagPrevU != 0
+                    && Math.Sign(u) != Math.Sign(_sess.DiagPrevU))
+                    _sess.DiagSignChanges++;
+                _sess.DiagPrevU = u;
+                _sess.DiagSampleCount++;
+
+                _sess.DiagYBaselineSum += y;
+                _sess.DiagYBaselineCnt++;
+
+                _sess.DiagT += dt;
+
+                double uPeakSoFar = Math.Max(Math.Abs(_sess.DiagUMax), Math.Abs(_sess.DiagUMin));
+                _sess.LastMessage = $"Diag P0... {_sess.DiagT:0.0}s/{DIAG_PHASE0_DUR:0.0}s (uPeak={uPeakSoFar:0.00}) / 진단 P0";
+
+                if (_sess.DiagT < DIAG_PHASE0_DUR) return;
+
+                // Phase 0 판정
+                double satRate = (double)_sess.DiagSatCount / Math.Max(1, _sess.DiagSampleCount);
+                double uSwing = _sess.DiagUMax - _sess.DiagUMin;
+                double uPeak = Math.Max(Math.Abs(_sess.DiagUMax), Math.Abs(_sess.DiagUMin));
+                double crossRate = _sess.DiagSignChanges / DIAG_PHASE0_DUR;
+
+                if (satRate > 0.40 && crossRate > 0.5 && uSwing > 1.6)
+                {
+                    _autoState = AutoTuneState.Failed;
+                    _sess.LastMessage =
+                        $"⚠ Limit cycle (u={_sess.DiagUMin:0.00}~{_sess.DiagUMax:0.00}, " +
+                        $"{crossRate:0.0}/s, sat={satRate:P0}). " +
+                        $"Kp 과대 / Ti 과소 (windup) / Td 과대 의심. 게인 낮춰 재시도.";
+                    return;
+                }
+                if (satRate > 0.40)
+                {
+                    _autoState = AutoTuneState.Failed;
+                    _sess.LastMessage =
+                        $"⚠ 지속 포화 (sat={satRate:P0}, uPeak={uPeak:0.00}). " +
+                        $"Kp/Ki 과대 또는 SP 가 액추에이터 한계 초과 의심.";
+                    return;
+                }
+
+                // Phase 1 진입 준비
+                _sess.DiagPhase = 1;
+                _sess.DiagYBaseline = _sess.DiagYBaselineSum / Math.Max(1, _sess.DiagYBaselineCnt);
+                _sess.DiagT = 0;  // Phase 1 timer reset
+                _sess.LastMessage = $"Diag P0 OK (sat={satRate:P0}). Phase 1 시작 (perturbation test)";
+                return;
             }
-            else
+
+            // ── Phase 1: 작은 PRBS perturbation + y 변동 측정 ──
+            // PRBS bit 진행 (LFSR 그대로 사용)
+            _sess.PrbsTicksInBit++;
+            if (_sess.PrbsTicksInBit >= PRBS_BIT_TICKS)
             {
-                if (u > _sess.DiagUMax) _sess.DiagUMax = u;
-                if (u < _sess.DiagUMin) _sess.DiagUMin = u;
+                int newBit = ((_sess.PrbsState >> PRBS_TAP1) ^ (_sess.PrbsState >> PRBS_TAP2)) & 1;
+                _sess.PrbsState = ((_sess.PrbsState << 1) | newBit) & PRBS_MASK;
+                _sess.PrbsCurrentValue = (newBit == 1) ? 1.0 : -1.0;
+                _sess.PrbsTicksInBit = 0;
             }
-            if (Math.Abs(u) >= _s.SaturationThreshold) _sess.DiagSatCount++;
-            if (_sess.DiagSampleCount > 0 && _sess.DiagPrevU != 0
-                && Math.Sign(u) != Math.Sign(_sess.DiagPrevU))
-                _sess.DiagSignChanges++;
-            _sess.DiagPrevU = u;
-            _sess.DiagSampleCount++;
+            double perturb = DIAG_PERTURB_AMP * _sess.PrbsCurrentValue;
+            // SP 에 작은 perturbation 주입 (base 가 있어야 적용)
+            if (_hasBaseSetPointAdjust)
+            {
+                try { this._focus.SetPointAdjust.Us = _baseSetPointAdjust + (float)perturb; } catch { }
+            }
+
+            // y 변동 누적 (baseline 차분)
+            double yDiff = y - _sess.DiagYBaseline;
+            _sess.DiagYSum += yDiff;
+            _sess.DiagYSumSq += yDiff * yDiff;
+            _sess.DiagYCountP1++;
+
             _sess.DiagT += dt;
+            _sess.LastMessage = $"Diag P1... {_sess.DiagT:0.0}s/{DIAG_PHASE1_DUR:0.0}s (perturb test) / 진단 P1";
 
-            // 진행 표시
-            double uPeakSoFar = Math.Max(Math.Abs(_sess.DiagUMax), Math.Abs(_sess.DiagUMin));
-            _sess.LastMessage = $"Diagnosing... {_sess.DiagT:0.0}s/{DIAG_DURATION:0.0}s (uPeak={uPeakSoFar:0.00}) / 진단 중";
+            if (_sess.DiagT < DIAG_PHASE1_DUR) return;
 
-            if (_sess.DiagT < DIAG_DURATION) return;
-
-            // ── 판정 ──
-            // PIDSupporter 는 "튜너" 가 아니라 "보조" 도구. 관찰된 현상과 의심 가능한
-            // 원인들만 사용자에게 전달하고, 구체적인 게인 변경은 사용자의 판단에 맡긴다.
-            double satRate = (double)_sess.DiagSatCount / Math.Max(1, _sess.DiagSampleCount);
-            double uSwing = _sess.DiagUMax - _sess.DiagUMin;
-            double uPeak = Math.Max(Math.Abs(_sess.DiagUMax), Math.Abs(_sess.DiagUMin));
-            double crossRate = _sess.DiagSignChanges / DIAG_DURATION;
-
-            // (1) Limit cycle: ±포화 사이 빠른 진동
-            if (satRate > 0.40 && crossRate > 0.5 && uSwing > 1.6)
+            // Phase 1 판정
+            // SetPoint 복원
+            if (_hasBaseSetPointAdjust)
             {
-                _autoState = AutoTuneState.Failed;
+                try { this._focus.SetPointAdjust.Us = _baseSetPointAdjust; } catch { }
+            }
+
+            int n = _sess.DiagYCountP1;
+            double yMean = _sess.DiagYSum / Math.Max(1, n);
+            double yVar = _sess.DiagYSumSq / Math.Max(1, n) - yMean * yMean;
+            double yStd = (yVar > 0) ? Math.Sqrt(yVar) : 0;
+            double trackingRatio = yStd / DIAG_PERTURB_AMP;
+
+            if (trackingRatio < DIAG_WELL_TUNED_THRESHOLD)
+            {
+                // 이미 완벽 추종 — closed-loop identifiability limit. 정보 부족.
+                _autoState = AutoTuneState.Done;
+                _sess.HasResult = true;
+                _sess.Kp = this._focus.Pid.kP.Us;
+                _sess.Ti = this._focus.Pid.kI.Us;
+                _sess.Td = this._focus.Pid.kD.Us;
                 _sess.LastMessage =
-                    $"⚠ Limit cycle detected (u={_sess.DiagUMin:0.00}~{_sess.DiagUMax:0.00}, " +
-                    $"{crossRate:0.0}/s, sat={satRate:P0}). " +
-                    $"Likely causes: Kp too high / Ti too low (windup) / Td too high. Reduce gains and retry. " +
-                    $"/ Limit cycle 감지. 의심 원인: Kp 과대 / Ti 과소 (windup) / Td 과대. 게인 낮춰 재시도.";
+                    $"✓ Already well-tuned (tracking ratio={trackingRatio:0.000} < {DIAG_WELL_TUNED_THRESHOLD}). " +
+                    $"Current PID rejects perturbation perfectly — closed-loop identifiability limit reached. " +
+                    $"No improvement possible without weaker C. " +
+                    $"/ 이미 잘 튜닝됨 — 정보 부족. 더 튜닝 불가.";
                 return;
             }
 
-            // (2) 지속 포화: 한쪽 rail 고정
-            if (satRate > 0.40)
-            {
-                _autoState = AutoTuneState.Failed;
-                _sess.LastMessage =
-                    $"⚠ Persistent saturation (sat={satRate:P0}, uPeak={uPeak:0.00}). " +
-                    $"Likely causes: Kp/Ki too high, or SetPoint beyond actuator range. Check and retry. " +
-                    $"/ 지속 포화. 의심 원인: Kp/Ki 과대 또는 SetPoint 가 액추에이터 한계 초과. 점검 후 재시도.";
-                return;
-            }
-
-            // (3) 진단 통과 — Recording 단계로 이행
-            string warn = (satRate > 0.15)
-                ? $" (주의: 초기 sat={satRate:P0})"
-                : "";
-
-            // 진단 상태 초기화 (사용한 _sess.T 는 StartRecording 에서 Clear 됨)
-            _sess.LastMessage = $"Diag OK (uPeak={uPeak:0.00}, sat={satRate:P0}). 녹화 시작{warn}";
+            // 정상 진행 — Recording 단계로
+            // Phase 0 의 y baseline 을 recording 동안 사용 (u-direct safety)
+            _recordingYBaseline = _sess.DiagYBaseline;
+            _sess.LastMessage = $"Diag OK (tracking={trackingRatio:0.000}). 녹화 시작.";
             StartAutoTuneRecording();
         }
 
@@ -1747,43 +1864,171 @@ namespace PIDSupporter
         private const int PRBS_TAP2 = 6;
         private const int PRBS_MASK = 0x3FF;  // 10-bit
 
-        // u-target adaptive: 매 K 틱마다 u_std 측정 → amp 비례 조정.
-        // dt=0.025 기준 80틱 ≈ 2초. closed-loop 반응 충분히 settle 되는 window.
+        // Hybrid PRBS adaptive amplitudes — SP-direct main + u-direct supplement.
+        //   학계 근거:
+        //     SP_amp adaptive: Hjalmarsson 2005 "input design with output constraint"
+        //     u_amp headroom: Ljung §13.5 "additive perturbation with safety bound"
+        //     Saturation 처리: Söderström-Stoica §8.5
         private const int AMP_ADJUST_INTERVAL = 80;
-        // 단계당 amp 변동 한계 (안정성). 한 step 에 최대 2배 ↑ / 0.5배 ↓.
-        private const double AMP_RATIO_MAX = 2.0;
+        // 단계당 변동 한계
+        private const double AMP_RATIO_MAX = 1.5;
         private const double AMP_RATIO_MIN = 0.5;
-        // amp 의 절대 한계. 0.001 (거의 안 흔듦) ~ 2.0 (PRBS 최대 진폭).
-        private const double AMP_DYN_MIN = 0.001;
-        private const double AMP_DYN_MAX = 2.0;
+        // SP-direct amp 범위 (사용자 슬라이더 ExciteAmp 의 동적 조정)
+        private const double AMP_DYN_MIN = 0.01;
+        private const double AMP_DYN_MAX = 1.0;
+        // u-direct amp 범위 (보조 가진, headroom 의 fraction)
+        private const double U_AMP_MIN = 0.005;
+        private const double U_AMP_MAX = 0.3;
+        // u-direct headroom factor γ — u_amp_k ≤ γ · (1 - |u_C_k|)
+        //   γ = 0.5 → u 의 headroom 절반까지 사용 (안전, Hjalmarsson 권장)
+        private const double U_HEADROOM_GAMMA = 0.5;
+        // Saturation 빈도 기반 — sat rate target ~10-25%
+        private const double SAT_RATE_HIGH = 0.30;
+        private const double SAT_RATE_TARGET_LOW = 0.10;
 
         // PRBS HPF coefficient (drift cancellation): fc ≈ 0.01Hz at dt=0.025.
         // α = exp(-2π·fc·dt) ≈ 1 - 2π·0.01·0.025 ≈ 0.9984. PRBS bit (0.1s) 동안 decay 무시 가능.
         private const double PRBS_HPF_ALPHA = 0.9984;
 
+        // Spectral monitor — y/r FFT 로 sensitivity 분석.
+        //   FFT length 256 (power of 2) = ~6.4 초 window @ dt=0.025
+        //   3 band: low (0.05-0.5Hz), mid (0.5-2Hz), high (2-5Hz)
+        //   부족 band (sensitivity 큰 곳) 자극 + max(S) 로 well-tuned 감지.
+        private const int SPECTRAL_FFT_LEN = 256;
+        private const int SPECTRAL_INTERVAL = 240;  // ~6초 마다 체크
+
+        // Information-driven termination
+        //   max(|S|) < ε 가 연속 K windows 만족 → "well-tuned" 종료
+        //   ε = 0.1: 모든 band 에서 |T| ∈ [0.9, 1.1] = 90% tracking 이상
+        //   K = 3: 약 18초 동안 consistent → noise 가 아닌 진짜 saturation
+        //   60초 hard timeout: 그 시간까지 well-tuned 안 되면 정보 충분 → FRIT 실행
+        private const double WELL_TUNED_S_THRESHOLD = 0.1;
+        private const int WELL_TUNED_CONSEC_REQUIRED = 3;
+        private const double MAX_COLLECT_SEC = 60.0;
+
+        /// <summary>
+        /// Sensitivity-aware spectral monitor — y/r 비율로 sensitivity 분석.
+        ///
+        /// 학계 (Forssell-Ljung 1999, Skogestad-Postlethwaite ch.2):
+        ///   T(jω) = y/r = closed-loop transfer (= CG/(1+CG))
+        ///   S(jω) = 1 - T(jω) = sensitivity (= 1/(1+CG))
+        ///
+        ///   |S| 큰 band = controller 가 reject 못 함 = 정보 풍부 → 그 band 자극
+        ///   |S| 모든 band 에서 작음 = controller 가 모든 band 잘 잡음 = well-tuned
+        ///
+        /// 두 역할:
+        ///   1) 부족한 band (= sensitivity 큰 band) 식별 → PRBS bit_ticks 조정
+        ///   2) max sensitivity 반환 → termination 결정 (well-tuned 감지)
+        /// </summary>
+        /// <returns>max(|S(f)|) over all bands, 또는 -1 if invalid</returns>
+        private double UpdatePrbsBitTicksFromSpectrum()
+        {
+            int N = _sess.Y.Count;
+            if (N < SPECTRAL_FFT_LEN) return -1;
+            if (_sess.R.Count < SPECTRAL_FFT_LEN) return -1;
+
+            double dt = Time.fixedDeltaTime;
+            if (dt <= 0) dt = 0.025;
+
+            int start = N - SPECTRAL_FFT_LEN;
+            var ySamples = new Complex[SPECTRAL_FFT_LEN];
+            var rSamples = new Complex[SPECTRAL_FFT_LEN];
+
+            double yMean = 0, rMean = 0;
+            for (int i = 0; i < SPECTRAL_FFT_LEN; i++)
+            {
+                yMean += _sess.Y[start + i];
+                rMean += _sess.R[start + i];
+            }
+            yMean /= SPECTRAL_FFT_LEN;
+            rMean /= SPECTRAL_FFT_LEN;
+            for (int i = 0; i < SPECTRAL_FFT_LEN; i++)
+            {
+                ySamples[i] = new Complex(_sess.Y[start + i] - yMean, 0);
+                rSamples[i] = new Complex(_sess.R[start + i] - rMean, 0);
+            }
+
+            try
+            {
+                MathNet.Numerics.IntegralTransforms.Fourier.Forward(ySamples);
+                MathNet.Numerics.IntegralTransforms.Fourier.Forward(rSamples);
+            }
+            catch { return -1; }
+
+            double binWidthHz = 1.0 / (SPECTRAL_FFT_LEN * dt);
+            int loStart = Math.Max(1, (int)Math.Round(0.05 / binWidthHz));
+            int loEnd = (int)Math.Round(0.5 / binWidthHz);
+            int midEnd = (int)Math.Round(2.0 / binWidthHz);
+            int hiEnd = Math.Min(SPECTRAL_FFT_LEN / 2, (int)Math.Round(5.0 / binWidthHz));
+
+            // 각 band 의 평균 |T(f)|
+            double tLo = ComputeAvgTMag(ySamples, rSamples, loStart, loEnd);
+            double tMid = ComputeAvgTMag(ySamples, rSamples, loEnd, midEnd);
+            double tHi = ComputeAvgTMag(ySamples, rSamples, midEnd, hiEnd);
+
+            // Sensitivity |S| = |1 - T|. T 가 1 에 가까우면 S ≈ 0 (well tracked).
+            double sLo = Math.Abs(1.0 - tLo);
+            double sMid = Math.Abs(1.0 - tMid);
+            double sHi = Math.Abs(1.0 - tHi);
+
+            // 부족 band 식별 = 가장 sensitivity 큰 band (= 정보 풍부 = 자극할 가치 큼)
+            int newBitTicks;
+            if (sLo >= sMid && sLo >= sHi)      newBitTicks = 64;  // low S 큼 → low band 자극
+            else if (sMid >= sHi)               newBitTicks = 16;  // mid
+            else                                newBitTicks = 4;   // high
+
+            _sess.PrbsBitTicks = newBitTicks;
+
+            // Termination metric: max(S) over all bands
+            return Math.Max(sLo, Math.Max(sMid, sHi));
+        }
+
+        private static double ComputeAvgTMag(Complex[] y, Complex[] r, int binStart, int binEnd)
+        {
+            double sum = 0;
+            int cnt = 0;
+            for (int i = binStart; i < binEnd; i++)
+            {
+                double rMag = r[i].Magnitude;
+                if (rMag < 1e-9) continue;  // r 거의 0 인 bin skip
+                double yMag = y[i].Magnitude;
+                sum += yMag / rMag;
+                cnt++;
+            }
+            return (cnt > 0) ? sum / cnt : 0;
+        }
+
         private void ApplyExcitation(float dt)
         {
             _lastExciteValue = 0.0;
-            FritExcitationInjector.Clear(this._focus);  // u-direct patch 무력화
 
-            if (!_s.ExciteEnabled) return;
-            if (_s.ExciteWave == WaveType.Off) return;
-            if (!_hasBaseSetPointAdjust) return;
+            if (!_s.ExciteEnabled || _s.ExciteWave == WaveType.Off || !_hasBaseSetPointAdjust)
+            {
+                FritExcitationInjector.Clear(this._focus);
+                try { this._focus.SetPointAdjust.Us = _baseSetPointAdjust; } catch { }
+                return;
+            }
 
             double t = _sess.T;
-            double amp = Math.Max(0.0, _s.ExciteAmp);
             double x = 0.0;
 
+            // Sine/Chirp 는 수동 실험용으로 보존 (SP-direct 방식 유지)
+            // MultiSine (=PRBS) 만 AutoTune 의 표준 — u-direct injection.
             switch (_s.ExciteWave)
             {
                 case WaveType.Sine:
                     {
+                        double ampS = Math.Max(0.0, _s.ExciteAmp);
                         double w = 2.0 * Math.PI * Math.Max(0.01, _s.ExciteFreqHz);
-                        x = amp * Math.Sin(w * t);
-                        break;
+                        x = ampS * Math.Sin(w * t);
+                        FritExcitationInjector.Clear(this._focus);
+                        _lastExciteValue = x;
+                        try { this._focus.SetPointAdjust.Us = _baseSetPointAdjust + (float)x; } catch { }
+                        return;
                     }
                 case WaveType.Chirp:
                     {
+                        double ampC = Math.Max(0.0, _s.ExciteAmp);
                         double f0 = Math.Max(0.01, _s.ChirpStartHz);
                         double f1 = Math.Max(f0 * 1.1, _s.ChirpEndHz);
                         double T = Math.Max(1.0, _s.MinSamples * dt);
@@ -1794,75 +2039,90 @@ namespace PIDSupporter
                             phase = 2.0 * Math.PI * f0 * T / lnRatio * (Math.Pow(ratio, t / T) - 1.0);
                         else
                             phase = 2.0 * Math.PI * f0 * T / lnRatio * (ratio - 1.0) + 2.0 * Math.PI * f1 * (t - T);
-                        x = amp * Math.Sin(phase);
-                        break;
-                    }
-                case WaveType.MultiSine:
-                    {
-                        // ── u-target adaptive amplitude ──
-                        // 사용자 ExciteAmp 의 의미: u (plant input) 의 target std.
-                        // 매 K 틱마다 최근 u std 측정 → ratio = target / observed → amp_dyn 조정.
-                        // 결과: closed-loop 의 plant input power 가 controller 강도와 무관하게 일정.
-                        _sess.TicksSinceAmpAdjust++;
-                        int nU = _sess.U.Count;
-                        if (_sess.TicksSinceAmpAdjust >= AMP_ADJUST_INTERVAL && nU >= AMP_ADJUST_INTERVAL)
-                        {
-                            int start = nU - AMP_ADJUST_INTERVAL;
-                            double sum = 0, sumSq = 0;
-                            for (int i = start; i < nU; i++)
-                            {
-                                double ui = _sess.U[i];
-                                sum += ui;
-                                sumSq += ui * ui;
-                            }
-                            int cn = nU - start;
-                            double mean = sum / cn;
-                            double variance = sumSq / cn - mean * mean;
-                            double uStd = (variance > 0) ? Math.Sqrt(variance) : 0;
-
-                            double target = Math.Max(AMP_DYN_MIN, _s.ExciteAmp);
-                            double ratio;
-                            if (uStd > 1e-4)
-                            {
-                                ratio = target / uStd;
-                                if (ratio > AMP_RATIO_MAX) ratio = AMP_RATIO_MAX;
-                                else if (ratio < AMP_RATIO_MIN) ratio = AMP_RATIO_MIN;
-                            }
-                            else
-                            {
-                                // u 가 거의 안 움직임 (weak C 등) → amp 적극 증가.
-                                ratio = AMP_RATIO_MAX;
-                            }
-                            _sess.AmpDyn *= ratio;
-                            if (_sess.AmpDyn > AMP_DYN_MAX) _sess.AmpDyn = AMP_DYN_MAX;
-                            else if (_sess.AmpDyn < AMP_DYN_MIN) _sess.AmpDyn = AMP_DYN_MIN;
-                            _sess.TicksSinceAmpAdjust = 0;
-                        }
-
-                        // PRBS — 매 틱 LFSR 상태 진행, PRBS_BIT_TICKS 마다 새 비트.
-                        _sess.PrbsTicksInBit++;
-                        if (_sess.PrbsTicksInBit >= PRBS_BIT_TICKS)
-                        {
-                            int newBit = ((_sess.PrbsState >> PRBS_TAP1) ^ (_sess.PrbsState >> PRBS_TAP2)) & 1;
-                            _sess.PrbsState = ((_sess.PrbsState << 1) | newBit) & PRBS_MASK;
-                            _sess.PrbsCurrentValue = (newBit == 1) ? 1.0 : -1.0;
-                            _sess.PrbsTicksInBit = 0;
-                        }
-                        double xRaw = _sess.AmpDyn * _sess.PrbsCurrentValue;  // ±A_dyn
-
-                        // ── HPF: drift cancellation ──
-                        // y[n] = α·(y[n-1] + x[n] - x[n-1]).
-                        // 적분기 plant 의 finite-window PRBS DC bias 제거.
-                        double xHpf = PRBS_HPF_ALPHA * (_sess.PrbsHpfOutPrev + xRaw - _sess.PrbsHpfInPrev);
-                        _sess.PrbsHpfInPrev = xRaw;
-                        _sess.PrbsHpfOutPrev = xHpf;
-                        x = xHpf;
-                        break;
+                        x = ampC * Math.Sin(phase);
+                        FritExcitationInjector.Clear(this._focus);
+                        _lastExciteValue = x;
+                        try { this._focus.SetPointAdjust.Us = _baseSetPointAdjust + (float)x; } catch { }
+                        return;
                     }
             }
 
-            _lastExciteValue = x;
-            try { this._focus.SetPointAdjust.Us = _baseSetPointAdjust + (float)x; } catch { }
+            // ── MultiSine = Hybrid PRBS (SP-direct + u-direct) ──
+            //   같은 PRBS 신호 + HPF 를 SP 와 u 양쪽 inject:
+            //     SP 에 SP_amp · PRBS · HPF   (main, FRIT 의 r 신호)
+            //     u 에  u_amp · PRBS · HPF   (보조, controller 우회 plant 자극)
+            //
+            //   학계 근거:
+            //     SP main: FRIT cost 식과 자연 호환 (r̃ = y + 1/C·u_C 가 SP 따라감)
+            //     u 보조: Söderström-Stoica §8.5 additive perturbation
+            //     headroom: Hjalmarsson 2005 amplitude bound
+            //
+            //   같은 PRBS 신호 사용 — 단순 + 두 경로 상관 OK (FRIT instrument 으로는 r=SP_inject 사용)
+
+            // ── Saturation-aware adaptive (SP_amp) ──
+            _sess.TicksSinceAmpAdjust++;
+            int n = _sess.U.Count;
+            if (_sess.TicksSinceAmpAdjust >= AMP_ADJUST_INTERVAL && n >= AMP_ADJUST_INTERVAL)
+            {
+                int start = n - AMP_ADJUST_INTERVAL;
+                int satCount = 0;
+                for (int i = start; i < n; i++)
+                    if (_sess.Saturated[i]) satCount++;
+                double satRate = (double)satCount / AMP_ADJUST_INTERVAL;
+
+                double scale;
+                if (satRate > SAT_RATE_HIGH)            scale = 0.7;
+                else if (satRate < SAT_RATE_TARGET_LOW) scale = 1.4;
+                else                                     scale = 1.0;
+
+                _sess.AmpDyn *= scale;
+                if (_sess.AmpDyn > AMP_DYN_MAX) _sess.AmpDyn = AMP_DYN_MAX;
+                else if (_sess.AmpDyn < AMP_DYN_MIN) _sess.AmpDyn = AMP_DYN_MIN;
+
+                // u_amp 도 같은 sat rate 기반 조정 (보조 가진도 plant 자극 만족)
+                _sess.UAmpDyn *= scale;
+                if (_sess.UAmpDyn > U_AMP_MAX) _sess.UAmpDyn = U_AMP_MAX;
+                else if (_sess.UAmpDyn < U_AMP_MIN) _sess.UAmpDyn = U_AMP_MIN;
+
+                _sess.TicksSinceAmpAdjust = 0;
+            }
+
+            // PRBS bit (LFSR) — bit duration 는 sensitivity-aware spectral monitor 가 조정
+            _sess.PrbsTicksInBit++;
+            if (_sess.PrbsTicksInBit >= _sess.PrbsBitTicks)
+            {
+                int newBit = ((_sess.PrbsState >> PRBS_TAP1) ^ (_sess.PrbsState >> PRBS_TAP2)) & 1;
+                _sess.PrbsState = ((_sess.PrbsState << 1) | newBit) & PRBS_MASK;
+                _sess.PrbsCurrentValue = (newBit == 1) ? 1.0 : -1.0;
+                _sess.PrbsTicksInBit = 0;
+            }
+
+            // HPF (DC drift cancellation) — PRBS 신호 자체에 적용
+            double prbsRaw = _sess.PrbsCurrentValue;
+            double prbsHpf = PRBS_HPF_ALPHA * (_sess.PrbsHpfOutPrev + prbsRaw - _sess.PrbsHpfInPrev);
+            _sess.PrbsHpfInPrev = prbsRaw;
+            _sess.PrbsHpfOutPrev = prbsHpf;
+
+            // SP-direct: SP 에 SP_amp · prbsHpf 주입
+            double spInject = _sess.AmpDyn * prbsHpf;
+            try { this._focus.SetPointAdjust.Us = _baseSetPointAdjust + (float)spInject; } catch { }
+
+            // u-direct: headroom envelope 안에서 u_amp · prbsHpf 주입
+            //   현재 u_C 측정: PID 출력 (LastControlVariable, pre-clip)
+            //   headroom = 1 - |u_C|, u-direct max = γ · headroom
+            //   p = clamp(u_amp · prbsHpf, ±u_amp_max_k)
+            var c = this._focus.GetCurrentController();
+            double uC = (c != null) ? Math.Max(-1.5, Math.Min(1.5, c.LastControlVariable)) : 0;
+            double headroom = Math.Max(0, 1.0 - Math.Abs(uC));
+            double uAmpMax = U_HEADROOM_GAMMA * headroom;
+            double uInjectRaw = _sess.UAmpDyn * prbsHpf;
+            double uInject = (uInjectRaw > uAmpMax) ? uAmpMax
+                          : (uInjectRaw < -uAmpMax) ? -uAmpMax
+                          : uInjectRaw;
+            FritExcitationInjector.Set(this._focus, (float)uInject);
+
+            // FRIT instrument = SP inject (main 신호). u-direct 는 보조 plant 자극용.
+            _lastExciteValue = spInject;
         }
 
         // ============================================================
@@ -2565,12 +2825,15 @@ namespace PIDSupporter
             double dt = Time.fixedDeltaTime;
             if (dt <= 0) dt = 0.02;
 
-            double[] u = _sess.U.ToArray();
             double[] y = _sess.Y.ToArray();
             double[] r = _sess.R.ToArray();
-            bool[]   s = _sess.Saturated.ToArray();
 
-            PlantModel m = IdentifyPlantArx(u, y, r, s, dt, 0);
+            // Two-stage 의 SE — 현재 PID 사용
+            double kp = this._focus.Pid.kP.Us;
+            double ti = this._focus.Pid.kI.Us;
+            double td = this._focus.Pid.kD.Us;
+
+            PlantModel m = IdentifyPlantTwoStage(y, r, dt, 0, kp, ti, td);
             if (!m.Valid || m.Tau1 <= 1e-6 || double.IsNaN(m.TauSE)) return double.PositiveInfinity;
             return m.TauSE / m.Tau1;
         }
@@ -2827,6 +3090,236 @@ namespace PIDSupporter
             return m;
         }
 
+        /// <summary>다항식 곱셈 — a[0]+a[1]z⁻¹+... × b[0]+b[1]z⁻¹+... 결과 c.</summary>
+        private static double[] PolyMult(double[] a, double[] b)
+        {
+            double[] c = new double[a.Length + b.Length - 1];
+            for (int i = 0; i < a.Length; i++)
+                for (int j = 0; j < b.Length; j++)
+                    c[i + j] += a[i] * b[j];
+            return c;
+        }
+
+        /// <summary>
+        /// 다항식 p[0]+p[1]z⁻¹+...+p[n]z⁻ⁿ 을 복소 z 에서 평가. (z⁻¹ = 1/z 사용)
+        /// </summary>
+        private static Complex PolyEvalAtZ(double[] coeffs, Complex z)
+        {
+            Complex zInv = Complex.One / z;
+            Complex acc = Complex.Zero;
+            Complex pow = Complex.One;
+            for (int i = 0; i < coeffs.Length; i++)
+            {
+                acc += coeffs[i] * pow;
+                pow *= zInv;
+            }
+            return acc;
+        }
+
+        /// <summary>
+        /// Two-stage method (Van den Hof &amp; Schrama 1995) — closed-loop identification.
+        ///
+        /// ▣ Why
+        ///   직접 (u, y) 식별은 controller 가 약/강에 따라 plant 추정이 변동 (model order
+        ///   misspecification 때문). reference signal r 이 외부신호라는 점을 활용해
+        ///   *closed-loop transfer* T(z)=y/r 를 먼저 식별 → 알려진 C(z) 로 G(z) 역산.
+        ///   → 같은 plant 에 대해 controller 무관 같은 G → iteration 수렴.
+        ///
+        /// ▣ Stage 1: T(z) ARX(2,2) — r 이 외부 신호 → OLS unbiased (IV 불필요)
+        ///   y[k] = a₁·y[k-1] + a₂·y[k-2] + b₀·r[k-1-δ] + b₁·r[k-2-δ] + ε
+        ///   → T(z) = (b₀·z⁻¹ + b₁·z⁻²) / (1 - a₁·z⁻¹ - a₂·z⁻²)
+        ///
+        /// ▣ Stage 2: G(z) = T(z) / [C(z)·(1-T(z))] — closed-form
+        ///   C(z) = K_p·(c₀ + c₁z⁻¹ + c₂z⁻²) / (1 - z⁻¹)   (backward Euler PID)
+        ///   대입 정리:  G(z) = N_T(z)·D_C(z) / [N_C(z)·(D_T(z)-N_T(z))]
+        ///   분자/분모 차수: N_G 차수 3, D_G 차수 4. dominant 2 pole = 진짜 plant pole.
+        ///   나머지는 C 의 zero 와 cancel — N_G(pole) ≈ 0 으로 검출.
+        /// </summary>
+        private static PlantModel IdentifyPlantTwoStage(
+            double[] y, double[] r, double dt, double theta,
+            double kp, double ti, double td)
+        {
+            PlantModel m = new PlantModel { Theta = theta };
+            int N = Math.Min(y.Length, r.Length);
+            if (N < 64) { m.Diagnosis = "data too short"; return m; }
+
+            int delayN = Math.Max(0, (int)Math.Round(theta / dt));
+            int kStart = 2 + delayN;
+            if (kStart >= N - 4) { m.Diagnosis = "delay > data"; return m; }
+
+            double yStd = StdDev(y);
+            if (yStd < 1e-4) { m.Diagnosis = "y barely moves — excitation too weak"; return m; }
+
+            double[] yd = new double[N]; Array.Copy(y, yd, N); Detrend(yd);
+            double[] rd = new double[N]; Array.Copy(r, rd, N); Detrend(rd);
+
+            // ── Stage 1: T(z) ARX(3,3) OLS ──
+            // 6×6 symmetric normal eq. r 은 외부 → noise ⟂ r → unbiased.
+            //   적분기 plant + PID controller 의 closed-loop T 는 차수 3:
+            //   T = CG/(1+CG), C ~ poly(2)/(1-z⁻¹), G_int ~ z⁻¹/(1-z⁻¹)
+            //   → numerator/denominator 모두 3차 → ARX(3,3) 가 minimum.
+            //   ARX(2,2) under-modeling 시 PID 강도에 따라 dominant mode 변동 → 수렴 깨짐.
+            const int NA = 3, NB = 3;
+            const int NP = NA + NB;  // 6 params
+            int kStartReg = Math.Max(kStart, NA + NB + delayN);
+            if (kStartReg >= N - 4) { m.Diagnosis = "delay/order > data"; return m; }
+
+            double[,] sMat = new double[NP, NP];
+            double[] tVec = new double[NP];
+            int count = 0;
+            for (int k = kStartReg; k < N; k++)
+            {
+                double yt = yd[k];
+                double[] reg = {
+                    yd[k-1], yd[k-2], yd[k-3],
+                    rd[k-1-delayN], rd[k-2-delayN], rd[k-3-delayN]
+                };
+                for (int i = 0; i < NP; i++)
+                {
+                    tVec[i] += yt * reg[i];
+                    for (int j = i; j < NP; j++)
+                        sMat[i, j] += reg[i] * reg[j];
+                }
+                count++;
+            }
+            for (int i = 0; i < NP; i++)
+                for (int j = 0; j < i; j++)
+                    sMat[i, j] = sMat[j, i];
+            if (count < 64) { m.Diagnosis = $"too few samples ({count})"; return m; }
+
+            var Mreg = MB.DenseOfArray(sMat);
+            var rhs = VB.DenseOfArray(tVec);
+
+            MathNet.Numerics.LinearAlgebra.Vector<double> sol;
+            try { sol = Mreg.Solve(rhs); }
+            catch { m.Diagnosis = "T regression singular"; return m; }
+
+            double aT1 = sol[0], aT2 = sol[1], aT3 = sol[2];
+            double bT0 = sol[3], bT1 = sol[4], bT2 = sol[5];
+            if (double.IsNaN(aT1) || double.IsNaN(aT2) || double.IsNaN(aT3)
+                || double.IsNaN(bT0) || double.IsNaN(bT1) || double.IsNaN(bT2))
+            { m.Diagnosis = "NaN in T fit"; return m; }
+
+            // T 식별 잔차 (SE-게이트 용)
+            double sqResid = 0; int cResid = 0;
+            for (int k = kStartReg; k < N; k++)
+            {
+                double pred = aT1 * yd[k - 1] + aT2 * yd[k - 2] + aT3 * yd[k - 3]
+                            + bT0 * rd[k - 1 - delayN] + bT1 * rd[k - 2 - delayN] + bT2 * rd[k - 3 - delayN];
+                double e = yd[k] - pred;
+                sqResid += e * e; cResid++;
+            }
+            m.FitRmse = Math.Sqrt(sqResid / Math.Max(1, cResid));
+
+            // ── Stage 2: G(z) = N_G/D_G via polynomial arithmetic ──
+            // C(z) = K_p · (c₀ + c₁ z⁻¹ + c₂ z⁻²) / (1 - z⁻¹)
+            double tiSafe = (ti > 1e-6 && ti < 1e6) ? ti : 1e9;  // Ti off (==250) → 거의 무한
+            double c0 = 1.0 + dt / tiSafe + td / dt;
+            double c1Pid = -(1.0 + 2.0 * td / dt);
+            double c2Pid = td / dt;
+
+            double[] N_C = { kp * c0, kp * c1Pid, kp * c2Pid };
+            double[] N_T = { 0.0, bT0, bT1, bT2 };
+            double[] D_T = { 1.0, -aT1, -aT2, -aT3 };
+            double[] DT_minus_NT = { 1.0, -aT1 - bT0, -aT2 - bT1, -aT3 - bT2 };
+            double[] D_C = { 1.0, -1.0 };
+
+            double[] N_G = PolyMult(N_T, D_C);              // 5 coeffs (z⁻⁰..z⁻⁴)
+            double[] D_G = PolyMult(N_C, DT_minus_NT);      // 6 coeffs (z⁻⁰..z⁻⁵)
+
+            double d0 = D_G[0];
+            if (Math.Abs(d0) < 1e-15)
+            { m.Diagnosis = "D_G leading coeff ≈ 0 (PID K_p ≈ 0?)"; return m; }
+
+            // ── G(z) 의 극점: D_G(z⁻¹) = 0 의 z root, 5×5 companion matrix ──
+            double cf1 = D_G[1]/d0, cf2 = D_G[2]/d0, cf3 = D_G[3]/d0, cf4 = D_G[4]/d0, cf5 = D_G[5]/d0;
+            var Mc = MB.DenseOfArray(new double[,] {
+                { -cf1, -cf2, -cf3, -cf4, -cf5 },
+                {  1.0,  0.0,  0.0,  0.0,  0.0 },
+                {  0.0,  1.0,  0.0,  0.0,  0.0 },
+                {  0.0,  0.0,  1.0,  0.0,  0.0 },
+                {  0.0,  0.0,  0.0,  1.0,  0.0 }
+            });
+            var eigs = Mc.Evd().EigenValues;
+
+            // 5 root: spurious (N_G(z_pole)≈0, C zero 와 cancel) 제외 후 dominant 2 채택.
+            var realPoles = new List<Complex>();
+            double ngScale = Math.Max(1e-9, Math.Abs(bT0) + Math.Abs(bT1) + Math.Abs(bT2));
+            for (int i = 0; i < 5; i++)
+            {
+                Complex p = eigs[i];
+                Complex ngVal = PolyEvalAtZ(N_G, p);
+                if (ngVal.Magnitude > 1e-4 * ngScale)
+                    realPoles.Add(p);
+            }
+            if (realPoles.Count == 0)
+                for (int i = 0; i < 5; i++) realPoles.Add(eigs[i]);
+
+            realPoles.Sort((a, b) => b.Magnitude.CompareTo(a.Magnitude));
+
+            Complex p1 = realPoles[0];
+            Complex p2 = (realPoles.Count > 1) ? realPoles[1] : p1;
+            double mag1 = p1.Magnitude;
+            double mag2 = p2.Magnitude;
+
+            if (mag1 > 2.0) { m.Diagnosis = $"G pole |z|={mag1:0.000} > 2 (unstable)"; return m; }
+            if (mag1 <= 0) { m.Diagnosis = $"G pole |z|={mag1:0.000} invalid"; return m; }
+
+            // ── DC gain K — multi-frequency Bode slope detection ──
+            // 적분기 plant: |G(jω)| ∝ 1/ω → log slope = -1 → K_i = ω·|G(jω)|
+            // stable plant: |G(jω)| → K (constant at low ω) → log slope ≈ 0 → K = |G|
+            // 두 ω 에서 |G| 측정해서 slope 로 plant type 판정.
+            double omega1 = 0.05, omega2 = 0.5;  // rad/s, well below typical FTD plant BW
+            Complex z1 = Complex.FromPolarCoordinates(1.0, omega1 * dt);
+            Complex z2 = Complex.FromPolarCoordinates(1.0, omega2 * dt);
+            double gMag1 = (PolyEvalAtZ(N_G, z1) / PolyEvalAtZ(D_G, z1)).Magnitude;
+            double gMag2 = (PolyEvalAtZ(N_G, z2) / PolyEvalAtZ(D_G, z2)).Magnitude;
+            double slope = (gMag1 > 1e-12 && gMag2 > 1e-12)
+                ? Math.Log(gMag2 / gMag1) / Math.Log(omega2 / omega1)
+                : 0;
+
+            bool integratorBySlope = slope < -0.5;  // slope -1 이면 정확히 적분기, -0.5 보수적 cutoff
+            bool integratorByPole = (mag1 > 0.95 && Math.Abs(p1.Real - 1.0) < 0.1 && Math.Abs(p1.Imaginary) < 0.05);
+            m.HasIntegrator = integratorBySlope || integratorByPole;
+            if (mag1 > 1.0) m.HasIntegrator = true;
+
+            if (m.HasIntegrator)
+                m.K = omega1 * gMag1;  // K_i = ω·|G(jω)| (integrator: |G|·ω 가 상수)
+            else
+                m.K = gMag1;  // K = |G(low ω)| (stable: constant at DC)
+
+            if (double.IsNaN(m.K) || double.IsInfinity(m.K) || m.K < 1e-9)
+            { m.Diagnosis = $"K calc failed ({m.K})"; return m; }
+
+            // Time constants
+            double magForTau = Math.Min(mag1, 1.0 - 1e-6);
+            m.Tau1 = -dt / Math.Log(magForTau);
+            double mag2Clamped = Math.Max(1e-6, Math.Min(mag2, 1.0 - 1e-6));
+            m.Tau2 = -dt / Math.Log(mag2Clamped);
+
+            // ── SE 근사 (proxy) ──
+            // T 의 dominant pole 로부터 τ SE 근사. ARX(3,3) 의 정확한 SE 는 복잡하므로 conservative.
+            double sigma2 = m.FitRmse * m.FitRmse;
+            double seA1 = 0;
+            try {
+                var Minv = Mreg.Inverse();
+                seA1 = Math.Sqrt(Math.Abs(sigma2 * Minv[0, 0]));
+            } catch { }
+            // τ_1 SE 근사: ARX 의 dominant pole 의 magnitude SE → τ chain rule
+            double dtau_dz = (mag1 > 1e-6 && mag1 < 1.0)
+                ? dt / (mag1 * Math.Log(mag1) * Math.Log(mag1)) : 0;
+            m.TauSE = Math.Abs(dtau_dz * seA1);
+
+            m.Valid = true;
+            string poleStr = (Math.Abs(p1.Imaginary) < 1e-4)
+                ? $"|z|={mag1:0.000}"
+                : $"|z|={mag1:0.000}∠{Math.Atan2(p1.Imaginary, p1.Real) * 180 / Math.PI:0}°";
+            m.Diagnosis = m.HasIntegrator
+                ? $"Two-stage ARX(3,3): integrator (slope={slope:0.00}), τ_2={m.Tau2:0.000}s K_i={m.K:0.000}"
+                : $"Two-stage ARX(3,3): τ_1={m.Tau1:0.000}s τ_2={m.Tau2:0.000}s K={m.K:0.000} ({poleStr}, slope={slope:0.00})";
+            return m;
+        }
+
         /// <summary>식별된 plant 에 SIMC PID 공식 적용.</summary>
         public struct SimcResult
         {
@@ -2883,6 +3376,298 @@ namespace PIDSupporter
             if (r.Td > 10.0) r.Td = 10.0;
 
             return r;
+        }
+
+        // ════════════════════════════════════════════════════════════════════════
+        //  FRIT (Fictitious Reference Iterative Tuning) — Soma/Kaneko 2004
+        //
+        //  Plant model-free PID tuning. (u, y, currentPid) 데이터로 직접 PID 산출.
+        //
+        //  Cost:   J(θ) = Σ (y[k] - ŷ(θ)[k])²
+        //          where r̃(θ) = y + C(θ)⁻¹·u  (가상 reference)
+        //                ŷ(θ) = M(z)·r̃_d(θ)  (참조 모델 응답, delay 적용)
+        //
+        //  θ* = argmin J(θ) → 비선형 LM (MathNet). non-convex 이라 multistart 필요.
+        //
+        //  본 implementation 의 장단점 (정직 평가):
+        //  ▣ 장점: model order 가정 없음 → 모든 축 universal (적분기 / 1차 / 2차 plant 다)
+        //  ▣ 단점: non-convex cost surface — local minimum 위험. multistart 로 완화.
+        //  ▣ 단점: 참조모델 M(s) 의 T_s 선택이 결과 좌우 → Ts sweep 으로 자동 선정.
+        // ════════════════════════════════════════════════════════════════════════
+
+        private struct FritOptResult
+        {
+            public double Kp, Ti, Td;
+            public double Cost;
+            public bool Converged;
+            public string Diag;
+        }
+
+        /// <summary>
+        /// 역필터 1/C(z) 의 안정성 (= a₀ z² + a₁ z + a₂ 의 zero 가 단위원 내부).
+        /// 불안정하면 e[k] = (1/C(z))·u[k] 가 발산 → LM 후퇴 위해 soft barrier 반환.
+        /// </summary>
+        private static bool IsInverseCStable(double kp, double ti, double td, double dt)
+        {
+            if (kp <= 0) return false;
+            double tiSafe = (ti > 1e-6 && ti < 1e6) ? ti : 1e9;
+            double a0 = 1.0 + dt / tiSafe + td / dt;
+            double a1 = -(1.0 + 2.0 * td / dt);
+            double a2 = td / dt;
+            if (Math.Abs(a0) < 1e-12) return false;
+            double disc = a1 * a1 - 4.0 * a0 * a2;
+            if (disc >= 0)
+            {
+                double sq = Math.Sqrt(disc);
+                double z1 = (-a1 + sq) / (2.0 * a0);
+                double z2 = (-a1 - sq) / (2.0 * a0);
+                return Math.Abs(z1) < 1.0 && Math.Abs(z2) < 1.0;
+            }
+            else
+            {
+                return (a2 / a0) < 1.0;
+            }
+        }
+
+        /// <summary>e[k] = 1/C(z) · u[k] — backward Euler PID 의 IIR 역필터.</summary>
+        private static double[] InverseCFilter(double[] u, double kp, double ti, double td, double dt)
+        {
+            int N = u.Length;
+            double[] e = new double[N];
+            double tiSafe = (ti > 1e-6 && ti < 1e6) ? ti : 1e9;
+            double a0 = 1.0 + dt / tiSafe + td / dt;
+            double a1 = -(1.0 + 2.0 * td / dt);
+            double a2 = td / dt;
+            double invKa0 = 1.0 / (kp * a0);
+            e[0] = u[0] * invKa0;
+            if (N > 1) e[1] = (u[1] - u[0] - kp * a1 * e[0]) * invKa0;
+            for (int k = 2; k < N; k++)
+                e[k] = (u[k] - u[k - 1] - kp * a1 * e[k - 1] - kp * a2 * e[k - 2]) * invKa0;
+            return e;
+        }
+
+        /// <summary>
+        /// 참조모델 M(z) = e⁻ˢτ_M / (1 + s·a_M)^n_M, a_M = 0.2·Ts.
+        /// Tustin 1차 LP n_M 번 캐스케이드 + delay shift.
+        /// </summary>
+        private static double[] ApplyRefModel(double[] r, double ts, int nM, double tauM, double dt)
+        {
+            int N = r.Length;
+            int delayN = Math.Max(0, (int)Math.Round(tauM / dt));
+            double aM = 0.2 * ts;
+            double beta0 = 1.0 + 2.0 * aM / dt;
+            double beta1 = 1.0 - 2.0 * aM / dt;
+            double invBeta0 = 1.0 / beta0;
+
+            double[] x = new double[N];
+            Array.Copy(r, x, N);
+            for (int stage = 0; stage < nM; stage++)
+            {
+                double[] yOut = new double[N];
+                double xPrev = 0, yPrev = 0;
+                for (int k = 0; k < N; k++)
+                {
+                    yOut[k] = (x[k] + xPrev - beta1 * yPrev) * invBeta0;
+                    xPrev = x[k];
+                    yPrev = yOut[k];
+                }
+                x = yOut;
+            }
+            // delay shift
+            double[] yDelayed = new double[N];
+            for (int k = 0; k < N; k++)
+                yDelayed[k] = (k < delayN) ? 0.0 : x[k - delayN];
+            return yDelayed;
+        }
+
+        /// <summary>FRIT 비용 — mean square (y - ŷ). 포화 샘플은 cost 에서 제외.</summary>
+        private static double FritCostEval(double kp, double ti, double td,
+            double[] u, double[] y, bool[] sat, double ts, int nM, double tauM, double dt)
+        {
+            if (!IsInverseCStable(kp, ti, td, dt)) return 1e12;
+            int N = u.Length;
+            double[] e = InverseCFilter(u, kp, ti, td, dt);
+            double[] rTilde = new double[N];
+            for (int k = 0; k < N; k++) rTilde[k] = y[k] + e[k];
+            double[] yHat = ApplyRefModel(rTilde, ts, nM, tauM, dt);
+            int dropEdge = Math.Max(32, (int)Math.Round(2.0 * ts / dt));
+            int kStart = dropEdge, kEnd = N - dropEdge;
+            if (kEnd <= kStart) return 1e12;
+            double sum = 0;
+            int cnt = 0;
+            for (int k = kStart; k < kEnd; k++)
+            {
+                // 포화 샘플 제외 — FTD 의 anti-windup 가 작동하지만 우리 1/C(z) inverse 가 LTI 가정.
+                //   포화 영역은 PID 가 nonlinear (I clamped). cost 에 systematic error.
+                if (sat != null && sat.Length > k && sat[k]) continue;
+                double rr = y[k] - yHat[k];
+                if (double.IsNaN(rr) || double.IsInfinity(rr)) return 1e12;
+                sum += rr * rr;
+                cnt++;
+            }
+            return (cnt > 0) ? sum / cnt : 1e12;
+        }
+
+        /// <summary>
+        /// FRIT LM 1회 — 주어진 시드에서 LM 최적화. 비용/수렴 여부 반환.
+        /// 포화 샘플은 LM residual 에서 mask (포화 동안 PID 가 nonlinear → 회귀 오염).
+        /// </summary>
+        private static FritOptResult RunFritLM(
+            double[] u, double[] y, bool[] sat, double dt, double ts, int nM, double tauM,
+            double kpInit, double tiInit, double tdInit)
+        {
+            FritOptResult r = new FritOptResult { Kp = kpInit, Ti = tiInit, Td = tdInit, Cost = 1e12 };
+            int N = u.Length;
+            int dropEdge = Math.Max(32, (int)Math.Round(2.0 * ts / dt));
+            int kStart = dropEdge, kEnd = N - dropEdge;
+            if (kEnd <= kStart) { r.Diag = "data too short"; return r; }
+
+            // 포화 mask 적용한 인덱스 리스트
+            var validIdx = new List<int>(kEnd - kStart);
+            for (int k = kStart; k < kEnd; k++)
+            {
+                if (sat != null && sat.Length > k && sat[k]) continue;
+                validIdx.Add(k);
+            }
+            int M = validIdx.Count;
+            if (M < 32) { r.Diag = $"too few non-sat samples ({M})"; return r; }
+
+            var obsX = VB.Dense(M, 0.0);
+            var yObsArr = new double[M];
+            for (int i = 0; i < M; i++) yObsArr[i] = y[validIdx[i]];
+            var obsY = VB.DenseOfArray(yObsArr);
+
+            Func<MathNet.Numerics.LinearAlgebra.Vector<double>,
+                 MathNet.Numerics.LinearAlgebra.Vector<double>,
+                 MathNet.Numerics.LinearAlgebra.Vector<double>> model = (theta, xUnused) =>
+            {
+                double kp = Math.Max(1e-4, theta[0]);
+                double ti = Math.Max(1e-3, Math.Min(1e6, theta[1]));
+                double td = Math.Max(0, Math.Min(100, theta[2]));
+
+                if (!IsInverseCStable(kp, ti, td, dt))
+                    return VB.Dense(M, 1e3);
+
+                double[] e = InverseCFilter(u, kp, ti, td, dt);
+                double[] rTilde = new double[N];
+                for (int k = 0; k < N; k++) rTilde[k] = y[k] + e[k];
+                double[] yHat = ApplyRefModel(rTilde, ts, nM, tauM, dt);
+                var result = VB.Dense(M);
+                for (int i = 0; i < M; i++)
+                {
+                    double yh = yHat[validIdx[i]];
+                    if (double.IsNaN(yh) || double.IsInfinity(yh)) yh = 1e3;
+                    result[i] = yh;
+                }
+                return result;
+            };
+
+            var thetaInit = VB.DenseOfArray(new double[] { kpInit, tiInit, tdInit });
+            try
+            {
+                var objective = MathNet.Numerics.Optimization.ObjectiveFunction.NonlinearModel(model, obsX, obsY);
+                var lm = new MathNet.Numerics.Optimization.LevenbergMarquardtMinimizer(maximumIterations: 30);
+                var lmResult = lm.FindMinimum(objective, thetaInit);
+                var opt = lmResult.MinimizingPoint;
+                r.Kp = Math.Max(1e-4, opt[0]);
+                r.Ti = Math.Max(0.1, Math.Min(250, opt[1]));
+                r.Td = Math.Max(0, Math.Min(10, opt[2]));
+                r.Cost = FritCostEval(r.Kp, r.Ti, r.Td, u, y, sat, ts, nM, tauM, dt);
+                r.Converged = (lmResult.ReasonForExit == MathNet.Numerics.Optimization.ExitCondition.Converged);
+                r.Diag = r.Converged ? "converged" : "stopped";
+            }
+            catch (Exception ex)
+            {
+                r.Diag = "LM ex: " + ex.Message;
+            }
+            return r;
+        }
+
+        /// <summary>
+        /// FRIT multistart — 현재 PID + 보수적 + 적분기/1차 가정 시드. 가장 cost 낮은 결과 채택.
+        /// non-convex cost surface 의 local minimum 위험 완화.
+        /// </summary>
+        /// <summary>
+        /// 27-grid multistart — PID 슬라이더 범위에서 log-spaced grid + 현재 PID = 28 seeds.
+        ///   Kp ∈ {0.01, 0.1, 1.0}  (3 값, log-spaced)
+        ///   Ti ∈ {1, 10, 100}      (3 값, log-spaced)
+        ///   Td ∈ {0, 0.1, 1.0}     (3 값)
+        ///   + 현재 PID 1 시드
+        /// 학계: Levenberg-Marquardt 의 local minimum 함정 회피 — multistart 가 표준.
+        /// </summary>
+        private static FritOptResult RunFritMultistart(
+            double[] u, double[] y, bool[] sat, double dt, double ts, int nM, double tauM,
+            double kpCurr, double tiCurr, double tdCurr)
+        {
+            double[] kpGrid = { 0.01, 0.1, 1.0 };
+            double[] tiGrid = { 1.0, 10.0, 100.0 };
+            double[] tdGrid = { 0.0, 0.1, 1.0 };
+
+            var seeds = new List<(double kp, double ti, double td)>(28);
+            // 현재 PID 첫 시드
+            seeds.Add((Math.Max(1e-3, kpCurr), Math.Max(0.1, tiCurr), Math.Max(0, tdCurr)));
+            // 27 grid
+            foreach (var kp in kpGrid)
+                foreach (var ti in tiGrid)
+                    foreach (var td in tdGrid)
+                        seeds.Add((kp, ti, td));
+
+            FritOptResult best = new FritOptResult { Cost = double.PositiveInfinity };
+            foreach (var s in seeds)
+            {
+                var r = RunFritLM(u, y, sat, dt, ts, nM, tauM, s.kp, s.ti, s.td);
+                if (r.Cost < best.Cost) best = r;
+            }
+            return best;
+        }
+
+        /// <summary>
+        /// Ts sweep — log-spaced 후보들에 multistart FRIT 실행, safety check 통과한 가장 공격적 후보 채택.
+        /// safety: Td/Ti &lt; 0.3, Td/dt &lt; 10 (D 진동 방지 — 산업 표준).
+        /// 모두 fail 시 fallback (가장 cost 낮은, 보수적 선호).
+        /// </summary>
+        private FritOptResult RunFritTsSweep(double[] u, double[] y, bool[] sat, double dt, double tauM,
+            double kpCurr, double tiCurr, double tdCurr, out double tsBest, out int safeCount)
+        {
+            int nM = 2;
+            int[] dtMults = { 3, 5, 7, 10, 15, 20, 30, 50, 80, 200 };
+            FritOptResult best = new FritOptResult { Cost = double.PositiveInfinity };
+            FritOptResult fallback = new FritOptResult { Cost = double.PositiveInfinity };
+            tsBest = 0;
+            double tsFallback = 0;
+            safeCount = 0;
+
+            foreach (int m in dtMults)
+            {
+                double ts = Math.Max(3.0 * dt, Math.Min(5.0, m * dt));
+                ts = Math.Max(ts, tauM);
+
+                var r = RunFritMultistart(u, y, sat, dt, ts, nM, tauM, kpCurr, tiCurr, tdCurr);
+                if (double.IsInfinity(r.Cost) || double.IsNaN(r.Cost)) continue;
+
+                bool safe = (r.Td / Math.Max(r.Ti, 1e-6) < 0.3) && (r.Td / dt < 10);
+                if (safe)
+                {
+                    safeCount++;
+                    if (best.Cost == double.PositiveInfinity || r.Cost < best.Cost)
+                    {
+                        best = r;
+                        tsBest = ts;
+                    }
+                }
+                if (r.Cost < fallback.Cost)
+                {
+                    fallback = r;
+                    tsFallback = ts;
+                }
+            }
+
+            if (best.Cost == double.PositiveInfinity)
+            {
+                tsBest = tsFallback;
+                return fallback;
+            }
+            return best;
         }
 
     }
