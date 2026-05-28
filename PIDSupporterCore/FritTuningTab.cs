@@ -243,11 +243,8 @@ namespace PIDSupporter
             public float ChirpStartHz = 0.2f;       // Chirp 시작 주파수
             public float ChirpEndHz = 2.0f;         // Chirp 끝 주파수
 
-            // ===== 적응형 진폭: PID가 가진을 다 눌러버릴 때 자동으로 키움 =====
-            // SP-direct 라 SP 단위 (u 의 [-1, 1] 범위와 무관). 큰 amp 허용해 강한 PID 의
-            // closed-loop reject 극복 가능. 액추에이터 saturation 은 별도 메커니즘이 감지.
-            public bool  AdaptiveAmp = true;
-            public float AdaptiveAmpMax = 10.0f;
+            // 적응형 진폭 제거 — 사용자 슬라이더 (Excite Amp) 값 그대로 사용.
+            // PRBS 가 ±A 로 강제 bounded 라 자동 boost 없어도 안전.
 
             // ===== 축 분리 (Axis Fixture) =====
             public bool FixOtherAxes = true;        // 튜닝 중 다른 축 SP 고정
@@ -285,16 +282,15 @@ namespace PIDSupporter
             public int    DiagSignChanges;  // u 부호 변환 횟수
             public double DiagPrevU;        // 직전 u (부호 변환 검출용)
 
-            // 적응형 진폭 상태 (saturation 기반 — u 만 봄)
-            public double AdaptiveCurrentAmp;       // 현재 실제 적용 진폭
-            public int    AdaptiveWindowSat;        // 윈도우 내 포화 카운트
-            public double AdaptiveWindowUPeak;      // 윈도우 내 max |u|
-            public int    AdaptiveWindowCount;      // 윈도우 누적 샘플 수
-            public int    AdaptiveCheckInterval = 60;  // 윈도우 크기 (≈1.2초)
-            public int    AdaptiveBoostCount;       // 진폭 ↑ 횟수 (표시용)
-            public double AdaptiveLastChangeT;      // 마지막 변경 시각 (쿨다운)
-            public double LastU;                    // 마지막 제어 출력 (가진 회피용)
-            public double NaturalYStd;              // 가진 전 자연 변동 (시작 진폭 결정)
+            public double LastU;                    // 마지막 제어 출력 (참고용)
+            public double NaturalYStd;              // 가진 전 자연 변동 (참고용)
+
+            // PRBS (Pseudo-Random Binary Sequence) 가진 상태.
+            // 10-bit LFSR, 다항식 x^10 + x^7 + 1 (maximum length, period 2^10 - 1 = 1023).
+            // 각 bit 가 PRBS_BIT_DURATION 틱 동안 유지.
+            public int PrbsState;                   // LFSR 현재 상태
+            public int PrbsTicksInBit;              // 현재 비트가 출력된 틱 수
+            public double PrbsCurrentValue;         // ±1 (이번 비트 값)
 
             public bool HasResult;
             public double Kp, Ti, Td;
@@ -323,14 +319,12 @@ namespace PIDSupporter
                 DiagSatCount = 0;
                 DiagSignChanges = 0;
                 DiagPrevU = 0;
-                AdaptiveCurrentAmp = 0;
-                AdaptiveWindowSat = 0;
-                AdaptiveWindowUPeak = 0;
-                AdaptiveWindowCount = 0;
-                AdaptiveBoostCount = 0;
-                AdaptiveLastChangeT = 0;
                 LastU = 0;
                 NaturalYStd = 0;
+                // PRBS 초기화: state = 1 (어떤 non-zero seed 든 OK, 결정론적)
+                PrbsState = 1;
+                PrbsTicksInBit = 0;
+                PrbsCurrentValue = 1.0;   // 첫 bit = state & 1 = 1 → +A
                 HasResult = false;
                 Kp = Ti = Td = FitRmse = 0;
                 KpSE = TiSE = TdSE = double.NaN;
@@ -543,59 +537,8 @@ namespace PIDSupporter
                     _sess.SamplesSinceLastSat++;
                 }
 
-                // ── 적응형 진폭 — saturation 기반 binary 규칙 ──
-                // 윈도우 통계 (uPeak, satCount) 만 보고 ↑/↓ 결정. y 는 안 봄 (FRIT 이론적으로 y info 는 amp ↑ 하면 자연 증가).
-                // 규칙: satRate > 2% 또는 uPeak > 0.85 → amp ÷ 1.5. 그 외 → amp × 1.5. 쿨다운 3초.
-                if (_s.AdaptiveAmp && _s.ExciteEnabled && _autoState == AutoTuneState.Recording)
-                {
-                    if (saturated) _sess.AdaptiveWindowSat++;
-                    double absU = Math.Abs(u);
-                    if (absU > _sess.AdaptiveWindowUPeak) _sess.AdaptiveWindowUPeak = absU;
-                    _sess.AdaptiveWindowCount++;
-
-                    if (_sess.AdaptiveWindowCount >= _sess.AdaptiveCheckInterval)
-                    {
-                        const double SAT_RATE_THRESHOLD = 0.02;   // 2%
-                        const double U_PEAK_THRESHOLD = 0.85;
-                        const double AMP_UP = 1.5;
-                        const double AMP_DOWN = 1.0 / 1.5;        // ≈ 0.667
-                        const double AMP_COOLDOWN = 3.0;
-                        const double AMP_FLOOR = 0.05;
-
-                        double satRate = (double)_sess.AdaptiveWindowSat / _sess.AdaptiveWindowCount;
-                        double uPeak = _sess.AdaptiveWindowUPeak;
-                        double amp = Math.Max(AMP_FLOOR, _sess.AdaptiveCurrentAmp);
-                        bool cooledDown = (_sess.T - _sess.AdaptiveLastChangeT) >= AMP_COOLDOWN;
-
-                        bool tooHigh = (satRate > SAT_RATE_THRESHOLD) || (uPeak > U_PEAK_THRESHOLD);
-
-                        if (cooledDown)
-                        {
-                            if (tooHigh && amp > AMP_FLOOR)
-                            {
-                                double newAmp = Math.Max(AMP_FLOOR, amp * AMP_DOWN);
-                                _sess.AdaptiveCurrentAmp = newAmp;
-                                _s.ExciteAmp = (float)newAmp;
-                                _sess.AdaptiveLastChangeT = _sess.T;
-                                _sess.LastMessage = $"Adaptive ↓ amp {amp:0.00}→{newAmp:0.00} (uPeak={uPeak:0.00}, satRate={satRate:P0})";
-                            }
-                            else if (!tooHigh && amp < _s.AdaptiveAmpMax)
-                            {
-                                double newAmp = Math.Min(_s.AdaptiveAmpMax, amp * AMP_UP);
-                                _sess.AdaptiveCurrentAmp = newAmp;
-                                _s.ExciteAmp = (float)newAmp;
-                                _sess.AdaptiveBoostCount++;
-                                _sess.AdaptiveLastChangeT = _sess.T;
-                                _sess.LastMessage = $"Adaptive ↑ amp {amp:0.00}→{newAmp:0.00} (uPeak={uPeak:0.00}, sat 없음)";
-                            }
-                            // else: 경계에 도달 (위 cap 또는 아래 floor). 유지.
-                        }
-
-                        _sess.AdaptiveWindowSat = 0;
-                        _sess.AdaptiveWindowUPeak = 0;
-                        _sess.AdaptiveWindowCount = 0;
-                    }
-                }
+                // 적응형 진폭 제거 — 사용자 슬라이더 (Excite Amp) 값 그대로 사용.
+                // PRBS 는 진폭 ±A 로 강제 bounded 라 adaptive 보호 불필요.
 
                 _sess.U.Add(u);
                 _sess.Y.Add(y);
@@ -609,7 +552,7 @@ namespace PIDSupporter
 
                 if (_sess.U.Count % 240 == 0)
                 {
-                    _sess.LastMessage = $"Collecting... valid {_sess.EffectiveValidCount}/{_s.MinSamples}  (total {_sess.U.Count}, sat {_sess.SaturatedCount}, boost {_sess.AdaptiveBoostCount}) / 수집중... 유효 {_sess.EffectiveValidCount}/{_s.MinSamples}";
+                    _sess.LastMessage = $"Collecting... valid {_sess.EffectiveValidCount}/{_s.MinSamples}  (total {_sess.U.Count}, sat {_sess.SaturatedCount}) / 수집중... 유효 {_sess.EffectiveValidCount}/{_s.MinSamples}";
                 }
 
                 // 자동 튜닝 종료 조건: 비포화 유효 샘플이 MinSamples 에 도달하면 종료.
@@ -1346,22 +1289,15 @@ namespace PIDSupporter
             }
             _sess.NaturalYStd = naturalStd;
 
-            // 시작 진폭: 자연 변동의 3배 이상, 최소 0.3
-            double startAmp = Math.Max(0.3, naturalStd * 3.0);
-            startAmp = Math.Min(startAmp, _s.AdaptiveAmpMax);
-
-            // SP 가진: SetPointAdjust에 멀티사인 추가, 원본 PID는 그대로 동작
+            // SP-direct PRBS 가진. 진폭은 사용자 슬라이더 (Excite Amp) 값 그대로.
+            // 슬라이더가 0 이면 default 0.3 사용 (사용자 첫 시도 보호).
+            if (_s.ExciteAmp <= 0.01f) _s.ExciteAmp = 0.3f;
             _s.ExciteEnabled = true;
-            _s.ExciteWave = WaveType.MultiSine;
-            _s.ExciteAmp = (float)startAmp;
-            _s.ExciteFreqHz = 0.05f;
-            _s.ChirpEndHz = (float)Math.Min(fs / 4.0, 2.0);
-            _s.AdaptiveAmp = true;
+            _s.ExciteWave = WaveType.MultiSine;  // 코드 상 wave type, 실제는 PRBS
 
             _autoState = AutoTuneState.Recording;
             StartRecording();
-            _sess.AdaptiveCurrentAmp = _s.ExciteAmp;
-            _sess.LastMessage = $"Recording (SP excite, amp={startAmp:0.00}) / 녹화 중 (SP 가진)";
+            _sess.LastMessage = $"Recording (PRBS amp={_s.ExciteAmp:0.00}) / 녹화 중 (PRBS 가진)";
         }
 
         /// <summary>
@@ -1727,18 +1663,33 @@ namespace PIDSupporter
         }
 
         /// <summary>
-        /// 매 틱마다 SetPoint 에 가진 신호를 더한다 (SP-direct).
-        /// PID 가 가진된 SP 를 추종하느라 u 를 만들고, plant 가 응답.
-        /// ARX 식별이 이 (u, y) 에서 plant G 를 추출.
+        /// SP-direct 가진. WaveType.MultiSine 일 때 PRBS (Pseudo-Random Binary Sequence) 사용.
+        /// Ljung "System Identification" §13 의 표준 식별 입력. 다른 wave 형식 (Sine/Chirp) 은
+        /// 수동 실험용으로 보존.
         ///
-        /// 왜 SP-direct (u-direct 가 아니라):
-        /// - FRIT 의 r̃(θ) = y + u/C(θ) 수식이 "u 는 순수 PID 출력" 가정
-        /// - u-direct 로 외부 ε 주입 시 ε/C(θ) 여분항이 cost surface 왜곡 → LM 이상 PID 수렴
-        /// - SP-direct 는 가정 만족 → cost 깔끔 + ARX 도 well-conditioned closed-loop OLS
-        /// - ARX 의 invariance: G 는 plant 고유 → C₀ 변해도 같은 G 추출 → iteration 자연 수렴
+        /// PRBS 의 성질 (수학적):
+        ///   · 평균 0 (정확) → integrator plant drift 누적 0
+        ///   · 진폭 ±A 항상 (피크 팩터 = 1)
+        ///   · 자기상관 ≈ impulse (broadband 스펙트럼, 0 ~ 1/(2·T_b) 거의 균일)
+        ///   · maximum length sequence (period 2^10 - 1 = 1023 bit)
+        ///   · deterministic (같은 seed = 같은 시퀀스 → reproducible)
+        ///
+        /// 휴리스틱 임의값 없음. 파라미터:
+        ///   · 진폭 A — 사용자 슬라이더 (Excite Amp)
+        ///   · bit duration T_b — PRBS_BIT_TICKS 상수 (코드)
         /// </summary>
         /// <summary>현재 틱 가진값 (telemetry).</summary>
         private double _lastExciteValue = 0.0;
+
+        // PRBS bit duration: 한 비트가 유지되는 틱 수.
+        // dt=0.025 기준 4틱 = 0.1초 → broadband 스펙트럼 0~5Hz (FTD plant 일반 범위 cover).
+        private const int PRBS_BIT_TICKS = 4;
+
+        // PRBS LFSR feedback polynomial x^10 + x^7 + 1 → maximum length 1023.
+        // bit 9 (MSB) XOR bit 6.
+        private const int PRBS_TAP1 = 9;
+        private const int PRBS_TAP2 = 6;
+        private const int PRBS_MASK = 0x3FF;  // 10-bit
 
         private void ApplyExcitation(float dt)
         {
@@ -1749,23 +1700,8 @@ namespace PIDSupporter
             if (_s.ExciteWave == WaveType.Off) return;
             if (!_hasBaseSetPointAdjust) return;
 
-            double t = _sess.T;  // 녹화 시작부터의 경과 시간 (블록 분리 제거됨)
-            double amp = Math.Max(0.0, _s.ExciteAmp); // 진폭 (음수 방지)
-
-            // 포화 회피: |u|가 포화 임계값에 가까우면 가진 진폭을 줄임
-            double absU = Math.Abs(_sess.LastU);
-            double satMargin = _s.SaturationThreshold - absU; // 포화까지 남은 여유
-            if (satMargin < 0.3 && satMargin > 0.0)
-            {
-                // 여유가 0.3~0 → 스케일 1.0~0.1
-                double scale = Math.Max(0.1, satMargin / 0.3);
-                amp *= scale;
-            }
-            else if (satMargin <= 0.0)
-            {
-                amp *= 0.1; // 이미 포화 근처면 최소 가진
-            }
-
+            double t = _sess.T;
+            double amp = Math.Max(0.0, _s.ExciteAmp);
             double x = 0.0;
 
             switch (_s.ExciteWave)
@@ -1778,7 +1714,6 @@ namespace PIDSupporter
                     }
                 case WaveType.Chirp:
                     {
-                        // 로그 chirp - 저주파에서 오래 머물러 Ti 추정에 유리
                         double f0 = Math.Max(0.01, _s.ChirpStartHz);
                         double f1 = Math.Max(f0 * 1.1, _s.ChirpEndHz);
                         double T = Math.Max(1.0, _s.MinSamples * dt);
@@ -1794,33 +1729,16 @@ namespace PIDSupporter
                     }
                 case WaveType.MultiSine:
                     {
-                        // Multi-width doublet 패턴 (aerospace 3-2-1-1 계열).
-                        // 폭이 다른 doublet (+ 직후 - pulse) 을 순서대로 적용:
-                        //   넓은 doublet  → 낮은 주파수 자극 (느린 plant 모드)
-                        //   좁은 doublet  → 높은 주파수 자극 (빠른 plant 모드)
-                        // 각 doublet 이 평균 zero 라 integrator drift 즉시 상쇄.
-                        // 그 후 긴 정적 구간에 closed-loop 자연 응답 관찰.
-                        //
-                        // 폭 W 인 doublet 의 주 자극 주파수 ≈ 1/(2W):
-                        //   1.5s → 0.33 Hz (slow modes, τ ~ 0.5-2s 인 plant)
-                        //   0.7s → 0.7 Hz  (medium, τ ~ 0.2-0.5s)
-                        //   0.3s → 1.7 Hz  (fast, τ ~ 0.1-0.2s)
-                        //
-                        // 다양한 폭으로 광대역 Fisher information → plant 시정수 모르는 상태에서도
-                        // 일부 doublet 이 plant 모드에 맞아 식별성 확보. 그래도 평균 zero 유지로 안정.
-                        //
-                        // 스케줄 (초): 6.6초 동안 자극, 이후 ~18초 정적/관찰.
-                        if (t < 1.5)        x = +amp;   // doublet 1 + (low)
-                        else if (t < 3.0)   x = -amp;   // doublet 1 -
-                        // 3.0 ~ 4.0: 1초 휴식
-                        else if (t < 4.0)   x = 0;
-                        else if (t < 4.7)   x = +amp;   // doublet 2 + (mid)
-                        else if (t < 5.4)   x = -amp;   // doublet 2 -
-                        // 5.4 ~ 6.0: 0.6초 휴식
-                        else if (t < 6.0)   x = 0;
-                        else if (t < 6.3)   x = +amp;   // doublet 3 + (high)
-                        else if (t < 6.6)   x = -amp;   // doublet 3 -
-                        // 6.6 이후: 모두 0 (긴 회복 + 정적 관찰)
+                        // PRBS — 매 틱 LFSR 상태 진행, PRBS_BIT_TICKS 마다 새 비트.
+                        _sess.PrbsTicksInBit++;
+                        if (_sess.PrbsTicksInBit >= PRBS_BIT_TICKS)
+                        {
+                            int newBit = ((_sess.PrbsState >> PRBS_TAP1) ^ (_sess.PrbsState >> PRBS_TAP2)) & 1;
+                            _sess.PrbsState = ((_sess.PrbsState << 1) | newBit) & PRBS_MASK;
+                            _sess.PrbsCurrentValue = (newBit == 1) ? 1.0 : -1.0;
+                            _sess.PrbsTicksInBit = 0;
+                        }
+                        x = amp * _sess.PrbsCurrentValue;  // ±A
                         break;
                     }
             }

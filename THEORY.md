@@ -7,13 +7,16 @@
 이 모드는 **ARX(2,1) plant identification + SIMC PID design** 기반 자동 튜닝을 제공합니다. classical closed-loop indirect ID 방법 (Ljung, Skogestad 계열).
 
 **수학적 기반과 한계 (명시)** — 모든 cap/bound 는 **수학적 근거** 또는 **UI 강제 제약** 에서 옵니다. 임의 휴리스틱 숫자 사용 안 함:
-- ARX(2,1) OLS — Linear LS, closed-form unique solution (Ljung "System ID" §10)
+- **가진 신호 PRBS** — Ljung "System ID" §13 표준. 10-bit LFSR, 다항식 x^10 + x^7 + 1 (maximum length, period 1023), bit duration 4 ticks. ±A 이진, 평균 0, broadband 스펙트럼. 휴리스틱 임의값 0개.
+- **ARX(2,1) OLS** — Linear LS, closed-form unique solution (Ljung "System ID" §10)
 - 극점 → 시정수: τ = -dt/ln|z| (이산 시간 정의)
-- SIMC formula — Skogestad 2003 paper
+- **SIMC formula** — Skogestad 2003 paper
 - 적분기 판정 — `|1-a₁-a₂| < 2·SE` 통계적 (2σ confidence)
 - Plant pole reject — `|z| > 1 + 3·SE_z` (3σ 통계적)
 - 강제 bound — FTD UI 슬라이더 한계 (Ti ≤ 250, Td ≤ 10)
 - SIMC variant 선택 — balanced (τ_c = 2·τ) 가 default. aggressive/conservative 는 사용자 슬라이더 조정.
+
+**제거된 휴리스틱들 (이전 코드 잔재 아님)**: Adaptive amplitude (`sat>2%`, `uPeak>0.85`, `×1.5/0.67`, cooldown 3s) — 다 임의값이라 제거. PRBS 가 진폭 ±A 로 bounded 라 자동 조정 필요 없음. 사용자가 슬라이더로 진폭 직접 설정.
 
 **한계 인정** — 위 외에 추가 cap (예: Td/Ti < 0.25 같은 산업 룰) 은 적용 안 함. 결과적으로 Td 가 노이즈 증폭하는 영역 (Td/dt 크게) 으로 갈 수 있으며 이 경우 사용자가 Ts 슬라이더로 더 큰 (conservative) 값 선택해 해결. mod 가 진동을 자동 차단하지 않음.
 
@@ -23,7 +26,7 @@
   → 사전 진단 3초 (가진 OFF, |u| 통계만 관찰)
        · Limit cycle 또는 지속 포화 감지 → 즉시 fail + 의심 원인 표시
        · 정상이면 다음 단계
-  → 가진 신호 (Multi-width doublet) 를 SetPoint 에 주입
+  → 가진 신호 (PRBS, Ljung §13 표준) 를 SetPoint 에 주입
   → 현재 PID C₀ 로 폐루프 데이터 (u, y) + 포화 플래그 연속 수집
   → EffectiveValidCount ≥ MinSamples 까지 대기 (적응형 진폭이 자동 조정)
   → ARX(2,1) OLS 로 plant G 직접 식별:
