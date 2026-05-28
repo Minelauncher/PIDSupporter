@@ -293,6 +293,21 @@ namespace PIDSupporter
             public int PrbsTicksInBit;              // 현재 비트가 출력된 틱 수
             public double PrbsCurrentValue;         // ±1 (이번 비트 값)
 
+            // u-target adaptive amplitude: closed-loop 의 plant input power 를 C 와 무관하게 일정 유지.
+            //   user 가 설정한 ExciteAmp 의 의미 = u 의 target std (post-clip plant input 진폭).
+            //   weak C → 작은 |T(z)| → 같은 r 에서 u_std 작음 → amp 자동 증가.
+            //   strong C → 큰 |T| → u_std 큼 → amp 자동 감소 (saturation 방지).
+            //   학계: Hjalmarsson 2005 "input design with power constraint".
+            public double AmpDyn;                   // 현재 동적 가진 진폭
+            public int    TicksSinceAmpAdjust;      // 마지막 amp 조정 후 경과 틱
+
+            // PRBS HPF state (drift cancellation): fc ≈ 0.01Hz HPF.
+            //   적분기 plant + finite-window PRBS → 누적 DC bias → 비행기 천천히 drift.
+            //   매우 저주파 HPF 로 DC 만 제거, fast PRBS dynamics 유지.
+            //   학계: closed-loop input design with bias removal (Ljung §13.5).
+            public double PrbsHpfInPrev;            // 이전 input (HPF state)
+            public double PrbsHpfOutPrev;           // 이전 output (HPF state)
+
             public bool HasResult;
             public double Kp, Ti, Td;
             public double KpSE, TiSE, TdSE;     // Cramér-Rao 표준오차 (NaN if 계산 실패)
@@ -327,6 +342,10 @@ namespace PIDSupporter
                 PrbsState = 1;
                 PrbsTicksInBit = 0;
                 PrbsCurrentValue = 1.0;   // 첫 bit = state & 1 = 1 → +A
+                AmpDyn = 0;               // StartRecording 에서 _s.ExciteAmp 으로 설정.
+                TicksSinceAmpAdjust = 0;
+                PrbsHpfInPrev = 0;
+                PrbsHpfOutPrev = 0;
                 HasResult = false;
                 Kp = Ti = Td = FitRmse = 0;
                 KpSE = TiSE = TdSE = double.NaN;
@@ -523,12 +542,15 @@ namespace PIDSupporter
                 if (c == null) return;
 
                 // u: 제어 출력(컨트롤 변수), y: 프로세스 변수, sp: 목표값
-                double u = c.LastControlVariable;
+                // u 는 plant 가 실제로 받는 값 = clip 된 값. 안전을 위해 명시적 clamp.
+                // 이렇게 하면 measured u = actual plant input → IV-ARX 가 포화 데이터에서도 unbiased.
+                double uRaw = c.LastControlVariable;
+                double u = Math.Max(-1.0, Math.Min(1.0, uRaw));
                 double y = c.LastProcessVariable;
                 _sess.LastU = u;
 
-                // 포화 추적 + transient tail 카운터
-                bool saturated = Math.Abs(u) >= _s.SaturationThreshold;
+                // 포화 추적 (telemetry/UI 용). 회귀에서는 제외 안 함 — clamped u 가 plant 입력이라 unbiased.
+                bool saturated = Math.Abs(uRaw) >= _s.SaturationThreshold;
                 if (saturated)
                 {
                     _sess.SaturatedCount++;
@@ -547,25 +569,53 @@ namespace PIDSupporter
                 _sess.R.Add(_lastExciteValue);   // PRBS reference — IV-ARX 의 instrument
                 _sess.Saturated.Add(saturated);
 
-                // EffectiveValid: transient tail 밖에 있는 깨끗한 샘플만 카운트
-                if (_sess.SamplesSinceLastSat > _s.TransientTailSamples)
-                    _sess.EffectiveValidCount++;
+                // 포화 데이터도 IV-ARX 회귀에 포함 (clamped u = actual plant input → unbiased).
+                // EffectiveValidCount = 총 샘플 수.
+                _sess.EffectiveValidCount = _sess.U.Count;
 
                 _sess.T += dt;
 
-                if (_sess.U.Count % 240 == 0)
+                // 자동 튜닝 종료 조건 (SE-게이트):
+                //   1. 최소: N >= MinSamples (충분한 데이터 보장)
+                //   2. SE/τ_1 < 0.2 도달 시 종료 (20% 상대 정확도 — 통계적 기준)
+                //   3. 하드 cap: N >= MinSamples * 4 도달 시 무조건 종료 (boundary 안전)
+                // 매 240 틱 (~6초) 마다 intermediate ID 실행해서 SE 검사.
+                if (_autoState == AutoTuneState.Recording)
                 {
-                    _sess.LastMessage = $"Collecting... valid {_sess.EffectiveValidCount}/{_s.MinSamples}  (total {_sess.U.Count}, sat {_sess.SaturatedCount}) / 수집중... 유효 {_sess.EffectiveValidCount}/{_s.MinSamples}";
-                }
+                    int nNow = _sess.U.Count;
+                    int hardCap = _s.MinSamples * 4;
+                    bool shouldStop = false;
+                    string stopReason = null;
 
-                // 자동 튜닝 종료 조건: 비포화 유효 샘플이 MinSamples 에 도달하면 종료.
-                // 시간 상한 없음 — 포화율이 높아도 적응형 진폭이 결국 가진을 줄여 비포화로 수렴.
-                if (_autoState == AutoTuneState.Recording
-                    && _sess.EffectiveValidCount >= _s.MinSamples)
-                {
-                    StopRecording();
-                    _autoState = AutoTuneState.Computing;
-                    _sess.LastMessage = "Auto-tune: analyzing... / 자동 튜닝: 데이터 분석 중...";
+                    if (nNow >= hardCap)
+                    {
+                        shouldStop = true;
+                        stopReason = $"hard cap ({hardCap})";
+                    }
+                    else if (nNow >= _s.MinSamples && nNow % 240 == 0)
+                    {
+                        double seRatio = QuickIdSeRatio();
+                        if (seRatio < 0.2)
+                        {
+                            shouldStop = true;
+                            stopReason = $"SE/τ={seRatio:0.00}";
+                        }
+                        else
+                        {
+                            _sess.LastMessage = $"Collecting... N={nNow}, SE/τ={seRatio:0.00} (need <0.2), sat={_sess.SaturatedCount}, amp={_sess.AmpDyn:0.000} / 수집중";
+                        }
+                    }
+                    else if (nNow % 240 == 0)
+                    {
+                        _sess.LastMessage = $"Collecting... N={nNow}/{_s.MinSamples} (min), sat={_sess.SaturatedCount}, amp={_sess.AmpDyn:0.000} / 수집중";
+                    }
+
+                    if (shouldStop)
+                    {
+                        StopRecording();
+                        _autoState = AutoTuneState.Computing;
+                        _sess.LastMessage = $"Auto-tune: {stopReason} reached, analyzing... / 자동 튜닝: 분석 중";
+                    }
                 }
             }
             catch (Exception e)
@@ -900,6 +950,7 @@ namespace PIDSupporter
         {
             _sess.Clear();
             _sess.Recording = true;
+            _sess.AmpDyn = Math.Max(0.001, _s.ExciteAmp);  // u-target adaptive amp: 사용자 슬라이더로 초기화
             _sess.LastMessage = "Recording started / 녹화 시작";
 
             CaptureSetPointAdjustBase();
@@ -1696,6 +1747,20 @@ namespace PIDSupporter
         private const int PRBS_TAP2 = 6;
         private const int PRBS_MASK = 0x3FF;  // 10-bit
 
+        // u-target adaptive: 매 K 틱마다 u_std 측정 → amp 비례 조정.
+        // dt=0.025 기준 80틱 ≈ 2초. closed-loop 반응 충분히 settle 되는 window.
+        private const int AMP_ADJUST_INTERVAL = 80;
+        // 단계당 amp 변동 한계 (안정성). 한 step 에 최대 2배 ↑ / 0.5배 ↓.
+        private const double AMP_RATIO_MAX = 2.0;
+        private const double AMP_RATIO_MIN = 0.5;
+        // amp 의 절대 한계. 0.001 (거의 안 흔듦) ~ 2.0 (PRBS 최대 진폭).
+        private const double AMP_DYN_MIN = 0.001;
+        private const double AMP_DYN_MAX = 2.0;
+
+        // PRBS HPF coefficient (drift cancellation): fc ≈ 0.01Hz at dt=0.025.
+        // α = exp(-2π·fc·dt) ≈ 1 - 2π·0.01·0.025 ≈ 0.9984. PRBS bit (0.1s) 동안 decay 무시 가능.
+        private const double PRBS_HPF_ALPHA = 0.9984;
+
         private void ApplyExcitation(float dt)
         {
             _lastExciteValue = 0.0;
@@ -1734,6 +1799,46 @@ namespace PIDSupporter
                     }
                 case WaveType.MultiSine:
                     {
+                        // ── u-target adaptive amplitude ──
+                        // 사용자 ExciteAmp 의 의미: u (plant input) 의 target std.
+                        // 매 K 틱마다 최근 u std 측정 → ratio = target / observed → amp_dyn 조정.
+                        // 결과: closed-loop 의 plant input power 가 controller 강도와 무관하게 일정.
+                        _sess.TicksSinceAmpAdjust++;
+                        int nU = _sess.U.Count;
+                        if (_sess.TicksSinceAmpAdjust >= AMP_ADJUST_INTERVAL && nU >= AMP_ADJUST_INTERVAL)
+                        {
+                            int start = nU - AMP_ADJUST_INTERVAL;
+                            double sum = 0, sumSq = 0;
+                            for (int i = start; i < nU; i++)
+                            {
+                                double ui = _sess.U[i];
+                                sum += ui;
+                                sumSq += ui * ui;
+                            }
+                            int cn = nU - start;
+                            double mean = sum / cn;
+                            double variance = sumSq / cn - mean * mean;
+                            double uStd = (variance > 0) ? Math.Sqrt(variance) : 0;
+
+                            double target = Math.Max(AMP_DYN_MIN, _s.ExciteAmp);
+                            double ratio;
+                            if (uStd > 1e-4)
+                            {
+                                ratio = target / uStd;
+                                if (ratio > AMP_RATIO_MAX) ratio = AMP_RATIO_MAX;
+                                else if (ratio < AMP_RATIO_MIN) ratio = AMP_RATIO_MIN;
+                            }
+                            else
+                            {
+                                // u 가 거의 안 움직임 (weak C 등) → amp 적극 증가.
+                                ratio = AMP_RATIO_MAX;
+                            }
+                            _sess.AmpDyn *= ratio;
+                            if (_sess.AmpDyn > AMP_DYN_MAX) _sess.AmpDyn = AMP_DYN_MAX;
+                            else if (_sess.AmpDyn < AMP_DYN_MIN) _sess.AmpDyn = AMP_DYN_MIN;
+                            _sess.TicksSinceAmpAdjust = 0;
+                        }
+
                         // PRBS — 매 틱 LFSR 상태 진행, PRBS_BIT_TICKS 마다 새 비트.
                         _sess.PrbsTicksInBit++;
                         if (_sess.PrbsTicksInBit >= PRBS_BIT_TICKS)
@@ -1743,7 +1848,15 @@ namespace PIDSupporter
                             _sess.PrbsCurrentValue = (newBit == 1) ? 1.0 : -1.0;
                             _sess.PrbsTicksInBit = 0;
                         }
-                        x = amp * _sess.PrbsCurrentValue;  // ±A
+                        double xRaw = _sess.AmpDyn * _sess.PrbsCurrentValue;  // ±A_dyn
+
+                        // ── HPF: drift cancellation ──
+                        // y[n] = α·(y[n-1] + x[n] - x[n-1]).
+                        // 적분기 plant 의 finite-window PRBS DC bias 제거.
+                        double xHpf = PRBS_HPF_ALPHA * (_sess.PrbsHpfOutPrev + xRaw - _sess.PrbsHpfInPrev);
+                        _sess.PrbsHpfInPrev = xRaw;
+                        _sess.PrbsHpfOutPrev = xHpf;
+                        x = xHpf;
                         break;
                     }
             }
@@ -2442,6 +2555,27 @@ namespace PIDSupporter
         }
 
         /// <summary>
+        /// 수집 중 중간 식별로 SE/τ_1 비율 반환 — SE-게이트 (수집 종료 조건) 용.
+        /// 너무 짧거나 식별 실패 시 +∞ 반환 → 수집 계속.
+        /// </summary>
+        private double QuickIdSeRatio()
+        {
+            int n = _sess.U.Count;
+            if (n < 128) return double.PositiveInfinity;
+            double dt = Time.fixedDeltaTime;
+            if (dt <= 0) dt = 0.02;
+
+            double[] u = _sess.U.ToArray();
+            double[] y = _sess.Y.ToArray();
+            double[] r = _sess.R.ToArray();
+            bool[]   s = _sess.Saturated.ToArray();
+
+            PlantModel m = IdentifyPlantArx(u, y, r, s, dt, 0);
+            if (!m.Valid || m.Tau1 <= 1e-6 || double.IsNaN(m.TauSE)) return double.PositiveInfinity;
+            return m.TauSE / m.Tau1;
+        }
+
+        /// <summary>
         /// (u, y, r) 데이터에 IV-ARX/OE (Refined Instrumental Variables) 로 plant G 식별.
         ///
         /// 모델 가정 (OE: Output Error, 더 현실적):
@@ -2482,12 +2616,13 @@ namespace PIDSupporter
 
             // ── Stage 1: ARX OLS (initial estimate) ──
             // regressors X = [y[k-1], y[k-2], u[k-1-δ]]
+            // 포화 샘플도 포함: measured u = clipped value = actual plant input → unbiased.
+            // saturation 은 information loss 만 만들고 bias 안 만듦 (linear-in-params 회귀).
             double s11 = 0, s12 = 0, s13 = 0, s22 = 0, s23 = 0, s33 = 0;
             double t1 = 0, t2 = 0, t3 = 0;
             int count = 0;
             for (int k = kStart; k < N; k++)
             {
-                if (sat[k] || sat[k - 1] || sat[k - 2] || sat[k - 1 - delayN]) continue;
                 double yt = yd[k];
                 double y1 = yd[k - 1];
                 double y2 = yd[k - 2];
@@ -2522,6 +2657,25 @@ namespace PIDSupporter
 
                 for (int rivIter = 0; rivIter < MAX_RIV_ITER; rivIter++)
                 {
+                    // 안정성 가드: 현재 추정이 unstable 이면 simulation 이 발산해서 IV 가 오염.
+                    // 특성다항식 root |z| < 1 인지 확인 후 simulate.
+                    double discCheck = a1 * a1 + 4.0 * a2;
+                    double zMaxAbs;
+                    if (discCheck >= 0)
+                    {
+                        double sqC = Math.Sqrt(discCheck);
+                        zMaxAbs = Math.Max(Math.Abs((a1 + sqC) / 2.0), Math.Abs((a1 - sqC) / 2.0));
+                    }
+                    else
+                    {
+                        zMaxAbs = Math.Sqrt(Math.Max(0, -a2));
+                    }
+                    if (zMaxAbs > 1.0)
+                    {
+                        // ARX initial 이 이미 unstable → RIV iteration 의미 없음, ARX 결과 유지.
+                        break;
+                    }
+
                     // y_sim: noise-free simulation with current estimate.
                     // y_sim[k] = a₁ y_sim[k-1] + a₂ y_sim[k-2] + b u_d[k-1-δ]
                     ySim[0] = yd[0];
@@ -2541,7 +2695,6 @@ namespace PIDSupporter
                     int rivCount = 0;
                     for (int k = kStart; k < N; k++)
                     {
-                        if (sat[k] || sat[k - 1] || sat[k - 2] || sat[k - 1 - delayN]) continue;
                         double yt = yd[k];
                         double y1 = yd[k - 1], y2 = yd[k - 2], u1 = ud[k - 1 - delayN];
                         double ys1 = ySim[k - 1], ys2 = ySim[k - 2];
@@ -2579,12 +2732,11 @@ namespace PIDSupporter
                 }
             }
 
-            // 잔차 RMSE (최종 estimate 기준)
+            // 잔차 RMSE (최종 estimate 기준) — 포화 샘플도 포함.
             double sqResid = 0;
             int cResid = 0;
             for (int k = kStart; k < N; k++)
             {
-                if (sat[k] || sat[k - 1] || sat[k - 2] || sat[k - 1 - delayN]) continue;
                 double pred = a1 * yd[k - 1] + a2 * yd[k - 2] + b * ud[k - 1 - delayN];
                 double e = yd[k] - pred;
                 sqResid += e * e;
@@ -2629,12 +2781,14 @@ namespace PIDSupporter
             m.HasIntegrator = Math.Abs(denom) < 2.0 * seDenom;  // 2σ 통계적 판정
 
             // 불안정 추정 거부 — SIMC physical: stable plant 면 |z| < 1.
-            //   추정 노이즈 허용해서 1 + 3·SE_z 까지는 적분기로 cap. 그 이상은 truly unstable.
-            double seZ = Math.Sqrt(sigma2 * M11 / Math.Max(1e-12, Math.Abs(det))); // a₁ 의 SE ≈ z₁ 의 SE
-            if (zSlow > 1.0 + 3.0 * seZ)
-            { m.Diagnosis = $"slow pole |z|={zSlow:0.000} > 1 + 3σ (truly unstable)"; return m; }
+            //   적분기 plant 는 |z|=1 근방. 노이즈/수치오차로 |z| 가 1 을 약간 넘는 건 흔함.
+            //   |z| ∈ (1, 2] 는 적분기로 간주 (아래 cap 로직이 처리), |z| > 2 만 truly unstable.
+            if (zSlow > 2.0)
+            { m.Diagnosis = $"slow pole |z|={zSlow:0.000} > 2.0 (truly unstable)"; return m; }
             if (zSlow <= 0)
             { m.Diagnosis = $"slow pole |z|={zSlow:0.000} ≤ 0 (invalid)"; return m; }
+            // |z| > 1 → 사실상 적분기 (noise 가 stable 극을 unit circle 밖으로 밀어낸 경우)
+            if (zSlow > 1.0) m.HasIntegrator = true;
 
             // |z| ≥ 1 노이즈 → 1 직전으로 cap (적분기 표현). cap 자체는 수치 보호 (1/ln(1) = ∞).
             double zForTau = Math.Min(zSlow, 1.0 - 1e-6);
