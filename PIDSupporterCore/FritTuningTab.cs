@@ -265,6 +265,7 @@ namespace PIDSupporter
 
             public readonly List<double> U = new List<double>();          // 제어 출력 기록 (전 샘플)
             public readonly List<double> Y = new List<double>();          // 프로세스 변수 기록 (전 샘플)
+            public readonly List<double> R = new List<double>();          // 가진 신호 (PRBS, IV-ARX 의 instrument)
             public readonly List<bool>   Saturated = new List<bool>();    // 이 샘플이 포화 중인지 (가중치용)
 
             // ── 포화 회복 추적 ──
@@ -309,6 +310,7 @@ namespace PIDSupporter
                 T = 0;
                 U.Clear();
                 Y.Clear();
+                R.Clear();
                 Saturated.Clear();
                 SaturatedCount = 0;
                 SamplesSinceLastSat = int.MaxValue / 2;   // 시작 시 "이미 충분히 오래 깨끗" 상태
@@ -542,6 +544,7 @@ namespace PIDSupporter
 
                 _sess.U.Add(u);
                 _sess.Y.Add(y);
+                _sess.R.Add(_lastExciteValue);   // PRBS reference — IV-ARX 의 instrument
                 _sess.Saturated.Add(saturated);
 
                 // EffectiveValid: transient tail 밖에 있는 깨끗한 샘플만 카운트
@@ -1324,6 +1327,7 @@ namespace PIDSupporter
 
             double[] u = _sess.U.ToArray();
             double[] y = _sess.Y.ToArray();
+            double[] r = _sess.R.Count == _sess.U.Count ? _sess.R.ToArray() : null;
             bool[]   sat = _sess.Saturated.ToArray();
 
             double yStd = StdDev(y);
@@ -1356,14 +1360,15 @@ namespace PIDSupporter
             double ti0 = this._focus.Pid.kI.Us;
             double td0 = this._focus.Pid.kD.Us;
 
-            // ── ARX(2,1) plant identification + SIMC PID design ──
-            // FRIT 의 비선형 LM + cost surface 의존성 대신 classical indirect ID:
-            //   1. (u, y) 데이터에 linear LS → plant G 추출 (deterministic, single solution)
-            //   2. G 의 시정수/극점/게인에 SIMC 공식 적용 → PID
-            // controller-invariant (G 는 plant property), local minimum 없음, iteration 자연 수렴.
+            // ── IV-ARX/OE (Refined Instrumental Variables) plant ID + SIMC PID ──
+            // Closed-loop ID 의 정통 표준 (Young 1980, Söderström-Stoica §8):
+            //   1. ARX OLS 로 초기 (a₁, a₂, b) 추정
+            //   2. RIV: y_sim 시뮬레이션 + r 을 instrument 로 → 편향 제거
+            //   3. 2~3회 iteration 수렴 → 점근적 OE-PEM efficiency
+            //   4. plant G 의 극점/게인 → SIMC PID
             double tauM = Math.Max(dt, (double)_s.ModelDelayTau);
 
-            PlantModel plant = IdentifyPlantArx(u, y, sat, dt, tauM);
+            PlantModel plant = IdentifyPlantArx(u, y, r, sat, dt, tauM);
 
             if (!plant.Valid)
             {
@@ -2437,16 +2442,30 @@ namespace PIDSupporter
         }
 
         /// <summary>
-        /// (u, y) 데이터에 ARX(2,1) OLS 로 plant G 식별.
-        ///   y[k] = a₁·y[k-1] + a₂·y[k-2] + b·u[k-1-δ]
-        /// 특성다항식 z² - a₁ z - a₂ = 0 의 근 → 이산 극점 → 연속 시정수.
-        /// b 와 극점에서 DC gain K 계산.
+        /// (u, y, r) 데이터에 IV-ARX/OE (Refined Instrumental Variables) 로 plant G 식별.
+        ///
+        /// 모델 가정 (OE: Output Error, 더 현실적):
+        ///   y[k] = G(z) u[k] + v[k]     where v ~ output noise (colored when reflected to ARX form)
+        ///
+        /// 전략 (RIV; Young 1980, Söderström-Stoica §8):
+        ///   Stage 1: Plain ARX OLS — 초기 추정 (a₁⁰, a₂⁰, b⁰)
+        ///   Stage 2+: RIV iteration
+        ///     - 현재 추정으로 y_sim 시뮬레이션 (noise-free plant output)
+        ///     - IV matrix Z = [y_sim[k-1], y_sim[k-2], r[k-1-δ]]
+        ///       · y_sim 은 시뮬레이션 → noise 와 무상관 ✓
+        ///       · r 은 사용자 가진 → noise 와 무상관 ✓
+        ///     - (Z^T X) θ = Z^T y 풀이
+        ///     - 수렴 (Δθ 작음) 까지 2~3회
+        ///   점근적으로 OE-PEM 과 동일 efficiency (Young 정리).
+        ///
+        /// 입력 r 이 null 이면 ARX OLS 로 폴백.
         /// </summary>
-        private static PlantModel IdentifyPlantArx(double[] u, double[] y, bool[] sat, double dt, double theta)
+        private static PlantModel IdentifyPlantArx(double[] u, double[] y, double[] r, bool[] sat, double dt, double theta)
         {
             PlantModel m = new PlantModel { Theta = theta };
             int N = Math.Min(u.Length, Math.Min(y.Length, sat.Length));
             if (N < 64) { m.Diagnosis = "data too short"; return m; }
+            bool useIv = (r != null && r.Length >= N);
 
             int delayN = Math.Max(0, (int)Math.Round(theta / dt));
             int kStart = 2 + delayN;
@@ -2458,8 +2477,11 @@ namespace PIDSupporter
             // Detrend
             double[] yd = new double[N]; Array.Copy(y, yd, N); Detrend(yd);
             double[] ud = new double[N]; Array.Copy(u, ud, N); Detrend(ud);
+            double[] rd = null;
+            if (useIv) { rd = new double[N]; Array.Copy(r, rd, N); Detrend(rd); }
 
-            // ARX(2,1) 정규방정식 (3×3): regressors = [y[k-1], y[k-2], u[k-1-δ]]
+            // ── Stage 1: ARX OLS (initial estimate) ──
+            // regressors X = [y[k-1], y[k-2], u[k-1-δ]]
             double s11 = 0, s12 = 0, s13 = 0, s22 = 0, s23 = 0, s33 = 0;
             double t1 = 0, t2 = 0, t3 = 0;
             int count = 0;
@@ -2478,7 +2500,6 @@ namespace PIDSupporter
             }
             if (count < 32) { m.Diagnosis = $"too few clean samples ({count})"; return m; }
 
-            // 3×3 inversion (Cramer)
             double M11 = s22 * s33 - s23 * s23;
             double M12 = s12 * s33 - s23 * s13;
             double M13 = s12 * s23 - s22 * s13;
@@ -2489,9 +2510,76 @@ namespace PIDSupporter
             double a2 = (s11 * (t2 * s33 - s23 * t3) - t1 * (s12 * s33 - s23 * s13) + s13 * (s12 * t3 - t2 * s13)) / det;
             double b  = (s11 * (s22 * t3 - s23 * t2) - s12 * (s12 * t3 - s13 * t2) + t1 * (s12 * s23 - s22 * s13)) / det;
             if (double.IsNaN(a1) || double.IsNaN(a2) || double.IsNaN(b))
-            { m.Diagnosis = "NaN in fit"; return m; }
+            { m.Diagnosis = "NaN in initial ARX fit"; return m; }
 
-            // 잔차 RMSE
+            // ── Stage 2+: RIV refinement (편향 제거) ──
+            int rivIters = 0;
+            if (useIv)
+            {
+                const int MAX_RIV_ITER = 3;
+                const double RIV_TOL = 0.001;
+                double[] ySim = new double[N];
+
+                for (int rivIter = 0; rivIter < MAX_RIV_ITER; rivIter++)
+                {
+                    // y_sim: noise-free simulation with current estimate.
+                    // y_sim[k] = a₁ y_sim[k-1] + a₂ y_sim[k-2] + b u_d[k-1-δ]
+                    ySim[0] = yd[0];
+                    ySim[1] = yd[1];
+                    for (int k = 2; k < N; k++)
+                    {
+                        double ud1 = (k - 1 - delayN >= 0) ? ud[k - 1 - delayN] : 0;
+                        ySim[k] = a1 * ySim[k - 1] + a2 * ySim[k - 2] + b * ud1;
+                    }
+
+                    // IV regressor Z = [y_sim[k-1], y_sim[k-2], r[k-1-δ]]
+                    // (Z^T X) θ = Z^T y. 3x3 시스템.
+                    double zx11 = 0, zx12 = 0, zx13 = 0;
+                    double zx21 = 0, zx22 = 0, zx23 = 0;
+                    double zx31 = 0, zx32 = 0, zx33 = 0;
+                    double zy1 = 0, zy2 = 0, zy3 = 0;
+                    int rivCount = 0;
+                    for (int k = kStart; k < N; k++)
+                    {
+                        if (sat[k] || sat[k - 1] || sat[k - 2] || sat[k - 1 - delayN]) continue;
+                        double yt = yd[k];
+                        double y1 = yd[k - 1], y2 = yd[k - 2], u1 = ud[k - 1 - delayN];
+                        double ys1 = ySim[k - 1], ys2 = ySim[k - 2];
+                        double r1 = rd[k - 1 - delayN];
+
+                        zx11 += ys1 * y1; zx12 += ys1 * y2; zx13 += ys1 * u1;
+                        zx21 += ys2 * y1; zx22 += ys2 * y2; zx23 += ys2 * u1;
+                        zx31 += r1  * y1; zx32 += r1  * y2; zx33 += r1  * u1;
+                        zy1 += ys1 * yt; zy2 += ys2 * yt; zy3 += r1 * yt;
+                        rivCount++;
+                    }
+                    if (rivCount < 32) break;
+
+                    // 3x3 시스템 (Z^T X) θ = (Z^T y) Cramer 풀이
+                    double Md = zx11 * (zx22 * zx33 - zx23 * zx32)
+                              - zx12 * (zx21 * zx33 - zx23 * zx31)
+                              + zx13 * (zx21 * zx32 - zx22 * zx31);
+                    if (Math.Abs(Md) < 1e-12) break;
+
+                    double a1n = ( zy1 * (zx22 * zx33 - zx23 * zx32)
+                                 - zx12 * (zy2 * zx33 - zx23 * zy3)
+                                 + zx13 * (zy2 * zx32 - zx22 * zy3)) / Md;
+                    double a2n = ( zx11 * (zy2 * zx33 - zx23 * zy3)
+                                 - zy1  * (zx21 * zx33 - zx23 * zx31)
+                                 + zx13 * (zx21 * zy3 - zy2 * zx31)) / Md;
+                    double bn  = ( zx11 * (zx22 * zy3 - zy2 * zx32)
+                                 - zx12 * (zx21 * zy3 - zy2 * zx31)
+                                 + zy1  * (zx21 * zx32 - zx22 * zx31)) / Md;
+                    if (double.IsNaN(a1n) || double.IsNaN(a2n) || double.IsNaN(bn)) break;
+
+                    double change = Math.Abs(a1n - a1) + Math.Abs(a2n - a2) + Math.Abs(bn - b) / Math.Max(1e-6, Math.Abs(b));
+                    a1 = a1n; a2 = a2n; b = bn;
+                    rivIters = rivIter + 1;
+                    if (change < RIV_TOL) break;
+                }
+            }
+
+            // 잔차 RMSE (최종 estimate 기준)
             double sqResid = 0;
             int cResid = 0;
             for (int k = kStart; k < N; k++)
@@ -2504,7 +2592,6 @@ namespace PIDSupporter
             }
             m.FitRmse = Math.Sqrt(sqResid / Math.Max(1, cResid));
 
-            // SE on a1 (proxy for τ_1 uncertainty): σ² · (M⁻¹)₁₁ / count
             double sigma2 = m.FitRmse * m.FitRmse;
             double seA1 = Math.Sqrt(sigma2 * M11 / Math.Max(1e-12, det));
 
@@ -2577,11 +2664,12 @@ namespace PIDSupporter
             m.TauSE = Math.Abs(dtau_dz * dz_da * seA1);
 
             m.Valid = true;
+            string method = useIv ? $"IV-ARX (RIV ×{rivIters})" : "ARX OLS";
             m.Diagnosis = m.HasIntegrator
-                ? $"integrator plant, τ_other={m.Tau2:0.000}s, K={m.K:0.000}"
+                ? $"{method}: integrator, τ_other={m.Tau2:0.000}s, K={m.K:0.000}"
                 : (m.Tau2 > 0.01
-                    ? $"2nd-order: τ_1={m.Tau1:0.000}s τ_2={m.Tau2:0.000}s K={m.K:0.000}"
-                    : $"1st-order: τ_p={m.Tau1:0.000}s K={m.K:0.000}");
+                    ? $"{method}: 2nd-order τ_1={m.Tau1:0.000}s τ_2={m.Tau2:0.000}s K={m.K:0.000}"
+                    : $"{method}: 1st-order τ_p={m.Tau1:0.000}s K={m.K:0.000}");
             return m;
         }
 

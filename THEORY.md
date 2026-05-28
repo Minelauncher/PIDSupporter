@@ -4,11 +4,11 @@
 
 ## 1. 개요
 
-이 모드는 **ARX(2,1) plant identification + SIMC PID design** 기반 자동 튜닝을 제공합니다. classical closed-loop indirect ID 방법 (Ljung, Skogestad 계열).
+이 모드는 **IV-ARX/OE (Refined Instrumental Variables) plant identification + SIMC PID design** 기반 자동 튜닝을 제공합니다. classical closed-loop indirect ID 의 정통 표준 (Young 1980 RIV, Söderström-Stoica §8, Skogestad 2003 SIMC).
 
 **수학적 기반과 한계 (명시)** — 모든 cap/bound 는 **수학적 근거** 또는 **UI 강제 제약** 에서 옵니다. 임의 휴리스틱 숫자 사용 안 함:
 - **가진 신호 PRBS** — Ljung "System ID" §13 표준. 10-bit LFSR, 다항식 x^10 + x^7 + 1 (maximum length, period 1023), bit duration 4 ticks. ±A 이진, 평균 0, broadband 스펙트럼. 휴리스틱 임의값 0개.
-- **ARX(2,1) OLS** — Linear LS, closed-form unique solution (Ljung "System ID" §10)
+- **IV-ARX/OE (RIV)** — Refined Instrumental Variables. Stage 1: ARX OLS 초기 추정. Stage 2~N: y_sim 시뮬레이션 + r (PRBS) 을 instrument 로 사용해 closed-loop OE 노이즈 편향 제거. (Z^T X)θ=Z^T y 닫힌형 풀이, 2~3회 iteration 수렴. 점근적으로 OE-PEM 과 동일 efficiency (Young 1980).
 - 극점 → 시정수: τ = -dt/ln|z| (이산 시간 정의)
 - **SIMC formula** — Skogestad 2003 paper
 - 적분기 판정 — `|1-a₁-a₂| < 2·SE` 통계적 (2σ confidence)
@@ -29,7 +29,7 @@
   → 가진 신호 (PRBS, Ljung §13 표준) 를 SetPoint 에 주입
   → 현재 PID C₀ 로 폐루프 데이터 (u, y) + 포화 플래그 연속 수집
   → EffectiveValidCount ≥ MinSamples 까지 대기 (적응형 진폭이 자동 조정)
-  → ARX(2,1) OLS 로 plant G 직접 식별:
+  → IV-ARX/OE (RIV) 로 plant G 식별 (closed-loop bias 제거):
        y[k] = a₁·y[k-1] + a₂·y[k-2] + b·u[k-1-δ]
        → 극점 z₁, z₂ → 연속 시정수 τ_1, τ_2
        → DC gain K
