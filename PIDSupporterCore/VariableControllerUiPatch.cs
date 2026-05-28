@@ -68,9 +68,9 @@ namespace PIDSupporter
         /// FTD의 BrilliantSkies.Blocks.Ai.VariableControllerUi.BuildInterface(string)를 대상으로 함.
         /// AccessTools = Harmony 유틸. private/internal 타입이나 메서드도 찾을 수 있음.
         /// </summary>
-        static MethodBase TargetMethod()
+        static MethodBase? TargetMethod()
         {
-            Type t = AccessTools.TypeByName("BrilliantSkies.Blocks.Ai.VariableControllerUi");
+            Type? t = AccessTools.TypeByName("BrilliantSkies.Blocks.Ai.VariableControllerUi");
             if (t == null) return null;
             return AccessTools.Method(t, "BuildInterface", new[] { typeof(string) });
         }
@@ -98,17 +98,17 @@ namespace PIDSupporter
                 // GP-PID의 구조: VariableControllerUi._focus = IPidBlock
                 //                IPidBlock.Controller = VariableControllerMaster
                 // _focus는 private 필드라서 일반적으로 접근 불가 → 리플렉션으로 강제 접근.
-                object focusObj = GetFieldInHierarchy(__instance.GetType(), __instance, "_focus");
+                object? focusObj = GetFieldInHierarchy(__instance.GetType(), __instance, "_focus");
                 if (focusObj == null) return;
 
                 // IPidBlock에서 Controller 프로퍼티(속성)를 찾아 VariableControllerMaster 얻기
-                PropertyInfo controllerProp = focusObj.GetType().GetProperty("Controller", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                VariableControllerMaster controller = controllerProp != null ? controllerProp.GetValue(focusObj, null) as VariableControllerMaster : null;
+                PropertyInfo? controllerProp = focusObj.GetType().GetProperty("Controller", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                VariableControllerMaster? controller = controllerProp != null ? controllerProp.GetValue(focusObj, null) as VariableControllerMaster : null;
                 if (controller == null) return;
 
                 // FRIT 전용 별도 창 생성 (기존 PID 창에 탭으로 넣지 않고 새 창)
                 // 700, 10, 520, 720 = 화면상 x, y, 폭, 높이
-                ConsoleWindow fritWindow = CreateFritWindowViaNewWindow(__instance, "FRIT Tuner Supporter", 700f, 10f, 520f, 720f);
+                ConsoleWindow? fritWindow = CreateFritWindowViaNewWindow(__instance, "FRIT Tuner Supporter", 700f, 10f, 520f, 720f);
                 if (fritWindow == null) return;
 
                 fritWindow.MinimumWindowWidth = new ScaledSizing(420f, Dimension.Width);
@@ -135,13 +135,13 @@ namespace PIDSupporter
         /// FTD UI 시스템의 NewWindow 메서드를 리플렉션으로 호출해서 새 창을 만듦.
         /// NewWindow는 protected(상속받은 클래스만 접근 가능)라서 직접 호출 불가 → 리플렉션 사용.
         /// </summary>
-        private static ConsoleWindow CreateFritWindowViaNewWindow(object variableControllerUiInstance, string title, float x, float y, float w, float h)
+        private static ConsoleWindow? CreateFritWindowViaNewWindow(object variableControllerUiInstance, string title, float x, float y, float w, float h)
         {
             try
             {
                 ScaledRectangle rect = new ScaledRectangle(x, y, w, h);
 
-                MethodInfo mi = GetMethodInHierarchy(
+                MethodInfo? mi = GetMethodInHierarchy(
                     variableControllerUiInstance.GetType(),
                     "NewWindow",
                     new[] { typeof(int), typeof(string), typeof(ScaledRectangle) }
@@ -154,7 +154,7 @@ namespace PIDSupporter
                 }
 
                 // index는 1로(원본 PID 창이 0을 쓰는 경우가 많아서 충돌 줄이기)
-                ConsoleWindow win = mi.Invoke(variableControllerUiInstance, new object[] { 1, title, rect }) as ConsoleWindow;
+                ConsoleWindow? win = mi.Invoke(variableControllerUiInstance, new object[] { 1, title, rect }) as ConsoleWindow;
                 return win;
             }
             catch (Exception e)
@@ -170,13 +170,14 @@ namespace PIDSupporter
         /// 찾고자 하는 메서드가 부모의 부모에 있을 수 있음.
         /// GetMethod는 현재 타입에서만 찾으므로, BaseType을 타고 올라가며 탐색.
         /// </summary>
-        private static MethodInfo GetMethodInHierarchy(Type t, string name, Type[] sig)
+        private static MethodInfo? GetMethodInHierarchy(Type t, string name, Type[] sig)
         {
-            while (t != null)
+            Type? cur = t;
+            while (cur != null)
             {
-                MethodInfo mi = t.GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public, null, sig, null);
+                MethodInfo? mi = cur.GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public, null, sig, null);
                 if (mi != null) return mi;
-                t = t.BaseType;
+                cur = cur.BaseType;
             }
             return null;
         }
@@ -185,13 +186,14 @@ namespace PIDSupporter
         /// 클래스 상속 계층을 따라 올라가며 필드(변수)를 찾아 값을 읽는 유틸.
         /// private 필드도 BindingFlags.NonPublic으로 접근 가능 (리플렉션의 힘).
         /// </summary>
-        private static object GetFieldInHierarchy(Type t, object obj, string fieldName)
+        private static object? GetFieldInHierarchy(Type t, object obj, string fieldName)
         {
-            while (t != null)
+            Type? cur = t;
+            while (cur != null)
             {
-                FieldInfo f = t.GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+                FieldInfo? f = cur.GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
                 if (f != null) return f.GetValue(obj);
-                t = t.BaseType;
+                cur = cur.BaseType;
             }
             return null;
         }

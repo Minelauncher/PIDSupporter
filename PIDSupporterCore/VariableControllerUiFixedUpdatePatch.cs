@@ -32,9 +32,9 @@ namespace PIDSupporter
     public static class VariableControllerUiFixedUpdatePatch
     {
         /// <summary>패치 대상: GP-PID UI의 FixedUpdateWhenActive 메서드</summary>
-        static MethodBase TargetMethod()
+        static MethodBase? TargetMethod()
         {
-            Type t = AccessTools.TypeByName("BrilliantSkies.Blocks.Ai.VariableControllerUi");
+            Type? t = AccessTools.TypeByName("BrilliantSkies.Blocks.Ai.VariableControllerUi");
             if (t == null) return null;
             return AccessTools.Method(t, "FixedUpdateWhenActive", new[] { typeof(ITimeStep) });
         }

@@ -45,10 +45,10 @@ namespace PIDSupporter
         public static bool TryGetTab(object uiInstance, out FritTuningTab tab)
             => _tabsByUiInstance.TryGetValue(uiInstance, out tab);
 
-        static MethodBase TargetMethod()
+        static MethodBase? TargetMethod()
         {
             // 글로벌 네임스페이스의 VariableControllerUi (Ai.dll)
-            Type t = AccessTools.TypeByName("VariableControllerUi");
+            Type? t = AccessTools.TypeByName("VariableControllerUi");
             if (t == null) return null;
             return AccessTools.Method(t, "BuildInterface", new[] { typeof(string) });
         }
@@ -61,11 +61,11 @@ namespace PIDSupporter
                 if (_tabsByUiInstance.TryGetValue(__instance, out _)) return;
 
                 // _focus는 이미 VariableControllerMaster
-                object focusObj = GetFieldInHierarchy(__instance.GetType(), __instance, "_focus");
-                VariableControllerMaster controller = focusObj as VariableControllerMaster;
+                object? focusObj = GetFieldInHierarchy(__instance.GetType(), __instance, "_focus");
+                VariableControllerMaster? controller = focusObj as VariableControllerMaster;
                 if (controller == null) return;
 
-                ConsoleWindow fritWindow = CreateFritWindowViaNewWindow(__instance, "FRIT Tuner Supporter", 700f, 10f, 520f, 720f);
+                ConsoleWindow? fritWindow = CreateFritWindowViaNewWindow(__instance, "FRIT Tuner Supporter", 700f, 10f, 520f, 720f);
                 if (fritWindow == null) return;
 
                 fritWindow.MinimumWindowWidth = new ScaledSizing(420f, Dimension.Width);
@@ -87,12 +87,12 @@ namespace PIDSupporter
             }
         }
 
-        private static ConsoleWindow CreateFritWindowViaNewWindow(object uiInstance, string title, float x, float y, float w, float h)
+        private static ConsoleWindow? CreateFritWindowViaNewWindow(object uiInstance, string title, float x, float y, float w, float h)
         {
             try
             {
                 ScaledRectangle rect = new ScaledRectangle(x, y, w, h);
-                MethodInfo mi = GetMethodInHierarchy(
+                MethodInfo? mi = GetMethodInHierarchy(
                     uiInstance.GetType(),
                     "NewWindow",
                     new[] { typeof(int), typeof(string), typeof(ScaledRectangle) }
@@ -103,24 +103,26 @@ namespace PIDSupporter
             catch { return null; }
         }
 
-        private static MethodInfo GetMethodInHierarchy(Type t, string name, Type[] sig)
+        private static MethodInfo? GetMethodInHierarchy(Type t, string name, Type[] sig)
         {
-            while (t != null)
+            Type? cur = t;
+            while (cur != null)
             {
-                MethodInfo mi = t.GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public, null, sig, null);
+                MethodInfo? mi = cur.GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public, null, sig, null);
                 if (mi != null) return mi;
-                t = t.BaseType;
+                cur = cur.BaseType;
             }
             return null;
         }
 
-        private static object GetFieldInHierarchy(Type t, object obj, string fieldName)
+        private static object? GetFieldInHierarchy(Type t, object obj, string fieldName)
         {
-            while (t != null)
+            Type? cur = t;
+            while (cur != null)
             {
-                FieldInfo f = t.GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+                FieldInfo? f = cur.GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
                 if (f != null) return f.GetValue(obj);
-                t = t.BaseType;
+                cur = cur.BaseType;
             }
             return null;
         }
@@ -132,9 +134,9 @@ namespace PIDSupporter
     [HarmonyPatch]
     public static class AiVariableControllerUiFixedUpdatePatch
     {
-        static MethodBase TargetMethod()
+        static MethodBase? TargetMethod()
         {
-            Type t = AccessTools.TypeByName("VariableControllerUi");
+            Type? t = AccessTools.TypeByName("VariableControllerUi");
             if (t == null) return null;
             return AccessTools.Method(t, "FixedUpdateWhenActive", new[] { typeof(ITimeStep) });
         }

@@ -70,10 +70,10 @@ namespace PIDSupporter
     internal static class NewMeasurementOutputPatch
     {
         // ControlBase.<LastControlVariable>k__BackingField — private, 한 번만 lookup 후 캐시.
-        private static FieldInfo _lcvBackingField;
+        private static FieldInfo? _lcvBackingField;
         private static bool _backingLookupDone;
 
-        private static FieldInfo GetLcvBackingField()
+        private static FieldInfo? GetLcvBackingField()
         {
             if (_backingLookupDone) return _lcvBackingField;
             _backingLookupDone = true;
@@ -113,7 +113,7 @@ namespace PIDSupporter
                 var ctrl = __instance.GetCurrentController();
                 if (ctrl == null) return;
 
-                FieldInfo fld = GetLcvBackingField();
+                FieldInfo? fld = GetLcvBackingField();
                 fld?.SetValue(ctrl, modified);
             }
             catch (Exception ex)

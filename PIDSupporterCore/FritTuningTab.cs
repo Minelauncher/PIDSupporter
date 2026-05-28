@@ -135,7 +135,6 @@ using BrilliantSkies.Ui.Consoles.Styles;    // ConsoleStyles (UI 스타일/테�
 using BrilliantSkies.Ui.Tips;               // ToolTip (마우스 올리면 나오는 설명)
 using MathNet.Numerics.IntegralTransforms;  // Fourier (FFT/IFFT)
 using MathNet.Numerics.LinearAlgebra;       // Matrix, Vector (선형대수 — SVD, QR 등)
-using System.Numerics;                       // Complex (Two-stage 의 G(z) 극점 추출)
 using UnityEngine;                          // Time.fixedDeltaTime (Unity 물리 틱 간격)
 
 namespace PIDSupporter
@@ -180,13 +179,6 @@ namespace PIDSupporter
         // ■ enum = 이름 붙인 정수 상수 모음. Python의 Enum과 동일.
         //   private = 이 클래스 안에서만 사용 가능.
 
-        /// <summary>가진(excitation) 파형 종류 — MultiSine (PRBS) 만 사용.</summary>
-        private enum WaveType
-        {
-            Off = 0,
-            MultiSine = 1   // PRBS (Pseudo-Random Binary Sequence)
-        }
-
         /// <summary>자동 튜닝 상태 머신</summary>
         private enum AutoTuneState
         {
@@ -219,28 +211,11 @@ namespace PIDSupporter
             // ===== 가중 필터 W: 고주파 노이즈 억제 =====
             public float CutoffHz = 30.0f;          // f_W: 컷오프 주파수 (Hz). 이 위 주파수는 무시
 
-            // ===== 녹화/전처리 =====
-            public int MinSamples = 1024;           // 최소 수집 샘플 수 (FFT 해상도에 영향)
-            public int DropEdgeSamples = 64;        // FFT 양끝 아티팩트 버릴 개수
-
             // ===== 포화 처리 =====
             public float SaturationThreshold = 0.98f;   // |u| >= 이 값이면 포화로 판정
-            // 포화 이후 IIR 회복 transient 보호 구간 (샘플 수).
-            // 0 = 보호 없음 — 포화 샘플만 down-weight, 회복 transient 는 IRLS Huber 가 처리.
-            //   짧은 spike 는 영향 미미, 긴 포화는 진단 단계가 미리 차단.
-            //   대부분 데이터를 살림 → CRLB 정밀도 ↑.
-            // 100 = 보수적 (≈2초) — 포화 이후 모든 샘플 down-weight. 데이터 손실 큼.
-            public int   TransientTailSamples = 0;
 
-            // ===== 가진(Excitation): 플랜트를 흔들어서 데이터를 만드는 신호 =====
+            // ===== 가진(Excitation) =====
             public bool ExciteEnabled = true;       // 가진 켤지
-            public WaveType ExciteWave = WaveType.MultiSine; // PRBS only
-            public float ExciteAmp = 0.5f;          // (legacy, adaptive 가 자동 조정)
-
-            // 적응형 진폭 제거 — 사용자 슬라이더 (Excite Amp) 값 그대로 사용.
-            // PRBS 가 ±A 로 강제 bounded 라 자동 boost 없어도 안전.
-
-            // 축 분리 기능 제거됨
         }
 
         /// <summary>
@@ -261,11 +236,7 @@ namespace PIDSupporter
             public readonly List<bool>   Saturated = new List<bool>();    // 이 샘플이 포화 중인지 (cost 에서 제외)
 
             // ── 포화 회복 추적 ──
-            // 포화 끝난 직후 1/C(z) IIR 역필터 state 가 회복하는 데 ~2초 (TransientTailSamples) 소요.
-            // 그 동안 계산되는 e[k] 가 오염됨 → 해당 인덱스는 FRIT 가중치에서 down-weight.
             public int SaturatedCount;
-            public int SamplesSinceLastSat;   // 마지막 포화 이후 경과 샘플 수
-            public int EffectiveValidCount;   // transient tail 밖에 있는 깨끗한 샘플 누적
 
             // 사전 진단 (Diagnosing 단계, 3초): 가진 OFF — limit cycle / 지속 포화 검출.
             //   통과하면 즉시 recording 진입.
@@ -278,9 +249,6 @@ namespace PIDSupporter
             public double DiagYBaseline;    // 진단 동안 y 평균 (recording baseline 으로 인계)
             public double DiagYBaselineSum;
             public int    DiagYBaselineCnt;
-
-            public double LastU;                    // 마지막 제어 출력 (참고용)
-            public double NaturalYStd;              // 가진 전 자연 변동 (참고용)
 
             // PRBS (Pseudo-Random Binary Sequence) 가진 상태.
             // 10-bit LFSR, 다항식 x^10 + x^7 + 1 (maximum length, period 2^10 - 1 = 1023).
@@ -347,8 +315,6 @@ namespace PIDSupporter
                 UInject.Clear();
                 Saturated.Clear();
                 SaturatedCount = 0;
-                SamplesSinceLastSat = int.MaxValue / 2;   // 시작 시 "이미 충분히 오래 깨끗" 상태
-                EffectiveValidCount = 0;
                 DiagT = 0;
                 DiagSampleCount = 0;
                 DiagUMax = DiagUMin = 0;
@@ -358,13 +324,11 @@ namespace PIDSupporter
                 DiagYBaseline = 0;
                 DiagYBaselineSum = 0;
                 DiagYBaselineCnt = 0;
-                LastU = 0;
-                NaturalYStd = 0;
                 // PRBS 초기화: state = 1 (어떤 non-zero seed 든 OK, 결정론적)
                 PrbsState = 1;
                 PrbsTicksInBit = 0;
                 PrbsCurrentValue = 1.0;   // 첫 bit = state & 1 = 1 → +A
-                AmpDyn = 0;               // StartRecording 에서 _s.ExciteAmp 으로 설정.
+                AmpDyn = 0;               // StartRecording 에서 초기값 0.3 으로 설정
                 UAmpDyn = 0;              // StartRecording 에서 초기화
                 TicksSinceAmpAdjust = 0;
                 PrbsHpfInPrev = 0;
@@ -404,13 +368,6 @@ namespace PIDSupporter
         // Diagnose Phase 0 (가진 OFF 3초) 에서 측정된 y 평균. 수집 동안 plant 가 base 에서
         // 너무 벗어나면 (= 비행기 자세 무너지면) amp 줄여서 안전 확보.
         private double _recordingYBaseline;
-
-        // 자연 변동 측정: 녹화 전 y를 링버퍼에 모아서 std 계산
-        private const int NaturalBufSize = 60; // 약 1.2초 분량
-
-        private readonly double[] _naturalYBuf = new double[NaturalBufSize];
-        private int _naturalYIdx = 0;
-        private int _naturalYCount = 0;
 
         /// <summary>
         /// 생성자. FTD가 PID 편집 UI를 열 때 패치에서 호출.
@@ -533,15 +490,6 @@ namespace PIDSupporter
                 if (!_sess.Recording)
                 {
                     RestoreSetPointAdjustIfNeeded();
-
-                    // 녹화 전 자연 변동 측정: y를 링버퍼에 수집
-                    IVariableController cIdle = this._focus.GetCurrentController();
-                    if (cIdle != null)
-                    {
-                        _naturalYBuf[_naturalYIdx % NaturalBufSize] = cIdle.LastProcessVariable;
-                        _naturalYIdx++;
-                        if (_naturalYCount < NaturalBufSize) _naturalYCount++;
-                    }
                     return;
                 }
 
@@ -559,32 +507,16 @@ namespace PIDSupporter
                 double uRaw = c.LastControlVariable;
                 double u = Math.Max(-1.0, Math.Min(1.0, uRaw));
                 double y = c.LastProcessVariable;
-                _sess.LastU = u;
 
-                // 포화 추적 (telemetry/UI 용). 회귀에서는 제외 안 함 — clamped u 가 plant 입력이라 unbiased.
+                // 포화 추적 (telemetry/UI). 회귀에선 clamped u = actual plant input → unbiased.
                 bool saturated = Math.Abs(uRaw) >= _s.SaturationThreshold;
-                if (saturated)
-                {
-                    _sess.SaturatedCount++;
-                    _sess.SamplesSinceLastSat = 0;
-                }
-                else
-                {
-                    _sess.SamplesSinceLastSat++;
-                }
-
-                // 적응형 진폭 제거 — 사용자 슬라이더 (Excite Amp) 값 그대로 사용.
-                // PRBS 는 진폭 ±A 로 강제 bounded 라 adaptive 보호 불필요.
+                if (saturated) _sess.SaturatedCount++;
 
                 _sess.U.Add(u);
                 _sess.Y.Add(y);
                 _sess.R.Add(_lastExciteValue);   // SP-direct 가진 = FRIT instrument
                 _sess.UInject.Add(_lastUInject); // u-direct 가진 (cost 보정용)
                 _sess.Saturated.Add(saturated);
-
-                // 포화 데이터도 IV-ARX 회귀에 포함 (clamped u = actual plant input → unbiased).
-                // EffectiveValidCount = 총 샘플 수.
-                _sess.EffectiveValidCount = _sess.U.Count;
 
                 _sess.T += dt;
 
@@ -675,7 +607,7 @@ namespace PIDSupporter
 
                     return
                         $"Status: {rec}\n" +
-                        $"Valid: {_sess.EffectiveValidCount} / {_s.MinSamples}  (total {_sess.U.Count}, elapsed {_sess.T:0.0}s)\n" +
+                        $"Samples: {_sess.U.Count}  (elapsed {_sess.T:0.0}s)\n" +
                         $"Saturated: {_sess.SaturatedCount}\n" +
                         $"FixedDeltaTime: {dt:0.000}s\n" +
                         $"Msg: {_sess.LastMessage}";
@@ -941,7 +873,7 @@ namespace PIDSupporter
                 M.m<VariableControllerMaster>(_ => _autoState == AutoTuneState.Recording ? "Auto-tuning..." : "Auto Tune"),
                 M.m<VariableControllerMaster>(new ToolTip(
                     "Closed-loop auto-tuning: excitation → record → FRIT → PID.\n---\n폐루프 자동 튜닝: 가진 → 녹화 → FRIT → PID.", 260f)),
-                null,
+                null!,
                 _ => AutoTuneNow()
             ));
 
@@ -1092,9 +1024,7 @@ namespace PIDSupporter
             //   u_amp = 보수적 0.03 (headroom envelope 안에서 추가 안전)
             _sess.AmpDyn = 0.3;
             _sess.UAmpDyn = 0.03;
-            // PRBS 만 사용 (Sine/Chirp 제거됨)
             _s.ExciteEnabled = true;
-            _s.ExciteWave = WaveType.MultiSine;
             _sess.LastMessage = "Recording started / 녹화 시작";
 
             CaptureSetPointAdjustBase();
@@ -1153,28 +1083,8 @@ namespace PIDSupporter
             if (dt <= 0) dt = 0.02;
             double fs = 1.0 / dt;
 
-            // 자연 변동 측정 → 시작 진폭 결정
-            double naturalStd = 0;
-            if (_naturalYCount >= 10)
-            {
-                double sum = 0;
-                double sqSum = 0;
-                int n = Math.Min(_naturalYCount, NaturalBufSize);
-                for (int i = 0; i < n; i++)
-                    sum += _naturalYBuf[i];
-                double mean = sum / n;
-                for (int i = 0; i < n; i++)
-                {
-                    double d = _naturalYBuf[i] - mean;
-                    sqSum += d * d;
-                }
-                naturalStd = Math.Sqrt(sqSum / Math.Max(1, n - 1));
-            }
-            _sess.NaturalYStd = naturalStd;
-
             // SP-direct PRBS 가진. amp 는 StartRecording 의 초기값 (0.3) → adaptive 가 sat rate 보고 조정.
             _s.ExciteEnabled = true;
-            _s.ExciteWave = WaveType.MultiSine;  // 코드 상 wave type, 실제는 PRBS
 
             _autoState = AutoTuneState.Recording;
             StartRecording();
@@ -1205,8 +1115,8 @@ namespace PIDSupporter
 
             double[] u = _sess.U.ToArray();
             double[] y = _sess.Y.ToArray();
-            double[] r = _sess.R.Count == _sess.U.Count ? _sess.R.ToArray() : null;
-            double[] uInject = _sess.UInject.Count == _sess.U.Count ? _sess.UInject.ToArray() : null;
+            double[]? r = _sess.R.Count == _sess.U.Count ? _sess.R.ToArray() : null;
+            double[]? uInject = _sess.UInject.Count == _sess.U.Count ? _sess.UInject.ToArray() : null;
             bool[]   sat = _sess.Saturated.ToArray();
 
             double yStd = StdDev(y);
@@ -1227,7 +1137,7 @@ namespace PIDSupporter
                 if (y[i] < yMin) yMin = y[i];
                 if (y[i] > yMax) yMax = y[i];
             }
-            _sess.LastMessage = $"Data: N={blkLen} valid={_sess.EffectiveValidCount} sat={_sess.SaturatedCount} u=[{uMin:0.00},{uMax:0.00}] y=[{yMin:0.0},{yMax:0.0}] yStd={yStd:0.000}";
+            _sess.LastMessage = $"Data: N={blkLen} sat={_sess.SaturatedCount} u=[{uMin:0.00},{uMax:0.00}] y=[{yMin:0.0},{yMax:0.0}] yStd={yStd:0.000}";
 
             // τ = dt 고정 (FTD 순수 지연 ≈ 1틱). nM 은 sweep 으로 결정.
             _s.ModelDelayTau = (float)dt;
@@ -1714,14 +1624,12 @@ namespace PIDSupporter
             _lastExciteValue = 0.0;
             _lastUInject = 0.0;
 
-            if (!_s.ExciteEnabled || _s.ExciteWave == WaveType.Off || !_hasBaseSetPointAdjust)
+            if (!_s.ExciteEnabled || !_hasBaseSetPointAdjust)
             {
                 FritExcitationInjector.Clear(this._focus);
                 try { this._focus.SetPointAdjust.Us = _baseSetPointAdjust; } catch { }
                 return;
             }
-
-            double x = 0.0;
 
             // ── Hybrid PRBS (SP-direct + u-direct) ──
             //   같은 PRBS 신호 + HPF 를 SP 와 u 양쪽 inject:
@@ -1807,16 +1715,6 @@ namespace PIDSupporter
         // Compute / Apply
         // ============================================================
 
-        private struct FritResult
-        {
-            public double Kp, Ti, Td, Rmse;
-            public double KpSE, TiSE, TdSE;     // Cramér-Rao 표준오차 (95% CI ≈ ±2·SE)
-            public string Warning;
-            public int Iterations;
-            public int IrlsIterations;          // IRLS 반복 횟수
-            public bool Converged;
-        }
-
         /// <summary>
         /// Compute (FRIT) 버튼 — 슬라이더의 Ts/nM 직접 사용 (수동 모드).
         ///   9-seed multistart + u-direct 보정 + 대역별 coherence 가중.
@@ -1838,7 +1736,7 @@ namespace PIDSupporter
 
                 double[] u = _sess.U.ToArray();
                 double[] y = _sess.Y.ToArray();
-                double[] uInject = _sess.UInject.Count == _sess.U.Count ? _sess.UInject.ToArray() : null;
+                double[]? uInject = _sess.UInject.Count == _sess.U.Count ? _sess.UInject.ToArray() : null;
                 bool[] sat = _sess.Saturated.ToArray();
 
                 double yStd = StdDev(y);
@@ -1924,399 +1822,6 @@ namespace PIDSupporter
             }
         }
 
-        // ════════════════════════════════════════════════════════════════════════
-        // ★ FRIT 핵심 계산 ★
-        // ════════════════════════════════════════════════════════════════════════
-        //
-        // 입력:
-        //   u, y        폐루프 수집 데이터 (sample N개)
-        //   sat         포화 플래그 (true = |u| ≥ 0.98 일 때)
-        //   dt          샘플 간격 (초)
-        //   s           Settings (Ts, nM, τM, TransientTailSamples 등)
-        //   Kp0,Ti0,Td0 LM 초기 시드 (보통 현재 PID 값)
-        //
-        // 출력: FritResult { Kp, Ti, Td, KpSE, TiSE, TdSE, Rmse, Iterations, ... }
-        //
-        // ─────────────────────────────────────────────────────────────────────
-        // 알고리즘 흐름 (10 단계)
-        // ─────────────────────────────────────────────────────────────────────
-        //   1) Detrend       : u, y 에서 DC + 선형 추세 제거
-        //   2) M(z) precomp  : 참조 모델 Tustin 이산화 계수 미리 계산 (θ 무관)
-        //   3) effSat 확장   : 포화 + IIR transient tail 영역 마킹 → w_sat 초기화
-        //   4) LM model fn   : (Kp, Ti, Td) → √w · ŷ  ( 가상레퍼런스 + M 캐스케이드)
-        //   5) 초기값 sanity : Kp0/Ti0/Td0 가 비정상이면 안전 기본값
-        //   6) IRLS × LM     : 3 회 반복 (각 iter 마다 잔차로 Huber 가중치 갱신)
-        //   7) RMSE          : effSat / IRLS-downweighted 제외 raw 잔차
-        //   8) CRLB          : FD 자코비안 + 3×3 cov 역행렬 → SE(Kp/Ti/Td)
-        //   9) 경계 클램프    : Kp∈[0,1], Ti∈[0.1,250], Td∈[0,10], NaN/Inf 처리
-        //  10) FritResult 반환
-        //
-        // ─────────────────────────────────────────────────────────────────────
-        // 핵심 수식
-        // ─────────────────────────────────────────────────────────────────────
-        //   PID 이산화 (backward Euler 적분/미분):
-        //     C(z) = Kp · (a₀ + a₁z⁻¹ + a₂z⁻²) / (1 - z⁻¹)
-        //       a₀ = 1 + dt/Ti + Td/dt
-        //       a₁ = -(1 + 2·Td/dt)
-        //       a₂ = Td/dt
-        //
-        //   가상 레퍼런스 (시간 영역 IIR 역필터, 1/C(z) · u):
-        //     e[k] = (u[k] - u[k-1] - Kp·a₁·e[k-1] - Kp·a₂·e[k-2]) / (Kp·a₀)
-        //     r̃[k] = y[k] + e[k]
-        //
-        //   참조 모델 M(z) (Tustin, nM 차 캐스케이드):
-        //     β₀ = 1 + 2·aM/dt,  β₁ = 1 - 2·aM/dt,  aM = 0.2·Ts
-        //     H₁(z) · x[k] = (x[k] + x[k-1] - β₁·prev) / β₀
-        //     순수 지연 τM/dt 정수 틱 shift
-        //
-        //   비용 (가중 LS via sqrt-스케일링):
-        //     observedY[k] = √w[k] · y[k]
-        //     model output = √w[k] · ŷ[k]
-        //     LM 이 ||observedY - model||² = Σ w·(y-ŷ)² 를 자동 최소화
-        //
-        //   가중치 w[k] = w_sat[k] · w_huber[k]:
-        //     w_sat:   포화 또는 transient tail 이면 1e-3, 아니면 1
-        //     w_huber: |r| ≤ δ 면 1, 아니면 δ/|r|.  δ = 1.5·1.4826·MAD(r)
-        //
-        // ─────────────────────────────────────────────────────────────────────
-        // 안정성: 1/C(z) 의 pole = C(z) 분자 zero. 단위원 밖이면 역필터 발산.
-        //         → LM 모델 함수 시작에 zero 위치 체크, 불안정 시 큰 residual 반환 (soft barrier).
-        //
-        // 왜 시간 영역? (이전 주파수 영역 구현 대비)
-        //   1. FFT 없음 → LM 반복당 빠름
-        //   2. 포화로 인한 spectral leakage 없음 → 가중치 100% 유효
-        //   3. circular convolution wrap-around 없음 (causal IIR)
-        //   4. 순수 지연을 정수 틱으로 정확히 처리
-        // ════════════════════════════════════════════════════════════════════════
-        private static FritResult ComputeFritPid(double[] u, double[] y, bool[] sat, double dt, Settings s,
-                                                  double Kp0, double Ti0, double Td0)
-        {
-            int N = Math.Min(u.Length, y.Length);
-            if (sat == null || sat.Length != N) throw new Exception("u/y/sat length mismatch / 길이 불일치");
-            if (N < 64) throw new Exception("Too few samples / 샘플이 너무 적습니다.");
-
-            // ── 1단계: 디트렌드 (DC + 선형 추세 제거) ──
-            double[] ud = new double[N]; Array.Copy(u, ud, N); Detrend(ud);
-            double[] yd = new double[N]; Array.Copy(y, yd, N); Detrend(yd);
-
-            // ── 2단계: 참조 모델 M(z) 이산화 (Tustin, θ 와 무관 → LM 외부에서 한 번만) ──
-            // M(s) = exp(-s·τM) / (1 + s·aM)^nM,  aM = 0.2·Ts
-            // 1차 LP H₁(z) = (1 + z⁻¹) / (β₀ + β₁ z⁻¹)
-            //   β₀ = 1 + 2aM/dt,  β₁ = 1 - 2aM/dt
-            // nM 번 캐스케이드. 순수 지연은 정수 틱 shift 로 처리.
-            // 안전 하한: 2.5·dt (β₁ ≤ 0 보장, LP 안정성). dt=0.02 일 때 0.05s.
-            double ts = Math.Max(2.5 * dt, s.SettlingTimeTs);
-            int nM = ClampInt(s.ModelOrderNm, 1, 10);
-            double tauM = Math.Max(0.0, s.ModelDelayTau);
-            double aM = 0.2 * ts;
-            double beta0 = 1.0 + 2.0 * aM / dt;
-            double beta1 = 1.0 - 2.0 * aM / dt;
-            int delayN = Math.Max(0, (int)Math.Round(tauM / dt));
-
-            // ── 3단계: 포화 + IIR transient tail 까지 확장한 effective saturation ──
-            // 포화 직후 1/C(z) 역필터 state 가 회복하는 데 ~TransientTailSamples 틱 소요.
-            // 그 구간 동안 계산되는 e[k] 가 오염 → effSat 로 down-weight.
-            int tail = Math.Max(0, s.TransientTailSamples);
-            bool[] effSat = new bool[N];
-            int since = int.MaxValue / 2;   // 시작 부분은 깨끗하다고 가정
-            for (int k = 0; k < N; k++)
-            {
-                if (sat[k]) { effSat[k] = true; since = 0; }
-                else { since++; if (since <= tail) effSat[k] = true; }
-            }
-
-            // per-sample 가중치 (effSat: SAT_WEIGHT, 나머지: 1)
-            const double SAT_WEIGHT = 1e-3;
-            double[] sqrtW = new double[N];
-            int nEffValid = 0;
-            for (int i = 0; i < N; i++)
-            {
-                sqrtW[i] = Math.Sqrt(effSat[i] ? SAT_WEIGHT : 1.0);
-                if (!effSat[i]) nEffValid++;
-            }
-            if (nEffValid < 32)
-                throw new Exception($"Too few effective valid samples after tail ({nEffValid}) / 유효 샘플 부족");
-
-            // ── 4단계: LM 모델 함수 (θ → √w · ŷ) ──
-            Func<MathNet.Numerics.LinearAlgebra.Vector<double>,
-                 MathNet.Numerics.LinearAlgebra.Vector<double>,
-                 MathNet.Numerics.LinearAlgebra.Vector<double>> model = (theta, xUnused) =>
-            {
-                double kp = Math.Max(1e-6, theta[0]);
-                double ti = Math.Max(1e-3, theta[1]);
-                double td = Math.Max(0.0,  theta[2]);
-
-                // PID 이산화 (backward Euler for I and D):
-                //   C(z) = Kp · (a₀ + a₁z⁻¹ + a₂z⁻²) / (1 - z⁻¹)
-                //     a₀ = 1 + dt/Ti + Td/dt
-                //     a₁ = -(1 + 2·Td/dt)
-                //     a₂ = Td/dt
-                double a0 = 1.0 + dt/ti + td/dt;
-                double a1 = -(1.0 + 2.0*td/dt);
-                double a2 = td/dt;
-
-                // 1/C(z) 안정성: C 분자 polynomial (a₀ z² + a₁ z + a₂) 의 zero 가 단위원 내부?
-                double disc = a1*a1 - 4.0*a0*a2;
-                bool stable;
-                if (disc >= 0)
-                {
-                    double sqrtD = Math.Sqrt(disc);
-                    double z1 = (-a1 + sqrtD) / (2.0*a0);
-                    double z2 = (-a1 - sqrtD) / (2.0*a0);
-                    stable = (Math.Abs(z1) < 0.9999 && Math.Abs(z2) < 0.9999);
-                }
-                else
-                {
-                    // 복소 conjugate pair: |z|² = a₂/a₀
-                    stable = (a2/a0 < 0.9999);
-                }
-
-                var result = VB.Dense(N);
-                if (!stable)
-                {
-                    // soft barrier: LM 이 unstable region 으로 가면 큰 residual 로 후퇴 유도
-                    for (int i = 0; i < N; i++) result[i] = 1e6 * sqrtW[i];
-                    return result;
-                }
-
-                // ── (a) e = (1/C) · u  ─ 시간 영역 IIR 역필터 ──
-                //   (1 - z⁻¹) · u[k] = Kp · (a₀ + a₁z⁻¹ + a₂z⁻²) · e[k]
-                //   e[k] = (u[k] - u[k-1] - Kp·a₁·e[k-1] - Kp·a₂·e[k-2]) / (Kp·a₀)
-                double[] e = new double[N];
-                for (int k = 0; k < N; k++)
-                {
-                    double uPrev = (k > 0) ? ud[k-1] : 0.0;
-                    double e1 = (k > 0) ? e[k-1] : 0.0;
-                    double e2 = (k > 1) ? e[k-2] : 0.0;
-                    e[k] = ((ud[k] - uPrev) - kp*a1*e1 - kp*a2*e2) / (kp*a0);
-                }
-
-                // ── (b) 가상 레퍼런스 r̃ = y + e ──
-                double[] rt = new double[N];
-                for (int k = 0; k < N; k++) rt[k] = yd[k] + e[k];
-
-                // ── (c) 순수 지연: r̃_d[k] = r̃[k - delayN] ──
-                double[] rtd = new double[N];
-                for (int k = 0; k < N; k++) rtd[k] = (k >= delayN) ? rt[k - delayN] : 0.0;
-
-                // ── (d) M(z) 캐스케이드: 1차 LP 를 nM 번 적용 ──
-                //   y[k] = (x[k] + x[k-1] - β₁·y[k-1]) / β₀
-                double[] cur = rtd;
-                for (int stage = 0; stage < nM; stage++)
-                {
-                    double[] next = new double[N];
-                    for (int k = 0; k < N; k++)
-                    {
-                        double xPrev = (k > 0) ? cur[k-1] : 0.0;
-                        double yPrev = (k > 0) ? next[k-1] : 0.0;
-                        next[k] = (cur[k] + xPrev - beta1*yPrev) / beta0;
-                    }
-                    cur = next;
-                }
-
-                // ── (e) √w 스케일 + NaN/Inf 검사 ──
-                for (int i = 0; i < N; i++)
-                {
-                    double v = sqrtW[i] * cur[i];
-                    if (double.IsNaN(v) || double.IsInfinity(v))
-                    {
-                        // 수치 발산 → soft barrier
-                        for (int j = 0; j < N; j++) result[j] = 1e6 * sqrtW[j];
-                        return result;
-                    }
-                    result[i] = v;
-                }
-                return result;
-            };
-
-            // ── 5단계: 관측값 + 초기값 sanity ──
-            var obsX = VB.Dense(N, i => (double)i);                       // dummy
-
-            if (Kp0 <= 1e-6 || double.IsNaN(Kp0) || Kp0 > 1.0) Kp0 = 0.1;
-            if (Ti0 <= 0.1 || Ti0 >= 250.0 || double.IsNaN(Ti0)) Ti0 = Math.Max(0.5, ts * 2.0);
-            if (Td0 < 0 || Td0 > 10.0 || double.IsNaN(Td0)) Td0 = 0.05;
-            var initial = VB.DenseOfArray(new[] { Kp0, Ti0, Td0 });
-
-            // ── 6단계: IRLS 외부 루프 + LM 내부 (robust M-estimator, Huber) ──
-            //   매 iter:  LM 으로 가중 LS 풀고 → 잔차 보고 → Huber 가중치 업데이트 → 다음 iter
-            //   effSat 인덱스의 saturation 가중치 (=1e-3) 는 유지, 나머지에 Huber 가중치 곱함.
-            //   3 회 반복이면 보통 robust 가중치 수렴.
-            const int IRLS_MAX_ITER = 3;
-            const double HUBER_K = 1.5;        // δ = K · σ_robust
-            MathNet.Numerics.Optimization.NonlinearMinimizationResult lmResult = null;
-            int irlsIter = 0;
-
-            for (int irls = 0; irls < IRLS_MAX_ITER; irls++)
-            {
-                var obsY = VB.Dense(N, i => sqrtW[i] * yd[i]);
-                var objective = MathNet.Numerics.Optimization.ObjectiveFunction.NonlinearModel(model, obsX, obsY);
-                var lm = new MathNet.Numerics.Optimization.LevenbergMarquardtMinimizer(maximumIterations: 30);
-
-                try
-                {
-                    lmResult = lm.FindMinimum(objective, initial);
-                }
-                catch (Exception ex)
-                {
-                    return new FritResult
-                    {
-                        Kp = Kp0, Ti = Ti0, Td = Td0,
-                        Rmse = double.NaN,
-                        Warning = "LM failed / LM 실패: " + ex.Message,
-                        Iterations = 0,
-                        IrlsIterations = irls,
-                        Converged = false
-                    };
-                }
-                initial = lmResult.MinimizingPoint;
-                irlsIter = irls + 1;
-
-                // 마지막 iter 에서는 가중치 업데이트 불필요
-                if (irls >= IRLS_MAX_ITER - 1) break;
-
-                // 잔차 계산 (raw, unweight)
-                var ypredW = model(lmResult.MinimizingPoint, obsX);
-                double[] resAbs = new double[N];
-                var unsatResList = new List<double>();
-                for (int i = 0; i < N; i++)
-                {
-                    double pred = ypredW[i] / Math.Max(1e-12, sqrtW[i]);
-                    double r = yd[i] - pred;
-                    resAbs[i] = Math.Abs(r);
-                    if (!effSat[i]) unsatResList.Add(resAbs[i]);
-                }
-                if (unsatResList.Count < 8) break;
-
-                // MAD 기반 robust scale 추정
-                unsatResList.Sort();
-                double mad = unsatResList[unsatResList.Count / 2];
-                double sigmaR = 1.4826 * Math.Max(mad, 1e-6);
-                double delta = HUBER_K * sigmaR;
-
-                // Huber 가중치 업데이트 (effSat 는 saturation 가중치 유지)
-                for (int i = 0; i < N; i++)
-                {
-                    if (effSat[i]) continue;     // saturation weight 보존
-                    double absR = resAbs[i];
-                    double wH = (absR <= delta) ? 1.0 : (delta / absR);
-                    sqrtW[i] = Math.Sqrt(wH);
-                }
-            }
-
-            double Kp = lmResult.MinimizingPoint[0];
-            double Ti = lmResult.MinimizingPoint[1];
-            double Td = lmResult.MinimizingPoint[2];
-
-            // ── 7단계: RMSE (effSat 제외, robust 가중치도 무시한 raw 잔차) ──
-            var finalWeighted = model(lmResult.MinimizingPoint, obsX);
-            double sse = 0;
-            int nValidRmse = 0;
-            for (int i = 0; i < N; i++)
-            {
-                if (effSat[i]) continue;
-                double pred = finalWeighted[i] / Math.Max(1e-12, sqrtW[i]);
-                double err = yd[i] - pred;
-                sse += err * err;
-                nValidRmse++;
-            }
-            double rmse = (nValidRmse > 0) ? Math.Sqrt(sse / nValidRmse) : double.NaN;
-
-            // ── 8단계: CRLB (Cramér-Rao 표준오차) ──
-            //   J = ∂(√w·ŷ)/∂θ at θ*, σ² ≈ ssr_w / (N_eff - 3)
-            //   cov ≈ σ² · (Jᵀ J)⁻¹ → diag 가 분산, sqrt 가 표준오차
-            double kpSE = double.NaN, tiSE = double.NaN, tdSE = double.NaN;
-            try
-            {
-                double[] eps = { Math.Max(1e-6, Math.Abs(Kp) * 1e-4),
-                                 Math.Max(1e-4, Math.Abs(Ti) * 1e-4),
-                                 Math.Max(1e-7, Math.Abs(Td) * 1e-4) };
-                double[,] Jmat = new double[N, 3];
-                for (int j = 0; j < 3; j++)
-                {
-                    var thp = lmResult.MinimizingPoint.Clone();
-                    var thm = lmResult.MinimizingPoint.Clone();
-                    thp[j] += eps[j]; thm[j] -= eps[j];
-                    var yp = model(thp, obsX);
-                    var ym = model(thm, obsX);
-                    double invDen = 0.5 / eps[j];
-                    for (int i = 0; i < N; i++) Jmat[i, j] = (yp[i] - ym[i]) * invDen;
-                }
-                // JtJ
-                double[,] JtJ = new double[3, 3];
-                for (int a = 0; a < 3; a++)
-                    for (int b = 0; b < 3; b++)
-                    {
-                        double sumJJ = 0;
-                        for (int i = 0; i < N; i++) sumJJ += Jmat[i, a] * Jmat[i, b];
-                        JtJ[a, b] = sumJJ;
-                    }
-                double[,] inv = Invert3x3(JtJ);
-                // σ² from weighted residuals over effective valid samples
-                int nEff = 0;
-                double ssrW = 0;
-                for (int i = 0; i < N; i++)
-                {
-                    if (effSat[i]) continue;
-                    if (sqrtW[i] < 0.5) continue;   // IRLS-downweighted outlier 도 제외
-                    double rW = sqrtW[i] * yd[i] - finalWeighted[i];
-                    ssrW += rW * rW;
-                    nEff++;
-                }
-                if (nEff > 3 && inv != null)
-                {
-                    double sigma2 = ssrW / (nEff - 3);
-                    kpSE = Math.Sqrt(Math.Max(0, sigma2 * inv[0, 0]));
-                    tiSE = Math.Sqrt(Math.Max(0, sigma2 * inv[1, 1]));
-                    tdSE = Math.Sqrt(Math.Max(0, sigma2 * inv[2, 2]));
-                }
-            }
-            catch { /* CRLB 실패해도 본 결과는 유효 */ }
-
-            // ── 9단계: 경계 클램프 + 경고 ──
-            string warning = null;
-            if (Kp < 0) { warning = $"Kp<0 ({Kp:0.000}) clamped to 0"; Kp = 0; }
-            if (Ti < 0.1) Ti = 0.1;
-            if (Ti > 250.0) Ti = 250.0;
-            if (Td < 0) Td = 0;
-            if (Td > 10.0) Td = 10.0;
-
-            if (double.IsNaN(Kp) || double.IsInfinity(Kp)) { Kp = 0; warning = "Kp NaN/Inf"; }
-            if (double.IsNaN(Ti) || double.IsInfinity(Ti)) Ti = 250.0;
-            if (double.IsNaN(Td) || double.IsInfinity(Td)) Td = 0;
-
-            return new FritResult
-            {
-                Kp = Kp, Ti = Ti, Td = Td,
-                KpSE = kpSE, TiSE = tiSE, TdSE = tdSE,
-                Rmse = rmse,
-                Warning = warning,
-                Iterations = lmResult.Iterations,
-                IrlsIterations = irlsIter,
-                Converged = (lmResult.ReasonForExit == MathNet.Numerics.Optimization.ExitCondition.Converged)
-            };
-        }
-
-        /// <summary>3×3 matrix inversion via cofactor expansion. Returns null if singular.</summary>
-        private static double[,] Invert3x3(double[,] m)
-        {
-            double a = m[0, 0], b = m[0, 1], c = m[0, 2];
-            double d = m[1, 0], e = m[1, 1], f = m[1, 2];
-            double g = m[2, 0], h = m[2, 1], i = m[2, 2];
-            double det = a*(e*i - f*h) - b*(d*i - f*g) + c*(d*h - e*g);
-            if (Math.Abs(det) < 1e-30) return null;
-            double inv = 1.0 / det;
-            double[,] r = new double[3, 3];
-            r[0, 0] = (e*i - f*h) * inv;
-            r[0, 1] = (c*h - b*i) * inv;
-            r[0, 2] = (b*f - c*e) * inv;
-            r[1, 0] = (f*g - d*i) * inv;
-            r[1, 1] = (a*i - c*g) * inv;
-            r[1, 2] = (c*d - a*f) * inv;
-            r[2, 0] = (d*h - e*g) * inv;
-            r[2, 1] = (b*g - a*h) * inv;
-            r[2, 2] = (a*e - b*d) * inv;
-            return r;
-        }
 
         // ============================================================
         // UI helpers (FTD 패턴: new SubjectiveFloatClampedWithBar + M.m)
@@ -2328,31 +1833,31 @@ namespace PIDSupporter
                 this._focus,
                 M.m<VariableControllerMaster>(_ => label),
                 M.m<VariableControllerMaster>(new ToolTip(tip, 260f)),
-                null,
+                null!,
                 onClick
             );
         }
 
-        private SubjectiveToggle<VariableControllerMaster> MakeToggle(string label, string tip, Func<bool> getter, Action<bool> setter, string tag = null)
+        private SubjectiveToggle<VariableControllerMaster> MakeToggle(string label, string tip, Func<bool> getter, Action<bool> setter, string? tag = null)
         {
             return new SubjectiveToggle<VariableControllerMaster>(
                 this._focus,
                 M.m<VariableControllerMaster>(_ => label),
                 M.m<VariableControllerMaster>(new ToolTip(tip, 260f)),
                 (VariableControllerMaster _, bool b) => setter(b),
-                null,
+                null!,
                 (VariableControllerMaster _) => getter(),
                 tag == null ? Array.Empty<string>() : new[] { tag }
             );
         }
 
-        private SubjectiveButton<VariableControllerMaster> MakeCycleButton(string title, string tip, Func<string> valueText, Action onClick, string tag = null)
+        private SubjectiveButton<VariableControllerMaster> MakeCycleButton(string title, string tip, Func<string> valueText, Action onClick, string? tag = null)
         {
             return new SubjectiveButton<VariableControllerMaster>(
                 this._focus,
                 M.m<VariableControllerMaster>(_ => $"{title}: {valueText()} (click/클릭)"),
                 M.m<VariableControllerMaster>(new ToolTip(tip, 260f)),
-                null,
+                null!,
                 _ => onClick()
             );
         }
@@ -2366,7 +1871,7 @@ namespace PIDSupporter
             float max,
             float step,
             string format,
-            string tag = null)
+            string? tag = null)
         {
             return new SubjectiveFloatClampedWithBar<VariableControllerMaster>(
                 M.m<VariableControllerMaster>(_ => min),
@@ -2391,7 +1896,7 @@ namespace PIDSupporter
             int max,
             int step,
             string format,
-            string tag = null)
+            string? tag = null)
         {
             return new SubjectiveFloatClampedWithBar<VariableControllerMaster>(
                 M.m<VariableControllerMaster>(_ => min),
@@ -2410,16 +1915,6 @@ namespace PIDSupporter
         // ============================================================
         // small utils
         // ============================================================
-
-        private static string WaveToKo(WaveType w)
-        {
-            switch (w)
-            {
-                case WaveType.Off: return "Off";
-                case WaveType.MultiSine: return "MultiSine (PRBS)";
-                default: return w.ToString();
-            }
-        }
 
         private static float Clamp(float v, float lo, float hi)
         {
@@ -2582,8 +2077,8 @@ namespace PIDSupporter
             // Detrend
             double[] yd = new double[N]; Array.Copy(y, yd, N); Detrend(yd);
             double[] ud = new double[N]; Array.Copy(u, ud, N); Detrend(ud);
-            double[] rd = null;
-            if (useIv) { rd = new double[N]; Array.Copy(r, rd, N); Detrend(rd); }
+            double[]? rd = null;
+            if (useIv && r != null) { rd = new double[N]; Array.Copy(r, rd, N); Detrend(rd); }
 
             // ── Stage 1: ARX OLS (initial estimate) ──
             // regressors X = [y[k-1], y[k-2], u[k-1-δ]]
@@ -2669,7 +2164,7 @@ namespace PIDSupporter
                         double yt = yd[k];
                         double y1 = yd[k - 1], y2 = yd[k - 2], u1 = ud[k - 1 - delayN];
                         double ys1 = ySim[k - 1], ys2 = ySim[k - 2];
-                        double r1 = rd[k - 1 - delayN];
+                        double r1 = rd![k - 1 - delayN];
 
                         zx11 += ys1 * y1; zx12 += ys1 * y2; zx13 += ys1 * u1;
                         zx21 += ys2 * y1; zx22 += ys2 * y2; zx23 += ys2 * u1;
@@ -3202,7 +2697,7 @@ namespace PIDSupporter
         /// coherence 값 ≤ 0 이면 unweighted (= 단순 MSE) 로 fallback.
         /// </summary>
         private static double FritCostEval(double kp, double ti, double td,
-            double[] u, double[] uInject, double[] y, bool[] sat, double ts, int nM, double tauM, double dt,
+            double[] u, double[]? uInject, double[] y, bool[] sat, double ts, int nM, double tauM, double dt,
             double cohLo, double cohMid, double cohHi)
         {
             if (!IsInverseCStable(kp, ti, td, dt)) return 1e12;
@@ -3225,7 +2720,7 @@ namespace PIDSupporter
             var residList = new List<double>(kEnd - kStart);
             for (int k = kStart; k < kEnd; k++)
             {
-                if (sat != null && sat.Length > k && sat[k]) continue;
+                if (sat.Length > k && sat[k]) continue;
                 double rr = y[k] - yHat[k];
                 if (double.IsNaN(rr) || double.IsInfinity(rr)) return 1e12;
                 residList.Add(rr);
@@ -3313,7 +2808,7 @@ namespace PIDSupporter
         /// 수렴 후 Cramér-Rao 표준오차 (KpSE, TiSE, TdSE) 도 계산.
         /// </summary>
         private static FritOptResult RunFritLM(
-            double[] u, double[] uInject, double[] y, bool[] sat, double dt, double ts, int nM, double tauM,
+            double[] u, double[]? uInject, double[] y, bool[] sat, double dt, double ts, int nM, double tauM,
             double cohLo, double cohMid, double cohHi,
             double kpInit, double tiInit, double tdInit)
         {
@@ -3339,7 +2834,7 @@ namespace PIDSupporter
             var validIdx = new List<int>(kEnd - kStart);
             for (int k = kStart; k < kEnd; k++)
             {
-                if (sat != null && sat.Length > k && sat[k]) continue;
+                if (sat.Length > k && sat[k]) continue;
                 validIdx.Add(k);
             }
             int M = validIdx.Count;
@@ -3491,7 +2986,7 @@ namespace PIDSupporter
         /// 학계: LM 의 local minimum 함정 회피 — multistart 표준.
         /// </summary>
         private static FritOptResult RunFritMultistart(
-            double[] u, double[] uInject, double[] y, bool[] sat, double dt, double ts, int nM, double tauM,
+            double[] u, double[]? uInject, double[] y, bool[] sat, double dt, double ts, int nM, double tauM,
             double cohLo, double cohMid, double cohHi,
             double kpCurr, double tiCurr, double tdCurr)
         {
@@ -3524,7 +3019,7 @@ namespace PIDSupporter
         ///   Cost 비교는 same data 위에서 different model 이라 valid (학계 표준).
         /// </summary>
         private static FritOptResult RunFritFullSweep(
-            double[] u, double[] uInject, double[] y, bool[] sat, double dt, double tauM,
+            double[] u, double[]? uInject, double[] y, bool[] sat, double dt, double tauM,
             double cohLo, double cohMid, double cohHi,
             double kpCurr, double tiCurr, double tdCurr,
             out double tsBest, out int nMBest)

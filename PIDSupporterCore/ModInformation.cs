@@ -32,15 +32,15 @@ namespace PIDSupporter
 {
     internal static class ModInformation
     {
-        private static string _name;
-        private static string _myModDirPath;
+        private static string? _name;
+        private static string? _myModDirPath;
 
         public static string MyModFolderPath
         {
             get
             {
                 if (string.IsNullOrEmpty(_myModDirPath)) Preparation();
-                return _myModDirPath;
+                return _myModDirPath!;
             }
         }
 
@@ -49,14 +49,14 @@ namespace PIDSupporter
             get
             {
                 if (string.IsNullOrEmpty(_name)) Preparation();
-                return _name;
+                return _name!;
             }
         }
 
         private static void Preparation()
         {
             string path1 = Assembly.GetExecutingAssembly().Location;
-            string path2 = Path.GetDirectoryName(path1);
+            string? path2 = Path.GetDirectoryName(path1);
 
             // Mods 폴더를 만날 때까지 상위로 올라간다.
             while (!string.IsNullOrEmpty(path2) && Path.GetFileName(path2) != "Mods")
@@ -68,8 +68,8 @@ namespace PIDSupporter
             // Mods 를 못 찾은 경우(특수 로딩 경로) 현재 어셈블리 폴더를 모드 루트로 간주.
             if (string.IsNullOrEmpty(path2))
             {
-                _myModDirPath = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-                _name = Path.GetFileName(_myModDirPath);
+                _myModDirPath = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? "";
+                _name = Path.GetFileName(_myModDirPath) ?? "";
                 return;
             }
 
@@ -81,7 +81,7 @@ namespace PIDSupporter
         private static System.Version _modVersion = new System.Version(0, 0, 0);
         private static ulong _workshopID;
         private static int _requestCount;
-        private static CallResult<SteamUGCRequestUGCDetailsResult_t> _steamCall;
+        private static CallResult<SteamUGCRequestUGCDetailsResult_t>? _steamCall;
 
         public static void VersionConfirmation()
         {
@@ -93,8 +93,8 @@ namespace PIDSupporter
             {
                 JObject jObject = JObject.Parse(File.ReadAllText(pluginPath));
 
-                JToken jobj1 = jObject["version"];
-                JToken jobj2 = jObject["workshop_id"];
+                JToken? jobj1 = jObject["version"];
+                JToken? jobj2 = jObject["workshop_id"];
 
                 if (jobj1 != null)
                 {
@@ -144,8 +144,8 @@ namespace PIDSupporter
 
             using (StringReader reader = new StringReader(description))
             {
-                string inputLine;
-                System.Version latestVersion = null;
+                string? inputLine;
+                System.Version? latestVersion = null;
 
                 while ((inputLine = reader.ReadLine()) != null)
                 {
