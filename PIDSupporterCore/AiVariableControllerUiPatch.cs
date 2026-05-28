@@ -65,7 +65,7 @@ namespace PIDSupporter
                 VariableControllerMaster controller = focusObj as VariableControllerMaster;
                 if (controller == null) return;
 
-                ConsoleWindow fritWindow = CreateFritWindowViaNewWindow(__instance, "FRIT 튜닝", 700f, 10f, 520f, 720f);
+                ConsoleWindow fritWindow = CreateFritWindowViaNewWindow(__instance, "FRIT Tuner Supporter", 700f, 10f, 520f, 720f);
                 if (fritWindow == null) return;
 
                 fritWindow.MinimumWindowWidth = new ScaledSizing(420f, Dimension.Width);

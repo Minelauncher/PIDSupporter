@@ -1,394 +1,488 @@
-# PID 자동 튜너 — 이론 및 구현
+# PIDSupporter — 이론 & 학습 가이드
+
+이 문서는 **공부용**. 한 번 읽으면 이 모드 안에서 무슨 일이 벌어지는지 다 파악할 수 있게 작성. 각 절은 **직관 → 수학 → 학계 출처 → 코드 위치** 순서.
 
 ---
 
-## 1. 개요
+## 0. 한 문장 요약
 
-이 모드는 **Hybrid PRBS 가진 + Welch/Coherence sensitivity 분석 + FRIT (28-seed multistart) PID 식별** 으로 PID 자동 튜닝을 수행합니다. 모든 단계가 학계 표준 + 명확한 수학적 근거.
-
-**핵심 파이프라인**:
-
-```
-[Auto Tune]
-  → Diagnose Phase 0 (3s, 가진 OFF)
-       · Limit cycle / 지속 포화 검출 → fail
-       · y baseline 측정
-
-  → Diagnose Phase 1 (3s, 작은 perturbation amp=0.05)
-       · tracking_ratio 측정 (정보 표시만, 자동 종료 X)
-
-  → Recording (open-ended, 최대 60s):
-       매 틱:
-         · Hybrid PRBS: SP-direct (메인) + u-direct (보조, headroom-bounded)
-         · 데이터 (u_actual, y, r=spInject, uInject, sat) 기록
-       매 2초 (80 ticks):
-         · Sat-aware amp adaptive (sat rate ~10-25% target)
-       매 6초 (240 ticks):
-         · Welch periodogram + Cross-spectrum + Coherence
-         · 3 band 의 |S(f)| + γ²(f) 측정
-         · 부족 band (S 큰 곳) → PRBS bit_ticks 조정
-       60s 도달 → 종료
-
-  → FRIT 식별:
-       · 28 seeds = 27-grid + 현재 PID
-       · LM 30 iter 각 seed → cost 최저 채택
-       · u-direct 보정: e = (1/C)·(u_actual - u_inject)
-
-  → Apply
-```
-
-**학계 근거 요약**:
-
-| 컴포넌트 | 학계 출처 |
-|---|---|
-| FRIT | Soma/Kaneko 2004 |
-| Levenberg-Marquardt | Marquardt 1963 |
-| Sensitivity function | Skogestad/Postlethwaite *Multivariable Feedback Control* |
-| Closed-loop identifiability | Forssell/Ljung 1999 |
-| Additive perturbation (u-direct) | Söderström/Stoica §8.5 |
-| Welch periodogram | Welch 1967 |
-| Coherence γ²(f) | Bendat/Piersol 2010 *Random Data* |
-| Input amplitude constraint | Hjalmarsson 2005 |
-| PRBS | Ljung *System Identification* §13 |
-| FTD PID 이산화 (backward Euler) | Ai.dll PidStandardForm 디컴파일 검증 |
+> 비행 중인 함체에 작은 무작위 신호를 넣어서 응답을 측정하고, 그 데이터로 PID 게인을 역산하는 모드. 알고리즘은 **FRIT** (Soma-Kaneko 2004) + **Welch coherence** (Bendat-Piersol 2010) + **multistart LM** 조합.
 
 ---
 
-## 2. PID 제어기
+## 1. 우선 PID 가 뭔지부터
 
-ISA PID:
-$$u(t) = K_p \left[ e(t) + \frac{1}{T_i} \int e \, d\tau + T_d \frac{de}{dt} \right]$$
+PID 제어기는 오차 e = (목표 - 현재값) 을 받아 제어신호 u 를 만드는 함수:
 
-### FTD 의 이산화 (디컴파일 검증)
+```
+u(t) = Kp · e(t) + Ki · ∫e dt + Kd · de/dt
+     = Kp · ( e + (1/Ti)·∫e dt + Td·de/dt )
+```
 
-- 적분: `I += e·dt` (backward Euler)
-- 미분: `(e - e_prev) / dt` (backward difference)
-- Output: `u_pre_clip = Kp·(e + I/Ti + Td·de/dt)`
-- Anti-windup: `I` clamp 후 `u = clip(u_pre_clip, ±1)`
+- **Kp**: 비례 — 오차가 크면 강하게
+- **Ti**: 적분 시정수 — 작을수록 누적 오차 빨리 잡음 (저주파 외란 제거)
+- **Td**: 미분 시정수 — 클수록 변화율에 민감 (overshoot 방지)
 
-### z-domain 표현
+**전달함수 형식**:
 
-$$C(z) = K_p \cdot \frac{a_0 + a_1 z^{-1} + a_2 z^{-2}}{1 - z^{-1}}$$
+```
+C(s) = Kp · ( 1 + 1/(Ti·s) + Td·s )
+```
 
-$$a_0 = 1 + \frac{dt}{T_i} + \frac{T_d}{dt}, \quad a_1 = -\left(1 + \frac{2 T_d}{dt}\right), \quad a_2 = \frac{T_d}{dt}$$
-
-### FTD 슬라이더 범위
-
-| 파라미터 | 범위 | 기본값 |
-|---|---|---|
-| `K_p` | 0 ~ 1 | 0.05 |
-| `T_i` | 0 ~ 250 | 250 (=off) |
-| `T_d` | 0 ~ 100 | 0.3 |
+이 모드의 목적: **Kp, Ti, Td 를 데이터로부터 알아내기**.
 
 ---
 
-## 3. 폐루프 식별의 본질적 한계
+## 2. 폐루프 시스템 식별이 왜 어려운가
 
-### Closed-loop identifiability theorem (Forssell-Ljung 1999)
+### 기본 구조
 
 ```
-T(jω) = CG/(1+CG)        ← closed-loop transfer
-S(jω) = 1/(1+CG) = 1-T   ← sensitivity
+        r           e          u           y
+   ──→ (+) ──→ [ C(s) ] ──→ [ G(s) ] ──→ ┬──→
+        ↑                                 │
+        └─────────────────────────────────┘
 ```
 
-- |S(jω)| 큼 = controller 가 그 freq 에서 reject 못 함 = **정보 풍부**
-- |S(jω)| ≈ 0 = controller 가 완벽 reject = **정보 없음**
-- |S(jω)| → 0 모든 freq = 완벽 PID = *수학적으로 식별 불가능*
+- r: 목표값 (setpoint)
+- C(s): 우리가 찾고 싶은 PID 제어기
+- G(s): plant (비행기/배 등 물리)
+- y: 출력 (실제값)
 
-→ 강한 PID 일수록 식별 어려움. 어떤 식별 방법도 우회 불가능.
+### 두 가지 ID 방식
+
+**Open-loop ID** (쉬움): 
+- C(s) 를 떼어내고 u 를 직접 정해서 G(s) 만 식별
+- 위험: 제어 없으니 비행기 추락
+
+**Closed-loop ID** (이 모드): 
+- C(s) 가 살아있는 상태로 식별
+- 비행기 안 추락 ✓
+- **하지만** u 와 y 가 c-G loop 으로 얽혀 있어서 수학적으로 까다로움
+
+### 핵심 어려움 두 개
+
+**(a) 식별성 (identifiability)**:
+- C 가 강하면 y 거의 안 흔들림 → 정보 없음
+- C 가 약하면 잘 흔들리지만 비행기 불안정
+
+**(b) Closed-loop 상관**:
+- y 에 노이즈 있음 → u 가 그 노이즈에 반응 → u 와 노이즈 상관
+- Open-loop 가정 ID 는 편향됨 (bias)
+
+→ 이 두 문제를 **FRIT** 가 우회.
 
 ---
 
-## 4. 가진 (Excitation) — Hybrid PRBS
+## 3. FRIT — Fictitious Reference Iterative Tuning
 
-### 4.1 PRBS (Pseudo-Random Binary Sequence)
+**출처**: Soma, S., Kaneko, O., Fujii, T. (2004) "A new method of controller parameter tuning based on input-output data – Fictitious Reference Iterative Tuning", *IFAC Proceedings*.
 
-10-bit LFSR (`x^10 + x^7 + 1`, period 1023). 매 `PrbsBitTicks` 마다 새 ±1 비트.
+### 아이디어
 
-`bit_ticks ↔ 자극 band`:
-- `bit=4` (0.1s) → high band (0-5Hz emphasis)
-- `bit=16` (0.4s) → mid band (0-1.25Hz)
-- `bit=64` (1.6s) → low band (0-0.3Hz)
+**핵심 트릭**: G(s) 를 모델링하지 않고 PID 만 직접 찾는다.
 
-매 6초 spectral monitor 가 `|S|` 가장 큰 band 로 자동 조정.
+데이터 (u, y, 현재 PID 게인 C₀) 가 있을 때:
+- **가상 참조신호**: r̃(θ) = y + C(θ)⁻¹ · u
+- 이건 "만약 PID 가 θ 였다면, 이 (u,y) 를 만든 reference 는 무엇이었을까?"
+- 우리가 원하는 응답은 **참조 모델** M(s) 와 같아야 함:
+  $$y = M(s) · r̃(θ)$$
+  이게 정확히 만족되는 θ 가 desired PID.
 
-### 4.2 HPF (DC drift cancellation)
-
-1차 IIR HPF (fc ≈ 0.01 Hz, α=0.9984): 적분기 plant 의 finite-window PRBS DC bias 제거. fast PRBS dynamics 유지.
-
-### 4.3 Hybrid 주입 — SP-direct + u-direct
-
-**같은 PRBS 신호를 양쪽 inject**:
+### 비용 함수
 
 ```
-PRBS bit (±1) → HPF → prbsHpf
-                       ↓
-        ┌──────────────┼──────────────┐
-        ↓                              ↓
-   SP_inject = SP_amp · prbsHpf    u_inject = u_amp · prbsHpf
-                                        ↓ headroom bound
-   focus.SetPointAdjust.Us           clamp(u_inject, ±γ·(1-|u_C|))
-   = base + SP_inject               (γ=0.5)
-                                        ↓
-                                   FritExcitationInjector.Set
-                                   → patch 가 u_PID 에 더함
+J(θ) = || y - M(s)·r̃(θ) ||²
+     = || y - M(s)·(y + C(θ)⁻¹·u) ||²
 ```
 
-**근거**:
-- SP-direct: FRIT cost 와 자연 호환 (Soma/Kaneko 2004)
-- u-direct: Söderström-Stoica §8.5 additive perturbation
-- Headroom-bounded: Hjalmarsson 2005 amplitude constraint
-- 같은 PRBS 신호: 단순 + 두 경로 phase 일치
+이걸 최소화하는 θ = (Kp, Ti, Td) 가 답.
 
-### 4.4 Saturation-aware adaptive amplitude
+### 참조 모델 M(s)
 
-매 80 틱 (~2초):
+원하는 폐루프 응답 모양:
 
-```
-sat rate > 30% → amp × 0.7 (비선형 distortion 회피)
-sat rate < 10% → amp × 1.4 (정보량 ↑)
-10-30%        → 유지
-```
+$$M(s) = \frac{e^{-s \tau_M}}{(1 + a_M \cdot s)^{n_M}}, \quad a_M = 0.2 \cdot T_s$$
 
-`SP_amp ∈ [0.01, 1.0]`, `u_amp ∈ [0.005, 0.3]`. 목표 sat rate ~10-25% (Hjalmarsson 2005).
+- **τ_M**: 순수 지연 (dead-time). FTD 에선 ≈ 1 tick.
+- **T_s**: 목표 정착시간. 작을수록 빠른 응답.
+- **n_M**: 모델 차수 (2~4 sweep).
+- 5·a_M = T_s 가 "5 시정수 = settling" 경험칙에서 옴.
+
+### 왜 잘 작동하나
+
+- G(s) 모델링 불필요 (모델 오차 자유)
+- 폐루프 데이터 그대로 쓰니까 비행 중에도 안전
+- 식별성: C(θ) 가 바뀌면서 r̃ 도 같이 바뀌어서 information 가 비선형적으로 들어옴
+
+**코드 위치**: `FritTuningTab.cs` → `FritCostEval`, `RunFritLM`, `ApplyRefModel`, `InverseCFilter`
 
 ---
 
-## 5. 데이터 수집 — Welch + Coherence Spectral Monitor
+## 4. 가진 (excitation) — 어떻게 자극하나
 
-### 5.1 Welch periodogram (학계 정통)
+식별하려면 신호를 흔들어야 함. 너무 약하면 정보 X, 너무 세면 비행기 X.
 
-**Welch 1967, Bendat-Piersol 2010**:
+### PRBS — Pseudo-Random Binary Sequence
 
-```
-[모든 데이터 사용]
-SEG_LEN = 256, step = 128 (50% overlap)
-K = (N - 256) / 128 + 1   ← 시간 흐를수록 K 증가
+- LFSR (Linear Feedback Shift Register) 로 만드는 ±1 시퀀스
+- 다항식 x¹⁰ + x⁷ + 1, period 2¹⁰ - 1 = 1023
+- 광대역 (broadband) 자극 — 화이트노이즈와 비슷한 스펙트럼
 
-[각 segment]
-  Hanning window 적용 (spectral leakage 차단)
-  FFT (y, r 둘 다)
+**왜 PRBS 인가**:
+- 결정론적 → 재현 가능
+- 양극단 (±A) 만 → 같은 분산 대비 piecewise constant 신호 중 SNR 최대
+- 학계 표준 (Söderström-Stoica §5.2)
 
-[Cross-spectrum 누적]
-  S_yy[f] += |Y_k(f)|²
-  S_rr[f] += |R_k(f)|²
-  S_yr[f] += Y_k(f) · conj(R_k(f))   ← complex
+### Hybrid 가진
 
-[K segments 평균]
-  S_yy /= K, S_rr /= K, S_yr /= K
-```
+**SP-direct** (메인): r 에 PRBS 더함 → 제어기 통해 plant 자극.
 
-**효과**: noise variance ∝ 1/K (60초 수집 시 K=17 → 4-5배 감소).
+**u-direct** (additive perturbation): u 에 직접 PRBS 더함.
+- C 가 강해서 SP-direct 만으론 plant 가 안 흔들릴 때 보완
+- **headroom-bounded**: |u_inject| ≤ γ · (1 - |u_C|) — 액추에이터 포화 안 시키게
+- 출처: Hjalmarsson (2005) "From experiment design to closed-loop control"
 
-### 5.2 Transfer function + Coherence
+**Adaptive bit duration**:
+- bit 길이 = bit_ticks × dt
+- 짧음 → 고주파 자극 우세, 김 → 저주파 우세
+- Welch 분석으로 "가장 정보 부족한 band" 식별 → 그 band 자극 강화
 
-```
-T(f) = S_yr(f) / S_rr(f)               ← complex transfer
-γ²(f) = |S_yr(f)|² / (S_yy(f)·S_rr(f))  ← coherence ∈ [0, 1]
-S(f) = |1 - T(f)|                       ← sensitivity
-```
+**HPF drift 제거**:
+- 적분기 plant + finite-window PRBS → 누적 DC bias → 비행기 천천히 drift
+- fc ≈ 0.01 Hz HPF → DC 만 제거, 동역학은 유지
+- 출처: Ljung §13.5
 
-**Coherence γ² 의 의미**:
-- ≈ 1: y, r 의 그 freq linear relationship 강함 → |S| 측정 *신뢰 가능*
-- ≈ 0: noise dominate → |S| 측정 *무의미*
+**Saturation-aware amplitude**:
+- 매 2초 sat rate 측정 → 목표 10-25% 유지하게 amp 조정
+- 너무 낮음 → amp ↑, 너무 높음 → amp ↓
+- 이론적 근거: 학계의 "input design with power constraint" 정통
 
-→ Coherence 가 *numerical artifact 자동 차단*. 신호 약한 bin 은 자연히 가중치 낮음.
-
-### 5.3 Band 평균 (coherence-weighted)
-
-```
-|S|_band = Σ |S(f)| · γ²(f) / Σ γ²(f)   ← 신뢰 bin 의 weight 큼
-```
-
-3 band:
-- low: 0.05-0.5 Hz
-- mid: 0.5-2 Hz
-- high: 2-5 Hz
-
-### 5.4 Adaptive PRBS bit_ticks
-
-가장 큰 `|S|_band` → 그 band 자극하는 bit_ticks 선택:
-- `S_lo` 가장 큼 → bit_ticks = 64 (low 자극)
-- `S_mid` 가장 큼 → bit_ticks = 16 (mid 자극)
-- `S_hi` 가장 큼 → bit_ticks = 4 (high 자극)
-
-### 5.5 Open-ended termination
-
-```
-Hard timeout: T ≥ 60초 → 종료, FRIT 실행
-```
-
-자동 well-tuned 감지는 *비활성화* (`tracking_ratio` 가 *진짜 well-tuned* 와 *plant 조용* 구분 못 함). UI bars (max|S|, γ²) 로 *사용자가 직접 판단*.
-
-### 5.6 Saturation 처리
-
-`measured u = post-clip clamp`:
-```csharp
-double u = clamp(c.LastControlVariable, ±1);
-```
-
-- u_actual = plant 실제 입력 (linear regression unbiased)
-- FRIT cost: saturation 샘플 weight 0 (anti-windup → PID nonlinear 영역 제외)
+**코드 위치**: `RecordingTick`, `ApplyExcitation`, `UpdateAdaptiveAmp`, `UpdateSpectralBitTicks`
 
 ---
 
-## 6. FRIT 식별 (with u-direct 보정)
+## 5. Welch periodogram + Coherence — 데이터 품질 측정
 
-### 6.1 Cost function (u-direct compensated)
+매 6초 마다 누적 데이터를 분석:
 
-$$\tilde{r}_k(\theta) = y_k + C(\theta)^{-1} \cdot u_{PID,k}$$
+### Welch periodogram
 
-$$u_{PID,k} = u_{actual,k} - u_{inject,k} \quad \text{(patch 가 더한 부분 제거)}$$
+- 데이터를 256-sample segment 로 자름, 50% overlap
+- 각 segment 에 Hanning window 적용 → FFT
+- 여러 segment 평균 → 분산 감소
+- 출처: Welch (1967) "The use of fast Fourier transform for the estimation of power spectra"
 
-$$\hat{y}_k(\theta) = M(z) \cdot \tilde{r}_{k - \delta}(\theta)$$
+### Cross-spectrum
 
-$$J(\theta) = \sum_k [y_k - \hat{y}_k(\theta)]^2$$
+$$S_{yr}(f) = \langle Y(f) \cdot R^*(f) \rangle$$
 
-**왜 보정?**: u-direct 가진의 `u_inject` 가 cost 식에 들어가면 *trivial solution 위험*. 명시적으로 빼서 *PID 만의 fictitious reference* 계산. Söderström-Stoica §8.5.
+y 와 r 사이의 주파수별 상관 (복소수, 진폭 + 위상).
 
-### 6.2 1/C(z) 안정성 체크
+### Coherence γ²(f)
+
+$$\gamma^2(f) = \frac{|S_{yr}(f)|^2}{S_{yy}(f) \cdot S_{rr}(f)} \in [0, 1]$$
+
+**해석**:
+- γ² → 1: y 가 r 에 선형적으로 깨끗하게 반응 (식별 OK)
+- γ² → 0: 노이즈가 dominate (식별 불가)
+- 보통 > 0.7 이면 신뢰 가능
+
+출처: Bendat & Piersol (2010) *Random Data*, §11.
+
+### Sensitivity |S(jω)|
+
+폐루프 sensitivity function:
+
+$$S(j\omega) = \frac{1}{1 + C(j\omega) \cdot G(j\omega)} = 1 - T(j\omega)$$
+
+T(j\omega) = S_yr/S_rr 로 추정 → |S| = |1 - T|.
+
+**해석**:
+- |S| 낮음 = controller 가 그 주파수에서 강함 (제어 잘 됨)
+- |S| 높음 = controller 약함 (정보 풍부)
+- 식별 관점에선 **|S| 큰 band 가 학습 기회**
+
+3 band 로 평균:
+- Low: 0.05–0.5 Hz (적분, 외란)
+- Mid: 0.5–2 Hz (주요 동역학)
+- High: 2–5 Hz (Td 영향)
+
+**코드 위치**: `MeasureSensitivityAndCoherence`, `ComputeBandWelchSensitivity`
+
+---
+
+## 6. Sensitivity-weighted Cost
+
+기본 FRIT cost 는 시간 영역 sum of squares. 그런데 모든 주파수가 동일하게 신뢰 가능한 건 아님 — γ² 낮은 대역은 노이즈만 fit 함.
+
+### Band 별 가중 평균
+
+Residual 을 FFT 해서 3 band 의 에너지 측정:
 
 ```
-disc = a₁² - 4 a₀ a₂
-실근:  stable ⇔ |z₁| < 1 ∧ |z₂| < 1
-복소근: stable ⇔ a₂/a₀ < 1
+cost = (γ²_lo · E_lo + γ²_mid · E_mid + γ²_hi · E_hi) / (γ²_lo + γ²_mid + γ²_hi)
 ```
 
-불안정 시 soft barrier (residual=1e3) → LM 후퇴.
+γ² 가 낮은 band 의 cost 영향력이 자동으로 줄어듦 → noise fitting 방지.
 
-### 6.3 IIR 역필터
+### Parseval 정리 등가성
 
-$$e[k] = \frac{u_{PID}[k] - u_{PID}[k-1] - K_p a_1 e[k-1] - K_p a_2 e[k-2]}{K_p a_0}$$
+시간 영역 sum of squares = 주파수 영역 sum of squares (Parseval). 그러니 band 별 합치는 게 수학적으로 의미 있음.
 
-### 6.4 참조 모델 M(z) — Tustin
+### 학계 출처
 
-$$M(s) = \frac{e^{-s \tau_M}}{(1 + s \cdot 0.2 T_s)^{n_M}}, \quad n_M = 2$$
+- Bendat-Piersol (2010): 표준 frequency-weighted MSE
+- 더 공격적 weight: Fisher information ratio `γ²/(1-γ²)` (Ljung §6.3) — 이건 미적용 (현재 γ² 직접 사용)
 
-`T_s` 는 *사용자 슬라이더* (SettlingTimeTs).
+**코드 위치**: `FritCostEval` (Welch periodogram on residual)
 
-### 6.5 27-Grid Multistart
+---
+
+## 7. LM 최적화 + Multistart
+
+비용 J(θ) 가 비선형 + 비볼록 (non-convex) → local minimum 위험.
+
+### Levenberg-Marquardt
+
+Gauss-Newton + gradient descent 의 하이브리드. Math.NET 의 `LevenbergMarquardtMinimizer` 사용.
+
+각 LM 한 번에 30 iter, residual 길이 = 비포화 sample 수.
+
+### Multistart 시드
+
+9 시드:
+- 1: 현재 PID 값
+- 8: 2×2×2 grid corners 
+  - Kp ∈ {0.05, 0.5}
+  - Ti ∈ {1.0, 10.0}
+  - Td ∈ {0.0, 1.0}
+
+각 시드에서 LM 돌리고 cost 최저 채택. 학계 표준 (Söderström-Stoica §7.3).
+
+**코드 위치**: `RunFritLM`, `RunFritMultistart`
+
+---
+
+## 8. nM × Ts Grid Sweep
+
+참조 모델 M(s) 의 두 메타파라미터:
+- **n_M**: 차수 (2, 3, 4)
+- **T_s**: 정착시간 (0.1, 0.3, 1.0, 3.0, 10.0 초)
+
+직관:
+- nM = 2: plant 만 (적분기 없는 1차 + actuator 없음 가정)
+- nM = 3: plant + actuator first-order lag
+- nM = 4: cascaded (예: roll → pitch → yaw)
+- T_s 작음: 빠른 응답 강요 (Td 커질 수 있음)
+- T_s 큼: 부드러운 응답 (Td 작음)
+
+### Sweep
 
 ```
-Kp ∈ {0.01, 0.1, 1.0}
-Ti ∈ {1, 10, 100}
-Td ∈ {0, 0.1, 1.0}
-→ 3×3×3 = 27 grid + 현재 PID 1개 = 28 seeds
+for nM in {2, 3, 4}:
+  for Ts in {0.1, 0.3, 1.0, 3.0, 10.0}:
+    for seed in 9 seeds:
+      run LM, record cost
+  
+pick (nM, Ts, θ) with lowest cost
 ```
 
-각 seed 에서 LM 30 iter → cost 최저 결과 채택.
+총 = 3 × 5 × 9 = **135 LM evaluations ≈ 30 초**.
 
-학계: LM 의 local minimum 함정 회피 — multistart 가 표준 (Bjorck 1996).
+학계 정통: model order selection via cross-validation cost (Söderström-Stoica §8.4).
 
-### 6.6 결과 후처리
-
-- FTD slider 단위 반올림 (Kp 0.001, Ti/Td 0.1)
-- Hard cap: Kp ≤ 1.0, Ti ≤ 250, Td ≤ 10
-
-### 6.7 ComputeNow ↔ AutoTuneCompute 통일
-
-`Compute (FRIT)` 버튼과 `Auto Tune` 둘 다 *동일 28-seed multistart + u-direct 보정* 사용. 결과 일관성 보장.
+**코드 위치**: `RunFritFullSweep`
 
 ---
 
-## 7. 사전 진단 — 2-phase (총 6초)
+## 9. Cramér-Rao 표준오차 (SE)
 
-### Phase 0 (0~3s, 가진 OFF)
+LM 이 θ̂ 를 줬는데 — 얼마나 믿을 수 있나?
 
-|u| max/min, saturation count, sign changes 누적. y baseline 계산.
+### Fisher Information
 
-판정:
-- `satRate > 40% AND crossRate > 0.5/s AND uSwing > 1.6` → Limit cycle fail
-- `satRate > 40%` → 지속 포화 fail
-- 그 외 → Phase 1 진입
+$$I(\theta) = \frac{1}{\sigma^2} J^T J$$
 
-### Phase 1 (3~6s, 작은 perturbation amp=0.05)
+J = ∂yHat/∂θ (Jacobian), σ² = residual variance.
 
-`tracking_ratio = y_std / amp` 측정. *결과 메시지에만 표시* (자동 종료 X).
+### Cramér-Rao Lower Bound
 
-이유: `tracking_ratio` 가 *완벽 추종* 과 *plant 조용* 구분 못 함. baseline 비교 + SNR 검사 추가 전까지 비활성.
+어떤 unbiased estimator 든 분산 ≥ I⁻¹. 우리는 등호 가까이라 가정:
 
----
+$$\text{cov}(\hat\theta) \approx \sigma^2 \cdot (J^T J)^{-1}$$
 
-## 8. 포화 처리
+$$\text{SE}_i = \sqrt{\text{cov}_{ii}}$$
 
-§5.6 의 saturation 처리:
-- `measured u = clamp(LastControlVariable, ±1)` → post-clip → actual plant input
-- linear-in-params 회귀에서 unbiased
-- FRIT cost: saturation 샘플 weight 0 (anti-windup → nonlinear)
+### 95% 신뢰구간
 
-100% saturated 면 `Var(u) = 0` → b 식별 불가능. 코드의 데이터 부족 경고가 자동 catch.
+Gaussian 가정에서 95% CI ≈ θ̂ ± 2·SE.
 
----
+### UI 표시
 
-## 9. FTD 특이사항 (단순화)
+```
+Kp = 0.5000  ±0.0200  (4%)             ← 좋음
+Ti = 5.20    ±2.10   (40%)  [low conf] ← 의심
+Td = 0.30    ±0.45   (150%) [uncertain] ← 신뢰 X
+```
 
-### 환경
-- `dt = 0.025s` (40Hz)
-- Nyquist ≈ 20Hz
-- PRBS bit duration: 4-64 틱
+### 학계 출처
 
-### u-direct injection
-`VariableControllerOutputPatch` (Harmony postfix on `NewMeasurement`) 가 PID 출력에 perturbation 더하고 `LastControlVariable` sync.
+- Ljung (1999) *System Identification: Theory for the User*, §9.4
+- Söderström-Stoica (1989) *System Identification*, §7.4
 
-### 축별 분리 기능 — 제거됨
-이전 버전의 *다른 축 SP 고정* + *피치 고도 유지* 기능 제거. 이유:
-- FTD UI 가 *single PID window* — 다중 축 metadata 유지 어려움
-- Cross-coupling 포함 데이터가 *실제 비행 환경 plant* 식별 → 더 robust PID
-- 코드 복잡도 ~400 라인 감소
-
-→ AI 가 다른 축 자유 제어, coupling 영향은 FRIT cost 의 small noise term 으로 흡수.
-
-### Validate
-단일 축 (focus) 만 측정. 10초 수집 후 yStd 표시.
+**코드 위치**: `ComputeFritSE`
 
 ---
 
-## 10. 알려진 한계
+## 10. Iterative Tuning Pattern (IFT)
 
-1. **완벽 PID 식별 불가능** — closed-loop identifiability limit. UI 의 |S| + γ² 로 사용자가 직접 판단.
+### 발견된 패턴
 
-2. **FRIT non-convex** — LM 의 local minimum. 28-seed multistart 완화하지만 완전 회피 X.
+User 가 직접 본 흐름:
+1. **Round 1**: 약한 PID → S_lo 높음 → 저주파 자극 우세 → Kp/Ti 정확, Td 발산
+2. (수동) Td 줄임 → 적용
+3. **Round 2**: 나은 PID → S_hi 높음 → 고주파 자극 우세 → Td 정확
 
-3. **참조 모델 M 차수** — `n_M = 2` 고정. 3차 이상 plant 면 model error.
+### 이게 왜 일어나나
 
-4. **u-direct headroom γ trade-off** — γ=0.5 가 안전 vs 정보. 작은 γ 안전하지만 plant 자극 약함.
+- Td 는 고주파에서만 영향 (Td·s 항)
+- Round 1 의 약한 PID 는 고주파 자극 못 함 → Td 정보 X → LM 이 자유롭게 둠
+- Round 2 의 나은 PID 는 고주파 자극 만들어줌 → Td 정확 식별
 
-5. **Ts 사용자 결정** — 자동 sweep 없음.
+### 학계 출처
 
-6. **D 항 noise sensitivity** — Td 가 결과마다 변동. 사용자가 cap 조정.
+이게 정확히 **IFT (Iterative Feedback Tuning)** — Hjalmarsson (1994):
+> "Iterative feedback tuning—an overview" — *Int. J. Adaptive Control and Signal Processing*
 
-7. **Cross-coupling 영향** — 다른 축 자유 제어 → 약간 noise 증가. *실제 비행 환경* 매치 효과.
+각 라운드는 "현재 약한 곳" 을 자극하고, 학습 누적은 다음 라운드의 시드로.
 
-8. **`tracking_ratio` 의 ambiguity** — well-tuned 자동 감지 비활성 (baseline + SNR fix 후 부활 가능).
+### 현재 구현
 
----
+User 가 수동으로 반복. SE 표시로 "이 게인 못 믿음" 알려줌 → User 가 판단해서 재실행.
 
-## 11. UI 의 사용자 metric
-
-수집 중 표시:
-
-- **|S| Low/Mid/High**: 각 band sensitivity (coherence-weighted)
-- **Coherence Low/Mid/High**: 그 band 측정 신뢰도 (γ² ∈ [0,1])
-- **Saturation rate**: target 10-25%
-- **SP amp / u amp**: adaptive 진폭
-- **Collection time**: 0-60s
-- **Well-tuned count**: max(|S|) < 0.1 연속 횟수 (정보용)
-
-사용자가 *실시간 데이터 quality* 판단 가능.
+자동화 (1 클릭으로 반복) 는 미구현 — 추후 가능.
 
 ---
 
-## 12. 참고문헌
+## 11. Bode 적분 정리 — 절대 못 이기는 법칙
 
-- **FRIT**: Soma, S., Kaneko, O., & Fujii, T. (2004). *A new method of controller parameter tuning based on input-output data — FRIT*. IFAC.
-- **Closed-loop identification**: Forssell, U., & Ljung, L. (1999). *Closed-loop identification revisited*. Automatica 35(7).
-- **Sensitivity / Loop-shaping**: Skogestad, S., & Postlethwaite, I. (2005). *Multivariable Feedback Control*. Wiley.
-- **Additive perturbation**: Söderström, T., & Stoica, P. (1989). *System Identification*. Prentice Hall. §8.5.
-- **Welch periodogram**: Welch, P.D. (1967). *The use of fast Fourier transform for the estimation of power spectra*. IEEE Transactions on Audio and Electroacoustics.
-- **Coherence / Cross-spectrum**: Bendat, J.S., & Piersol, A.G. (2010). *Random Data: Analysis and Measurement Procedures*. Wiley. Ch. 9-10.
-- **Input design**: Hjalmarsson, H. (2005). *From experiment design to closed-loop control*. Automatica 41(3).
-- **PRBS / System ID**: Ljung, L. (1999). *System Identification: Theory for the User*. Prentice Hall.
-- **Levenberg-Marquardt**: Marquardt, D.W. (1963). *An algorithm for least-squares estimation of nonlinear parameters*. SIAM Journal.
-- **Multistart in LM**: Björck, Å. (1996). *Numerical Methods for Least Squares Problems*. SIAM.
-- **Tustin bilinear**: Oppenheim, A.V., & Schafer, R.W. *Discrete-Time Signal Processing*. Pearson.
-- **MathNet LM 구현**: `MathNet.Numerics.Optimization.LevenbergMarquardtMinimizer`
+### 정리
+
+안정 plant + RHP zero 없음 가정:
+
+$$\int_0^\infty \log|S(j\omega)| \, d\omega = 0$$
+
+번역: **|S| 어디서든 내리면 다른 곳에서 반드시 올라옴**. 모든 ω 에서 |S| < 1 인 controller 는 물리적으로 불가능.
+
+### 좋은 PID 의 |S| 모양
+
+```
+|S(jω)|
+ │
+1│ - - - - - - - - - - ╱──────  ← S_hi ≈ 1 (대역폭 밖)
+ │              ╱─────
+ │      ╱──────
+0│ ──                          ← S_lo 낮음 (제어 강함)
+ └─────────────────────→ ω
+```
+
+- 저주파 (S_lo 낮음): 제어 잘 됨 ✓
+- 중주파 (S_mid 중간): trade-off zone
+- 고주파 (S_hi ≈ 1): 대역폭 밖, 어쩔 수 없음 (= 정상)
+
+User 가 본 "S_lo, S_mid 낮고 S_hi 높은 PID 가 좋은 PID" 라는 관찰은 **Bode 정리의 직접 결과**.
+
+### 만약 S_hi 도 낮추려면?
+
+- Td 매우 크게 (D 가 고주파 강하게)
+- 결과: 센서 노이즈 증폭, 액추에이터 burnout, phase margin 잃음
+- = 실제로는 나쁜 PID
+
+### 학계 출처
+
+Bode, H. (1945) *Network Analysis and Feedback Amplifier Design*, §11.5. 그 후 Doyle-Francis-Tannenbaum (1992) *Feedback Control Theory* 에서 현대화.
+
+---
+
+## 12. 전체 파이프라인 (요약)
+
+```
+[Auto Tune 클릭]
+  │
+  ├─ Phase 0 (3s, 가진 OFF):
+  │    · |u|, sign change rate, sat rate 측정
+  │    · Limit cycle / 지속 포화 → 실패 종료
+  │    · y baseline 누적
+  │
+  ├─ Recording (최대 60s):
+  │    매 틱:
+  │      · Hybrid PRBS (SP-direct + u-direct headroom)
+  │      · HPF DC 제거
+  │      · (u, y, r, uInject, sat) 기록
+  │    매 2초:
+  │      · Sat rate 측정 → amp 자동 조정 (target 10-25%)
+  │    매 6초:
+  │      · Welch + Coherence + |S| 측정
+  │      · 부족 band 자극 강화 (bit_ticks 조정)
+  │      · LastCohLo/Mid/Hi 저장
+  │
+  ├─ FRIT Sweep:
+  │    for nM ∈ {2, 3, 4}:
+  │      for Ts ∈ {0.1, 0.3, 1.0, 3.0, 10.0}:
+  │        9-seed multistart LM
+  │          · 비용 = band-weighted Welch on residual
+  │          · SE = √diag(σ²·(JᵀJ)⁻¹)
+  │    pick (nM, Ts, θ) with lowest cost
+  │
+  └─ Result:
+       · _s.SettlingTimeTs ← best Ts (슬라이더 반영)
+       · _s.ModelOrderNm   ← best nM (슬라이더 반영)
+       · UI: Kp ± KpSE, Ti ± TiSE, Td ± TdSE
+       · [uncertain] flag if SE/|val| > 50%
+```
+
+---
+
+## 13. 코드 위치 빠른 색인
+
+| 기능 | 위치 |
+|------|------|
+| Auto Tune 진입점 | `FritTuningTab.cs` → `AutoTuneCompute` |
+| Compute 버튼 | `ComputeNow` |
+| 진단 phase | `OnDiagnoseTick` |
+| 데이터 수집 + 가진 | `RecordingTick`, `ApplyExcitation` |
+| Sat-aware amp | `UpdateAdaptiveAmp` |
+| Welch + Coherence | `MeasureSensitivityAndCoherence`, `ComputeBandWelchSensitivity` |
+| FRIT cost (band-weighted) | `FritCostEval` |
+| Inverse C filter | `InverseCFilter` |
+| Reference model M(s) | `ApplyRefModel` |
+| LM 1회 + SE | `RunFritLM`, `ComputeFritSE` |
+| Multistart | `RunFritMultistart` |
+| Full sweep | `RunFritFullSweep` |
+| u-direct 가진 injection | `VariableControllerOutputPatch.cs` (Harmony) |
+
+---
+
+## 14. 학계 참고문헌
+
+- **Bendat & Piersol (2010)**. *Random Data: Analysis and Measurement Procedures*, 4th ed. Wiley. — Welch, coherence, sensitivity.
+- **Bode (1945)**. *Network Analysis and Feedback Amplifier Design*. Van Nostrand. — Sensitivity integral.
+- **Doyle, Francis, Tannenbaum (1992)**. *Feedback Control Theory*. Macmillan. — 현대 sensitivity 분석.
+- **Forssell & Ljung (1999)**. "Closed-loop identification revisited", *Automatica* 35(7). — 폐루프 식별성.
+- **Hjalmarsson (1994)**. "Iterative feedback tuning—an overview", *Int. J. Adapt. Control Signal Process*. — IFT.
+- **Hjalmarsson (2005)**. "From experiment design to closed-loop control", *Automatica* 41. — Headroom-bounded input.
+- **Ljung (1999)**. *System Identification: Theory for the User*, 2nd ed. Prentice Hall. — 표준 교재.
+- **Söderström & Stoica (1989)**. *System Identification*. Prentice Hall. — Multistart, model order.
+- **Soma, Kaneko, Fujii (2004)**. "A new method of controller parameter tuning based on input-output data – FRIT", *IFAC Proc.* — FRIT 원논문.
+- **Welch (1967)**. "The use of fast Fourier transform for the estimation of power spectra", *IEEE Trans. Audio Electroacoustics*. — Welch periodogram.
+
+---
+
+## 15. 더 발전시킬 수 있는 부분
+
+- **Iterative auto-tune** (자동 반복): User 의 manual round 2 를 자동화 — Hjalmarsson IFT 정통.
+- **Optimal input design** (D-optimal): 현재 PRBS → information matrix 최대화하는 input 으로.
+- **Residual whitening test**: Ljung-Box 등 — 모델이 진짜 맞는지 통계적 검정.
+- **Gain/Phase margin 계산**: Robust stability 보장.
+- **Multi-axis joint ID**: Roll + Pitch 동시 식별 (cross-coupling 명시 모델링).

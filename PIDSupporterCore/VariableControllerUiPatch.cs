@@ -108,7 +108,7 @@ namespace PIDSupporter
 
                 // FRIT 전용 별도 창 생성 (기존 PID 창에 탭으로 넣지 않고 새 창)
                 // 700, 10, 520, 720 = 화면상 x, y, 폭, 높이
-                ConsoleWindow fritWindow = CreateFritWindowViaNewWindow(__instance, "FRIT 튜닝", 700f, 10f, 520f, 720f);
+                ConsoleWindow fritWindow = CreateFritWindowViaNewWindow(__instance, "FRIT Tuner Supporter", 700f, 10f, 520f, 720f);
                 if (fritWindow == null) return;
 
                 fritWindow.MinimumWindowWidth = new ScaledSizing(420f, Dimension.Width);
