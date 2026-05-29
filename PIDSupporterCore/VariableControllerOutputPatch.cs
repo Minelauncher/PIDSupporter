@@ -62,6 +62,34 @@ namespace PIDSupporter
     }
 
     /// <summary>
+    /// Relay feedback test 중 PID 출력을 **완전 교체** (additive 가 아님).
+    /// Åström-Hägglund 1984 표준: u = ±h based on sign of error.
+    /// 활성화된 컨트롤러는 PID 의 계산값 무시, relay 출력만 사용.
+    /// </summary>
+    internal static class RelayOutputInjector
+    {
+        private static readonly Dictionary<VariableControllerMaster, float> _active
+            = new Dictionary<VariableControllerMaster, float>();
+
+        public static void Set(VariableControllerMaster controller, float relayOutput)
+        {
+            if (controller == null) return;
+            _active[controller] = relayOutput;
+        }
+
+        public static void Clear(VariableControllerMaster controller)
+        {
+            if (controller == null) return;
+            _active.Remove(controller);
+        }
+
+        public static bool TryGet(VariableControllerMaster controller, out float relayOutput)
+        {
+            return _active.TryGetValue(controller, out relayOutput);
+        }
+    }
+
+    /// <summary>
     /// VariableControllerMaster.NewMeasurement postfix 로 PID 출력에 가진 신호 추가.
     /// 액추에이터가 NewMeasurement 의 반환값을 사용하므로 __result 수정으로 u 가 바뀜.
     /// LastControlVariable (데이터 수집에서 우리가 읽는 값) 도 동일하게 동기화.
@@ -98,18 +126,36 @@ namespace PIDSupporter
             try
             {
                 if (__instance == null) return;
-                if (!FritExcitationInjector.TryGet(__instance, out float excite)) return;
-                if (excite == 0f) return;
 
-                // FTD 의 PID 출력은 [-1, 1] 범위. 가진 추가 후 클램프.
-                float modified = __result + excite;
+                float modified;
+                bool changed = false;
+
+                // 우선순위 1: Relay (replace mode) — PID 출력 완전 교체
+                if (RelayOutputInjector.TryGet(__instance, out float relayU))
+                {
+                    modified = relayU;
+                    changed = true;
+                }
+                // 우선순위 2: 가진 (additive) — PID 출력에 더함
+                else if (FritExcitationInjector.TryGet(__instance, out float excite) && excite != 0f)
+                {
+                    modified = __result + excite;
+                    changed = true;
+                }
+                else
+                {
+                    return;
+                }
+
+                // FTD 의 PID 출력은 [-1, 1] 범위. 클램프.
                 if (modified > 1f) modified = 1f;
                 else if (modified < -1f) modified = -1f;
 
                 __result = modified;
 
-                // LastControlVariable 동기화: 데이터 수집 시 c.LastControlVariable 을 읽으니
-                // 가진이 포함된 값이어야 (u, y) pair 가 일관됨.
+                if (!changed) return;
+
+                // LastControlVariable 동기화 — c.LastControlVariable 을 읽는 데이터 수집에서 일관.
                 var ctrl = __instance.GetCurrentController();
                 if (ctrl == null) return;
 

@@ -31,20 +31,57 @@ namespace PIDSupporter
             seg1.AddInterpretter(new SubjectiveDisplay<VariableControllerMaster>(
                 this._focus,
                 M.m<VariableControllerMaster>(_ =>
-                    "1. Fly steady (level, no maneuvers, no combat)\n" +
-                    "   안정 비행 (수평, 기동 X, 전투 X)\n\n" +
-                    "2. Press [Auto Tune] — collects ~60s, sweeps nM × Ts\n" +
-                    "   [Auto Tune] 누르기 — 약 60초 수집, nM × Ts 스윕\n\n" +
-                    "3. Check Result panel — see Kp/Ti/Td ± SE\n" +
-                    "   결과 패널 확인 — Kp/Ti/Td ± SE 표시\n\n" +
-                    "4. Press [Apply] to write to PID\n" +
-                    "   [Apply] 눌러 PID 에 반영\n\n" +
-                    "5. (Optional) Repeat steps 2-4 — see 'Iterative Tuning' below\n" +
-                    "   (선택) 2-4 반복 — 아래 'Iterative Tuning' 참조"
+                    "Two tuning paths — pick one:\n" +
+                    "튜닝 경로 두 개 — 골라 쓰기:\n\n" +
+                    "── [Auto Tune] (FRIT, ~60s + 30s sweep) ──\n" +
+                    "  · Broadband PRBS + spectral analysis + nM×Ts sweep\n" +
+                    "  · Best for: complex plants, fine-grained sensitivity\n" +
+                    "  · 복잡 plant, 정밀 sensitivity 분석\n\n" +
+                    "── [Quick Tune (Relay)] (~30s) ──\n" +
+                    "  · Åström-Hägglund relay feedback + Ziegler-Nichols\n" +
+                    "  · Industry standard #1, vessel oscillates around SP\n" +
+                    "  · 산업 표준 #1, 함체가 SP 주변에서 진동\n\n" +
+                    "Both: Fly steady → press button → [Apply] result\n" +
+                    "공통: 안정 비행 → 버튼 → 결과 [Apply]"
                 ),
                 M.m<VariableControllerMaster>(new ToolTip(
-                    "Standard FRIT auto-tune workflow. Steps 2-4 may be repeated for refinement.\n---\n" +
-                    "표준 FRIT 자동 튜닝 워크플로우. 정제를 위해 2-4 반복 가능.", 300f))
+                    "FRIT: data-driven broadband ID. Quick Tune: industrial-standard relay feedback.\n---\n" +
+                    "FRIT: 데이터 기반 broadband 식별. Quick Tune: 산업 표준 relay 피드백.", 300f))
+            ));
+
+            // ── Quick Tune (Relay feedback) ──
+            ScreenSegmentStandard segQt = base.CreateStandardSegment(InsertPosition.OnCursor);
+            segQt.BackgroundStyleWhereApplicable = ConsoleStyles.Instance.Styles.Segments.OptionalSegmentDarkBackgroundWithHeader.Style;
+            segQt.NameWhereApplicable = "Quick Tune (Relay + ZN)";
+            segQt.SpaceAbove = 5f;
+            segQt.SpaceBelow = 5f;
+
+            segQt.AddInterpretter(new SubjectiveDisplay<VariableControllerMaster>(
+                this._focus,
+                M.m<VariableControllerMaster>(_ =>
+                    "Phases (~30s total):\n" +
+                    "단계 (약 30초):\n" +
+                    "  3s diag → relay warm-up (~2 cycles) → measure (~3 cycles)\n\n" +
+                    "What happens:\n" +
+                    "동작:\n" +
+                    "  PID is temporarily replaced by ±h relay.\n" +
+                    "  Vessel naturally oscillates around current SP.\n" +
+                    "  PID 가 잠시 ±h relay 로 교체. 함체가 SP 주변 진동.\n\n" +
+                    "Sliders:\n" +
+                    "슬라이더:\n" +
+                    "  · h (Relay amplitude): bigger = bigger oscillation\n" +
+                    "    h 큼 = 진동 큼 (SNR↑ but 함체 더 흔들림)\n" +
+                    "  · ε (Hysteresis): noise rejection (0 = pure relay)\n" +
+                    "    노이즈 거부 (0 = 순수 relay)\n\n" +
+                    "Method: A, T measured → K_c=4h/(πA), T_c=T\n" +
+                    "        Ziegler-Nichols: Kp=0.6·K_c, Ti=0.5·T_c, Td=0.125·T_c\n\n" +
+                    "Safer than open-loop ZN: relay output bounded ±h.\n" +
+                    "Open-loop ZN 보다 안전: relay 출력 ±h 한정."
+                ),
+                M.m<VariableControllerMaster>(new ToolTip(
+                    "Åström-Hägglund 1984 + Ziegler-Nichols 1942.\n" +
+                    "The most cited industrial PID auto-tuning method.\n---\n" +
+                    "산업 PID auto-tuning 의 가장 인용 많은 표준.", 320f))
             ));
 
             // ── Iterative Tuning / 반복 튜닝 ──

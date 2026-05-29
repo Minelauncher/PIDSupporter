@@ -6,7 +6,7 @@
 
 ## 0. 한 문장 요약
 
-> 비행 중인 함체에 작은 무작위 신호를 넣어서 응답을 측정하고, 그 데이터로 PID 게인을 역산하는 모드. 알고리즘은 **FRIT** (Soma-Kaneko 2004) + **Welch coherence** (Bendat-Piersol 2010) + **multistart LM** 조합.
+> 비행 중인 함체에 작은 무작위 신호를 넣어서 응답을 측정하고, 그 데이터로 PID 게인을 역산하는 모드. 알고리즘은 **FRIT** (Soma-Kaneko 2004) + **γ²-weighted tracking cost** (Bendat-Piersol) + **closed-loop bandwidth Ts** (Skogestad-Postlethwaite) + **9-seed multistart LM** + **Skogestad Td realizability cap** (Skogestad 2003).
 
 ---
 
@@ -212,30 +212,42 @@ T(j\omega) = S_yr/S_rr 로 추정 → |S| = |1 - T|.
 
 ---
 
-## 6. Sensitivity-weighted Cost
+## 6. γ²-weighted Cost (per-bin Welch)
 
 기본 FRIT cost 는 시간 영역 sum of squares. 그런데 모든 주파수가 동일하게 신뢰 가능한 건 아님 — γ² 낮은 대역은 노이즈만 fit 함.
 
-### Band 별 가중 평균
+### 현재 cost form
 
-Residual 을 FFT 해서 3 band 의 에너지 측정:
+residual r(k) = y(k) - M(s)·r̃(θ)(k) 를 Welch FFT 로 per-bin power 추정 (|R(f_i)|²) 후 γ² 가중합:
 
 ```
-cost = (γ²_lo · E_lo + γ²_mid · E_mid + γ²_hi · E_hi) / (γ²_lo + γ²_mid + γ²_hi)
+J(θ) = Σ γ²(f_i) · |R(f_i, θ)|²  /  Σ γ²(f_i)
 ```
 
-γ² 가 낮은 band 의 cost 영향력이 자동으로 줄어듦 → noise fitting 방지.
+- γ²(f_i) ≈ 1 (signal band, 보통 저주파): tracking 항이 강하게 fit 강요 → Ti / Kp 같은 저주파 파라미터 정확
+- γ²(f_i) ≈ 0 (noise band, 보통 고주파): tracking 항이 자동으로 noise fitting 무시 → robust
+- 정규화 Σγ² → 가중평균 → 데이터 magnitude 와 무관
 
 ### Parseval 정리 등가성
 
-시간 영역 sum of squares = 주파수 영역 sum of squares (Parseval). 그러니 band 별 합치는 게 수학적으로 의미 있음.
+시간 영역 sum of squares = 주파수 영역 sum of squares (Parseval). 그러니 per-bin 합 계산이 수학적으로 의미 있음 (시간영역 MSE 의 일반화).
+
+### 시행착오 기록 (penalty 항)
+
+세션 중에 controller-energy penalty 항을 시도:
+
+1. **per-bin (1-γ²)·|C|² penalty** (Bazanella §5.3.2): residual 과 controller 분리, 고주파 |C| 억제로 Td drift 차단 의도. 결과: noise band penalty 가 고주파 편향 → Td 과보호하면서 Ti 무방어.
+2. **ω² weighting (F2)** (Bazanella §5.3.3): Ti/Td 양방향 절제 시도. 결과: Td 과억제 (Td=0 폭살).
+3. **Tikhonov 정통 L-curve λ 선택** (Hansen 1992): augmented LM 의 residual vector 에 penalty rows 증강 + λ 자동 결정. 결과: PRBS-excited FRIT 데이터의 cost surface 가 log T 변동(0.24) vs log P (5.16) = 21:1 → 거의 수직 직선 → corner detection 이 boundary 로 끌려서 PI 구조 collapse 야기.
+
+→ 결론: **penalty 항 전부 폐기**. tracking only + 사후 Skogestad cap (§9) 가 가장 정통 + 실용 균형.
 
 ### 학계 출처
 
-- Bendat-Piersol (2010): 표준 frequency-weighted MSE
-- 더 공격적 weight: Fisher information ratio `γ²/(1-γ²)` (Ljung §6.3) — 이건 미적용 (현재 γ² 직접 사용)
+- Bendat-Piersol (2010) §11.4: 표준 frequency-weighted MSE
+- Fisher information ratio `γ²/(1-γ²)` (Ljung §6.3) — 더 공격적이지만 noise band 에서 0/0 불안정 → 미적용
 
-**코드 위치**: `FritCostEval` (Welch periodogram on residual)
+**코드 위치**: `FritCostBreakdown` (Welch periodogram on residual + γ² weighting)
 
 ---
 
@@ -264,39 +276,127 @@ Gauss-Newton + gradient descent 의 하이브리드. Math.NET 의 `LevenbergMarq
 
 ---
 
-## 8. nM × Ts Grid Sweep
+## 8. Closed-loop Bandwidth Ts + nM Sweep
 
 참조 모델 M(s) 의 두 메타파라미터:
-- **n_M**: 차수 (2, 3, 4)
-- **T_s**: 정착시간 (0.1, 0.3, 1.0, 3.0, 10.0 초)
+- **n_M**: 차수 (2, 3, 4) — sweep
+- **T_s**: 정착시간 — **데이터에서 자동 산출** (sweep 안 함)
 
-직관:
-- nM = 2: plant 만 (적분기 없는 1차 + actuator 없음 가정)
-- nM = 3: plant + actuator first-order lag
-- nM = 4: cascaded (예: roll → pitch → yaw)
-- T_s 작음: 빠른 응답 강요 (Td 커질 수 있음)
-- T_s 큼: 부드러운 응답 (Td 작음)
+### 왜 Ts sweep 폐기
 
-### Sweep
+초기 구현: Ts ∈ {0.1, 0.3, 1.0, 3.0, 10.0} × nM × 9 seeds = 135 LM.
+
+발견된 문제: cost(θ; Ts) 가 Ts 축 cross-comparison 시 구조적 bias 발생.
+- Ts → ∞ 면 M(s) bandwidth ≈ 0 → residual ≈ y → tracking θ-flat → penalty 최소 trivial solution 으로 polarization
+- Ts → dt 면 M(s) bandwidth ≈ Nyquist → 비현실
+- Sweep 의 winner 가 데이터의 실제 plant 특성 무관하게 cost 의 구조적 minimum 으로 끌림
+
+→ 해결: Ts 를 **데이터에서 직접 산출** (sweep 제거).
+
+### Closed-loop bandwidth ω_B (Skogestad-Postlethwaite §2.4.5)
+
+폐루프 전달 함수 T(jω) = S_yr(jω) / S_rr(jω) (Bendat-Piersol §6.4 H₁ estimator).
+
+ω_B = first ω where |T(jω)|² ≤ 1/2.
+
+이 정의는 closed-loop bandwidth 의 표준 정의 (3dB 점). 데이터 → ω_B 직접 추정.
+
+### Bartlett 3-bin band averaging
+
+|T(jω_i)|² 의 Welch 추정은 noise variance ~ (1-γ²)/(K·γ²) 가짐. variance 줄이려고:
+
+```
+|T̄(jω_i)|² = ( |T(ω_{i-1})|² + |T(ω_i)|² + |T(ω_{i+1})|² ) / 3
+```
+
+3-bin 평균으로 noise variance 1/3 감소 (Bendat-Piersol §11.5). "3" = 최소 non-trivial 중앙 평균 (current + 양쪽 이웃) — 임의 숫자 아님.
+
+ω_B = first ω where |T̄(jω)|² ≤ 0.5.
+
+### M(s) bandwidth matching → Ts 공식
+
+|M(jω_B)|² = 1/(1 + (0.2·Ts·ω_B)²)^nM = 1/2 풀어서:
+
+$$T_s = \frac{\sqrt{2^{1/n_M} - 1}}{0.2 \cdot \omega_B}$$
+
+각 nM 별로 다른 Ts. M(s) bandwidth = ω_B 매칭하도록.
+
+### Sweep (nM 만)
 
 ```
 for nM in {2, 3, 4}:
-  for Ts in {0.1, 0.3, 1.0, 3.0, 10.0}:
-    for seed in 9 seeds:
-      run LM, record cost
+  Ts(nM) = √(2^(1/nM)-1) / (0.2·ω_B)   ← 데이터에서
+  9-seed multistart LM with this Ts, nM
+  record cost
   
-pick (nM, Ts, θ) with lowest cost
+pick nM with lowest cost
 ```
 
-총 = 3 × 5 × 9 = **135 LM evaluations ≈ 30 초**.
+총 = 3 × 9 = **27 LM evaluations ≈ 5 초** (이전 135 의 1/5).
 
-학계 정통: model order selection via cross-validation cost (Söderström-Stoica §8.4).
+### 전제 (정직 보고)
 
-**코드 위치**: `RunFritFullSweep`
+- 적분 작용 있는 PID (Ti < ∞) → |T(0)| ≈ 1 (closed-loop DC tracking 보장)
+- |T(jω)| 단조 감소 (resonance peak 없음)
+- ω_B 가 관측 band 안 [ω_1, ω_Nyquist] (= 1/(SEG·dt) ~ fs/2)
+
+위반 시 ω_B 미발견 → 메시지 "increase starting PID gain" 으로 사용자 안내. 폴백 없음.
+
+학계 정통: Skogestad-Postlethwaite (2005) §2.4.5 + Bendat-Piersol (2010) §11.5.
+
+**코드 위치**: `EstimateTsFromClosedLoopBandwidth`, `RunFritBandwidthSweep`
 
 ---
 
-## 9. Cramér-Rao 표준오차 (SE)
+## 9. Skogestad Td Cap (Realizability + Timescale)
+
+LM 이 tracking 만 최적화하면 **Td drift** 가 흔함:
+- Td 는 미분 작용 — 고주파 noise 에 민감
+- cost surface 가 Td 축으로 종종 평평 → noise 따라 drift → Td 과대
+- 사용자 경험 + 학계 일치: Kp/Ti 는 안정, Td 만 drift 빈번
+
+→ 사후 cap 으로 차단.
+
+### 두 정통 cap 결합
+
+$$T_d \le \min\left( \frac{T_i}{4}, \; \frac{1}{\omega_B} \right)$$
+
+**(1) Skogestad SIMC realizability** (Skogestad 2003 §4.2):
+- Td > Ti/4 면 controller zero 가 unstable region → noise 증폭
+- derivative filtering 의 산업 표준 한계
+- Ti 가 정상 범위 (0.5~10) 일 때 binding
+
+**(2) Closed-loop timescale matching** (Skogestad-Postlethwaite §2.4.5):
+- 1/ω_B = 닫힌루프 timescale
+- Td > 1/ω_B 는 "D 작용이 폐루프 보다 느림" — 물리적으로 over-reach
+- Ti 가 매우 큼 (≥100, I-off case) 일 때 binding
+
+### 어느 cap 이 효력 발휘하나
+
+| 케이스 | Ti | ω_B | Ti/4 | 1/ω_B | 효력 cap |
+|--------|-----|-----|------|-------|---------|
+| Relay → FRIT (정상 Ti) | 0.7 | 5.9 | 0.175 | 0.17 | 비슷 (두 정통 일치) |
+| FRIT only, Ti=250 (I-off) | 250 | 4.9 | 62.5 | 0.20 | **1/ω_B** (Ti/4 무력) |
+| 함선 롤 (느린 응답) | 5 | 1.0 | 1.25 | 1.0 | **1/ω_B** |
+| 빠른 비행기 | 5 | 10 | 1.25 | 0.10 | **1/ω_B** |
+| 보수 PID (작은 Ti) | 1 | 4 | 0.25 | 0.25 | 비슷 |
+
+### 왜 Td 만 cap, Kp/Ti 안 cap
+
+- Kp / Ti 는 저주파 dominant → 데이터 fit 이 strong 하게 결정 → drift 적음
+- Td 만 cost surface 평평 → noise sensitive
+- Skogestad cap 자체가 noise filtering 정신 — Td 만 제약
+
+### 학계 출처
+
+- Skogestad (2003) "Simple analytic rules for model reduction and PID controller tuning", *J. Process Control* 13, §4.2 — SIMC realizability
+- Skogestad & Postlethwaite (2005) *Multivariable Feedback Control* §2.4.5 — closed-loop bandwidth
+
+**코드 위치**: `RunFritMultistart` 의 사후 cap 블록
+
+---
+
+## 10. Cramér-Rao 표준오차 (SE)
 
 LM 이 θ̂ 를 줬는데 — 얼마나 믿을 수 있나?
 
@@ -335,7 +435,7 @@ Td = 0.30    ±0.45   (150%) [uncertain] ← 신뢰 X
 
 ---
 
-## 10. Iterative Tuning Pattern (IFT)
+## 11. Iterative Tuning Pattern (IFT)
 
 ### 발견된 패턴
 
@@ -365,7 +465,7 @@ User 가 수동으로 반복. SE 표시로 "이 게인 못 믿음" 알려줌 →
 
 ---
 
-## 11. Bode 적분 정리 — 절대 못 이기는 법칙
+## 12. Bode 적분 정리 — 절대 못 이기는 법칙
 
 ### 정리
 
@@ -405,7 +505,7 @@ Bode, H. (1945) *Network Analysis and Feedback Amplifier Design*, §11.5. 그 �
 
 ---
 
-## 12. 전체 파이프라인 (요약)
+## 13. 전체 파이프라인 (요약)
 
 ```
 [Auto Tune 클릭]
@@ -425,46 +525,48 @@ Bode, H. (1945) *Network Analysis and Feedback Amplifier Design*, §11.5. 그 �
   │    매 6초:
   │      · Welch + Coherence + |S| 측정
   │      · 부족 band 자극 강화 (bit_ticks 조정)
-  │      · LastCohLo/Mid/Hi 저장
+  │      · LastCohLo/Mid/Hi + per-bin S_rr/S_yr 저장
   │
-  ├─ FRIT Sweep:
-  │    for nM ∈ {2, 3, 4}:
-  │      for Ts ∈ {0.1, 0.3, 1.0, 3.0, 10.0}:
+  ├─ Compute (수집 완료 후):
+  │    · Closed-loop bandwidth ω_B from |T̄|² (Bartlett 3-bin)
+  │    · for nM ∈ {2, 3, 4}:
+  │        Ts(nM) = √(2^(1/nM)-1) / (0.2·ω_B)   ← 데이터에서 자동
   │        9-seed multistart LM
-  │          · 비용 = band-weighted Welch on residual
+  │          · 비용 = γ²-weighted Welch on residual
   │          · SE = √diag(σ²·(JᵀJ)⁻¹)
-  │    pick (nM, Ts, θ) with lowest cost
+  │      pick nM with lowest cost
+  │    · Skogestad cap: Td ≤ min(Ti/4, 1/ω_B)
   │
   └─ Result:
-       · _s.SettlingTimeTs ← best Ts (슬라이더 반영)
+       · _s.SettlingTimeTs ← derived Ts (슬라이더 반영)
        · _s.ModelOrderNm   ← best nM (슬라이더 반영)
        · UI: Kp ± KpSE, Ti ± TiSE, Td ± TdSE
        · [uncertain] flag if SE/|val| > 50%
+       · cap 활성 시 메시지 "Td cap (X→Y by Ti/4 or 1/ω_B)"
 ```
 
 ---
 
-## 13. 코드 위치 빠른 색인
+## 14. 코드 위치 빠른 색인
 
 | 기능 | 위치 |
 |------|------|
 | Auto Tune 진입점 | `FritTuningTab.cs` → `AutoTuneCompute` |
 | Compute 버튼 | `ComputeNow` |
 | 진단 phase | `OnDiagnoseTick` |
-| 데이터 수집 + 가진 | `RecordingTick`, `ApplyExcitation` |
-| Sat-aware amp | `UpdateAdaptiveAmp` |
-| Welch + Coherence | `MeasureSensitivityAndCoherence`, `ComputeBandWelchSensitivity` |
-| FRIT cost (band-weighted) | `FritCostEval` |
+| 데이터 수집 + 가진 | `OnUiFixed` 의 recording 분기, `ApplyExcitation` |
+| Welch + Coherence | `UpdatePrbsBitTicksFromSpectrum` (per-bin S_rr/S_yr 저장 포함) |
+| 폐루프 BW Ts 추정 | `EstimateTsFromClosedLoopBandwidth` |
+| nM sweep + Skogestad cap | `RunFritBandwidthSweep`, `RunFritMultistart` |
+| FRIT cost (γ²-weighted) | `FritCostBreakdown` |
 | Inverse C filter | `InverseCFilter` |
 | Reference model M(s) | `ApplyRefModel` |
 | LM 1회 + SE | `RunFritLM`, `ComputeFritSE` |
-| Multistart | `RunFritMultistart` |
-| Full sweep | `RunFritFullSweep` |
 | u-direct 가진 injection | `VariableControllerOutputPatch.cs` (Harmony) |
 
 ---
 
-## 14. 학계 참고문헌
+## 15. 학계 참고문헌
 
 - **Bendat & Piersol (2010)**. *Random Data: Analysis and Measurement Procedures*, 4th ed. Wiley. — Welch, coherence, sensitivity.
 - **Bode (1945)**. *Network Analysis and Feedback Amplifier Design*. Van Nostrand. — Sensitivity integral.
@@ -473,13 +575,15 @@ Bode, H. (1945) *Network Analysis and Feedback Amplifier Design*, §11.5. 그 �
 - **Hjalmarsson (1994)**. "Iterative feedback tuning—an overview", *Int. J. Adapt. Control Signal Process*. — IFT.
 - **Hjalmarsson (2005)**. "From experiment design to closed-loop control", *Automatica* 41. — Headroom-bounded input.
 - **Ljung (1999)**. *System Identification: Theory for the User*, 2nd ed. Prentice Hall. — 표준 교재.
+- **Skogestad (2003)**. "Simple analytic rules for model reduction and PID controller tuning", *J. Process Control* 13. — SIMC PID realizability cap (Td ≤ Ti/4).
+- **Skogestad & Postlethwaite (2005)**. *Multivariable Feedback Control: Analysis and Design*, 2nd ed. Wiley. — Closed-loop bandwidth 정의 (|T|²=0.5), 1/ω_B timescale.
 - **Söderström & Stoica (1989)**. *System Identification*. Prentice Hall. — Multistart, model order.
 - **Soma, Kaneko, Fujii (2004)**. "A new method of controller parameter tuning based on input-output data – FRIT", *IFAC Proc.* — FRIT 원논문.
 - **Welch (1967)**. "The use of fast Fourier transform for the estimation of power spectra", *IEEE Trans. Audio Electroacoustics*. — Welch periodogram.
 
 ---
 
-## 15. 더 발전시킬 수 있는 부분
+## 16. 더 발전시킬 수 있는 부분
 
 - **Iterative auto-tune** (자동 반복): User 의 manual round 2 를 자동화 — Hjalmarsson IFT 정통.
 - **Optimal input design** (D-optimal): 현재 PRBS → information matrix 최대화하는 input 으로.
