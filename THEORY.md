@@ -6,7 +6,10 @@
 
 ## 0. 한 문장 요약
 
-> 비행 중인 함체에 작은 무작위 신호를 넣어서 응답을 측정하고, 그 데이터로 PID 게인을 역산하는 모드. 알고리즘은 **FRIT** (Soma-Kaneko 2004) + **γ²-weighted tracking cost** (Bendat-Piersol) + **closed-loop bandwidth Ts** (Skogestad-Postlethwaite) + **9-seed multistart LM** + **Skogestad Td realizability cap** (Skogestad 2003).
+> 비행 중인 함체에 작은 무작위 신호를 넣어서 응답을 측정하고, 그 데이터로 PID 게인을 역산하는 모드. 두 정통 알고리즘 제공:
+>
+> 1. **FRIT** (Soma-Kaneko 2004) + **γ²-weighted tracking cost** (Bendat-Piersol) + **closed-loop bandwidth Ts** (Skogestad-Postlethwaite) + **9-seed multistart LM** + **Skogestad Td realizability cap** (Skogestad 2003) — 정밀 식별
+> 2. **Relay Feedback** (Åström-Hägglund 1984) + **Ziegler-Nichols** (1942) — 빠른 baseline tuning, 산업 표준 #1
 
 ---
 
@@ -464,7 +467,128 @@ $$T_d \le \min\left( \frac{T_i}{4}, \; \frac{1}{\omega_B} \right)$$
 
 ---
 
-## 10. Cramér-Rao 표준오차 (SE)
+## 10. Quick Tune — Relay Feedback (Åström-Hägglund + ZN)
+
+FRIT 와 다른 정통 접근. 산업에서 가장 많이 쓰이는 PID auto-tuning. 두 핵심 논문:
+
+- **Åström, Hägglund (1984)**. "Automatic tuning of simple regulators with specifications on phase and amplitude margins". *Automatica* 20(5), 645-651 — relay feedback 측정법
+- **Ziegler, Nichols (1942)**. "Optimum settings for automatic controllers". *ASME Trans.* 64, 759-768 — (K_c, T_c) → PID 공식
+
+### 기본 원리
+
+```
+원래:   r → PID → u → plant → y
+                 ↑___________|
+
+Quick:  r → ±h relay → u → plant → y
+                      ↑___________|
+```
+
+PID 를 일시적으로 ±h relay 로 교체:
+- y > SP → u = -h
+- y < SP → u = +h
+
+→ plant dynamics 에 따라 y 가 SP 주변에서 **자연 진동 (limit cycle)** 형성.
+
+### Limit cycle 의 수학 — Describing Function
+
+비선형 relay 를 sinusoidal 입력 $A \sin(\omega t)$ 에 대한 **fundamental harmonic** 으로 근사 (높은 harmonic 무시):
+
+$$\text{relay output}_1(t) \approx \frac{4h}{\pi} \sin(\omega t)$$
+
+→ 등가 게인 (describing function):
+
+$$N(A) = \frac{4h}{\pi A}$$
+
+여기서 A 는 limit cycle 의 y 진폭.
+
+### Limit Cycle 조건
+
+closed-loop 에서 진동이 유지되려면 loop transfer 가 -1 점 지나야 (Nyquist 임계):
+
+$$N(A) \cdot G(j\omega) = -1$$
+
+이는 두 조건으로 분해:
+
+$$|G(j\omega)| \cdot N(A) = 1, \qquad \angle G(j\omega) = -180°$$
+
+위상이 -180° 가 되는 주파수 = **critical frequency ω_c**. 그때:
+
+$$K_c = \frac{1}{|G(j\omega_c)|} = N(A) = \frac{4h}{\pi A}$$
+
+→ **A (진폭) 측정만으로 K_c 직접 산출**. plant 모델링 없이.
+
+T_c = 진동 주기 = $2\pi / \omega_c$.
+
+### Ziegler-Nichols PID 공식 (1942)
+
+(K_c, T_c) 측정 후:
+
+$$K_p = 0.6 \cdot K_c, \qquad T_i = 0.5 \cdot T_c, \qquad T_d = 0.125 \cdot T_c$$
+
+이 비율은 ZN 의 경험적 최적화 — **1/4 amplitude decay** 목표 (한 cycle 마다 진동 진폭이 25% 로 감소). 학계 비판: damping ratio ζ ≈ 0.21 이라 약간 진동적.
+
+### Hysteresis ε (noise robustness)
+
+순수 relay 는 noise 가 있으면 SP 근처에서 fast switching → 부정확. hysteresis 로 noise 거부:
+
+- y > SP + ε → u = -h
+- y < SP - ε → u = +h
+- 그 사이 → u 이전 값 유지
+
+이때 describing function 이 복소수로 변함:
+
+$$N(A, \epsilon) = \frac{4h}{\pi A} \sqrt{1 - (\epsilon/A)^2} - j \frac{4h\epsilon}{\pi A^2}$$
+
+복소 게인 → critical frequency 가 약간 이동. ε ≪ A 면 순수 relay 와 근사.
+
+### 안전성 비교 (open-loop ZN vs relay)
+
+기존 ZN (1942 원본) 은 Kp 를 키우면서 진동 한계 측정 → **Kp 한계 도달 시 plant 발산 위험**.
+
+Åström-Hägglund 의 relay 변형은 u 가 ±h 로 한정 → **plant 가 안정한 limit cycle 형성** → 발산 없음. 이게 산업 표준 #1 인 이유.
+
+| 측면 | Open-loop ZN | Relay (closed-loop) |
+|------|--------------|---------------------|
+| u 범위 | 무제한 (Kp 키우는 도중) | ±h 한정 |
+| 함체 거동 | Kp 한계 도달 시 발산 | 안정한 limit cycle |
+| 위험 | 높음 | 낮음 |
+
+### Quick Tune 의 실제 단계 (이 모드)
+
+1. **Diagnose (3s)**: 가진 OFF, 현재 PID 의 limit cycle 가능성 확인 (포화, sign change 등)
+2. **Warm-up (~2 cycles)**: relay 활성화 → 초기 transient 무시 (PID → relay 전환 충격)
+3. **Measure (≥3 cycles)**: A, T 측정 후 평균 (variance 감소)
+4. **Compute**: $K_c = 4h/(\pi A)$, $T_c = T$ → ZN 공식 → Kp/Ti/Td
+
+전체 ~30 초.
+
+### Quick Tune 의 한계 (정직 평가)
+
+- **ZN 공식은 보편적 최적 아님**: 1/4 decay 가 너무 진동적이라는 비판 (Skogestad SIMC 등 더 보수적 변형 존재). 다만 baseline 으로는 충분.
+- **단일 주파수만 식별**: critical point ($\omega_c$, $K_c$) 두 정보. 전체 frequency response 미식별.
+- **함체 진동**: FRIT 보다 크게 흔들림 (limit cycle 진폭 A 가 visible). 작은 함체에 부담.
+- **Td = 0.125·T_c 일률**: 플랜트별 적정 Td 와 다를 수 있음.
+
+### FRIT vs Relay 비교
+
+| 측면 | FRIT | Quick Tune (Relay) |
+|------|------|---------------------|
+| 데이터 방식 | broadband PRBS | limit cycle 단일 주파수 |
+| 식별 정보 | 전체 frequency response (Welch) | $(K_c, T_c)$ 두 점 |
+| 모델 가정 | 참조 모델 M(s) 필요 | 없음 (등가 게인만) |
+| 시간 | ~60s | ~30s |
+| 안전성 | 약한 가진, 안전 | 함체 큰 진동 |
+| 결과 정밀도 | 높음 (다변량 LM + multistart) | 보수 (ZN 일률 공식) |
+| 적용 | 정밀 tuning | 빠른 baseline |
+
+**권장 워크플로**: Quick Tune 으로 빠른 baseline → Apply → FRIT 로 정밀화. 두 알고리즘 장점 결합. 사용자 도메인 지식 + 데이터 기반 식별 + 산업 표준 안전.
+
+**코드 위치**: `FritTuningTab.cs` → `QuickTuneNow` (진입점), `OnQuickTuneTick` (상태 머신), `ComputeRelayTune` (K_c, T_c → ZN), `RelayOutputInjector` (`VariableControllerOutputPatch.cs`)
+
+---
+
+## 11. Cramér-Rao 표준오차 (SE)
 
 LM 이 θ̂ 를 줬는데 — 얼마나 믿을 수 있나?
 
@@ -503,7 +627,7 @@ Td = 0.30    ±0.45   (150%) [uncertain] ← 신뢰 X
 
 ---
 
-## 11. Iterative Tuning Pattern (IFT)
+## 12. Iterative Tuning Pattern (IFT)
 
 ### 발견된 패턴
 
@@ -533,7 +657,7 @@ User 가 수동으로 반복. SE 표시로 "이 게인 못 믿음" 알려줌 →
 
 ---
 
-## 12. Bode 적분 정리 — 절대 못 이기는 법칙
+## 13. Bode 적분 정리 — 절대 못 이기는 법칙
 
 ### 정리
 
@@ -573,7 +697,7 @@ Bode, H. (1945) *Network Analysis and Feedback Amplifier Design*, §11.5. 그 �
 
 ---
 
-## 13. 전체 파이프라인 (요약)
+## 14. 전체 파이프라인 (요약)
 
 ```
 [Auto Tune 클릭]
@@ -615,10 +739,11 @@ Bode, H. (1945) *Network Analysis and Feedback Amplifier Design*, §11.5. 그 �
 
 ---
 
-## 14. 코드 위치 빠른 색인
+## 15. 코드 위치 빠른 색인
 
 | 기능 | 위치 |
 |------|------|
+| **FRIT (Auto Tune)** | |
 | Auto Tune 진입점 | `FritTuningTab.cs` → `AutoTuneCompute` |
 | Compute 버튼 | `ComputeNow` |
 | 진단 phase | `OnDiagnoseTick` |
@@ -631,11 +756,17 @@ Bode, H. (1945) *Network Analysis and Feedback Amplifier Design*, §11.5. 그 �
 | Reference model M(s) | `ApplyRefModel` |
 | LM 1회 + SE | `RunFritLM`, `ComputeFritSE` |
 | u-direct 가진 injection | `VariableControllerOutputPatch.cs` (Harmony) |
+| **Quick Tune (Relay)** | |
+| Quick Tune 진입점 | `FritTuningTab.cs` → `QuickTuneNow` |
+| Relay 상태 머신 (warm-up + measure) | `OnQuickTuneTick` |
+| K_c, T_c → ZN PID 계산 | `ComputeRelayTune` |
+| Relay 출력 injection (PID 일시 교체) | `RelayOutputInjector` in `VariableControllerOutputPatch.cs` |
 
 ---
 
-## 15. 학계 참고문헌
+## 16. 학계 참고문헌
 
+- **Åström, Hägglund (1984)**. "Automatic tuning of simple regulators with specifications on phase and amplitude margins", *Automatica* 20(5), 645-651. — Relay feedback auto-tuning, describing function 분석.
 - **Bendat & Piersol (2010)**. *Random Data: Analysis and Measurement Procedures*, 4th ed. Wiley. — Welch, coherence, sensitivity.
 - **Bode (1945)**. *Network Analysis and Feedback Amplifier Design*. Van Nostrand. — Sensitivity integral.
 - **Doyle, Francis, Tannenbaum (1992)**. *Feedback Control Theory*. Macmillan. — 현대 sensitivity 분석.
@@ -648,10 +779,11 @@ Bode, H. (1945) *Network Analysis and Feedback Amplifier Design*, §11.5. 그 �
 - **Söderström & Stoica (1989)**. *System Identification*. Prentice Hall. — Multistart, model order.
 - **Soma, Kaneko, Fujii (2004)**. "A new method of controller parameter tuning based on input-output data – FRIT", *IFAC Proc.* — FRIT 원논문.
 - **Welch (1967)**. "The use of fast Fourier transform for the estimation of power spectra", *IEEE Trans. Audio Electroacoustics*. — Welch periodogram.
+- **Ziegler, Nichols (1942)**. "Optimum settings for automatic controllers", *ASME Trans.* 64, 759-768. — (K_c, T_c) → PID 게인 공식.
 
 ---
 
-## 16. 더 발전시킬 수 있는 부분
+## 17. 더 발전시킬 수 있는 부분
 
 - **Iterative auto-tune** (자동 반복): User 의 manual round 2 를 자동화 — Hjalmarsson IFT 정통.
 - **Optimal input design** (D-optimal): 현재 PRBS → information matrix 최대화하는 input 으로.
