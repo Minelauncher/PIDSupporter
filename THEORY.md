@@ -115,7 +115,56 @@ $$M(s) = \frac{e^{-s \tau_M}}{(1 + a_M \cdot s)^{n_M}}, \quad a_M = 0.2 \cdot T_
 - 폐루프 데이터 그대로 쓰니까 비행 중에도 안전
 - 식별성: C(θ) 가 바뀌면서 r̃ 도 같이 바뀌어서 information 가 비선형적으로 들어옴
 
-**코드 위치**: `FritTuningTab.cs` → `FritCostEval`, `RunFritLM`, `ApplyRefModel`, `InverseCFilter`
+### 이산 시간 IIR 구현 (backward Euler)
+
+FRIT cost J(θ) 평가하려면 r̃(θ) 를 시간영역에서 계산. C(s) 와 M(s) 둘 다 IIR 로 이산화 필요.
+
+**1/C(z) 유도**:
+
+연속시간 C(s) 를 분수로 정리:
+
+$$C(s) = K_p \cdot \frac{T_i T_d s^2 + T_i s + 1}{T_i s}$$
+
+backward Euler 치환 $s \to (1 - z^{-1})/dt$ 후:
+
+$$\frac{1}{C(z^{-1})} = \frac{1}{K_p} \cdot \frac{T_i \cdot dt \cdot (1 - z^{-1})}{a_0 + a_1 z^{-1} + a_2 z^{-2}}$$
+
+where:
+
+$$a_0 = 1 + \frac{dt}{T_i} + \frac{T_d}{dt}, \quad a_1 = -\left(1 + \frac{2 T_d}{dt}\right), \quad a_2 = \frac{T_d}{dt}$$
+
+차분 방정식 ($e[k] = (1/C(z)) \cdot u[k]$):
+
+$$a_0 \cdot e[k] + a_1 \cdot e[k-1] + a_2 \cdot e[k-2] = \frac{1}{K_p} \cdot (u[k] - u[k-1])$$
+
+→ $e[k]$ 에 대해 풀어:
+
+$$e[k] = \frac{1}{a_0} \left( \frac{u[k] - u[k-1]}{K_p} - a_1 \cdot e[k-1] - a_2 \cdot e[k-2] \right)$$
+
+**1/C(z) 안정성**:
+
+1/C(z) 의 poles = $a_0 z^2 + a_1 z + a_2 = 0$ 의 root. 단위원 안에 있어야 안정.
+
+- disc = $a_1^2 - 4 a_0 a_2 \ge 0$ (실수 root): 둘 다 $|z| < 1$ 확인
+- disc < 0 (복소 conjugate pair): $|z|^2 = a_2 / a_0 < 1$ 확인
+
+불안정 (Kp, Ti, Td) 조합 → LM 평가 실패 → multistart 에서 시드 skip (휴리스틱 penalty 없이 NaN 반환).
+
+**M(z) 이산화**:
+
+$M(s) = e^{-s \tau_M} / (1 + a \cdot s)^{n_M}$, where $a = 0.2 \cdot T_s$.
+
+각 first-order pole $1/(1 + a s)$ 를 backward Euler 로:
+
+$$\frac{1}{1 + a s} \to \frac{1 - \alpha}{1 - \alpha z^{-1}}, \quad \alpha = \frac{a}{a + dt}$$
+
+= 표준 first-order IIR low-pass:
+
+$$y[k] = \alpha \cdot y[k-1] + (1 - \alpha) \cdot u[k]$$
+
+$n_M$ 번 cascade 해서 M(z) 완성. 순수 지연 $e^{-s \tau_M}$ 는 $\lfloor \tau_M / dt \rfloor$ 번 $z^{-1}$ 곱하기 (FTD 에서 보통 1 tick).
+
+**코드 위치**: `FritTuningTab.cs` → `FritCostBreakdown`, `RunFritLM`, `ApplyRefModel`, `InverseCFilter`, `IsInverseCStable`
 
 ---
 
@@ -350,10 +399,29 @@ pick nM with lowest cost
 
 ## 9. Skogestad Td Cap (Realizability + Timescale)
 
+### |C(jω)|² closed form
+
+cap 분석 + cost penalty 분석에 PID 의 frequency response 가 필요. 유도:
+
+$$C(j\omega) = K_p \left( 1 + \frac{1}{j \omega T_i} + j \omega T_d \right) = K_p + j K_p \left( \omega T_d - \frac{1}{\omega T_i} \right)$$
+
+magnitude squared:
+
+$$|C(j\omega)|^2 = K_p^2 \left( 1 + \left( \omega T_d - \frac{1}{\omega T_i} \right)^2 \right)$$
+
+특성:
+- 저주파 (ω → 0): $|C|^2 \approx K_p^2 / (\omega T_i)^2 \to \infty$ — integrator 영역
+- 고주파 (ω → ∞): $|C|^2 \approx K_p^2 (\omega T_d)^2 \to \infty$ — derivative 영역
+- 최소 at $\omega^* = 1/\sqrt{T_i T_d}$ where $|C|^2 = K_p^2$
+
+이 닫힌형이 §6 의 cost surface 분석 (Td drift 원인) + 본 절 cap 설계의 기반.
+
+### 왜 cap 필요한가
+
 LM 이 tracking 만 최적화하면 **Td drift** 가 흔함:
 - Td 는 미분 작용 — 고주파 noise 에 민감
-- cost surface 가 Td 축으로 종종 평평 → noise 따라 drift → Td 과대
-- 사용자 경험 + 학계 일치: Kp/Ti 는 안정, Td 만 drift 빈번
+- cost surface 가 Td 축으로 종종 평평 (위 |C|² 닫힌형에서 ω 작을 때 Td 항 미미) → noise 따라 drift → Td 과대
+- 사용자 경험 + 학계 일치: Kp/Ti 는 저주파 dominant 라 안정, Td 만 drift 빈번
 
 → 사후 cap 으로 차단.
 
