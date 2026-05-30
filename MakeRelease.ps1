@@ -45,6 +45,7 @@ $files = @(
     "PIDSupporterCore.dll",
     "PIDSupporterSelector.dll",
     "header.header",
+    "header.jpg",          # Steam Workshop preview image (< 1MB, 권장 512x512)
     "plugin.json",
     "THEORY.md"
 )

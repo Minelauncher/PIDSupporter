@@ -25,3 +25,6 @@ PIDSupporter_Release/
 
 # Decompile temp files
 *.tmp
+
+# MakePreview.ps1 의 원본 백업
+*.bak
