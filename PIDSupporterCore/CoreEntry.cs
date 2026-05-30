@@ -9,33 +9,54 @@
 //  - 설정/리소스 로드/GUI 초기화 등 Core 초기화 단계가 늘어날 때
 // ============================================================================
 
+using System;
 using BrilliantSkies.Core.Logger;
 using HarmonyLib;
 using System.Reflection;
+using UnityEngine.SceneManagement;
 
 namespace PIDSupporter
 {
     internal static class CoreEntry
     {
         private static bool _patched;
+        private static bool _versionShown;
 
         public static void OnLoad()
         {
             PatchAllOnce();
+
+            // FTD 의 GamePlugin 라이프사이클은 실제로 OnLoad 만 안정적으로 호출됨
+            // (로그 확인: OnStart 자국 없음). 따라서 VersionConfirmation 은 OnStart 에
+            // 두지 않고 SceneManager.sceneLoaded 첫 발생 시 호출 — BreadThing 도 동일 패턴.
+            // 이유: ModProblemOverwrite 가 GuiDisplayer 싱글톤을 건드리는데, OnLoad 시점엔
+            // 아직 GuiDisplayer / ProfileManager 가 준비 안 됨.
+            SceneManager.sceneLoaded += OnSceneLoadedOnce;
         }
 
         public static void OnStart()
         {
-            // OnStart 단계에서 호출해야 GameEvents.Twice_Second 가 준비되어 있다.
-            // plugin.json 의 version/workshop_id 를 읽어 ModProblems 에 표시하고,
-            // workshop_id 가 0 이 아니면 Steam Workshop description 의 최신 버전 줄을 조회한다.
-            ModInformation.VersionConfirmation();
-
+            // FTD 가 실제로는 호출하지 않지만 인터페이스 계약상 남겨둠.
             PatchAllOnce();
         }
 
         public static void OnSave()
         {
+        }
+
+        private static void OnSceneLoadedOnce(Scene scene, LoadSceneMode mode)
+        {
+            if (_versionShown) return;
+            _versionShown = true;
+            SceneManager.sceneLoaded -= OnSceneLoadedOnce;
+            try
+            {
+                ModInformation.VersionConfirmation();
+            }
+            catch (Exception e)
+            {
+                AdvLogger.LogInfo("[PIDSupporter] VersionConfirmation failed: " + e, LogOptions.None);
+            }
         }
 
         private static void PatchAllOnce()
