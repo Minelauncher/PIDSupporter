@@ -1402,16 +1402,17 @@ namespace PIDSupporter
                 double satRate = (double)_sess.DiagSatCount / Math.Max(1, _sess.DiagSampleCount);
                 double crossRate = _sess.DiagSignChanges / 3.0;
                 double uSwing = _sess.DiagUMax - _sess.DiagUMin;
+                double uPeak = Math.Max(Math.Abs(_sess.DiagUMax), Math.Abs(_sess.DiagUMin));
                 if (satRate > 0.40 && crossRate > 0.5 && uSwing > 1.6)
                 {
                     _autoState = AutoTuneState.Failed;
-                    _sess.LastMessage = $"⚠ Limit cycle (sat={satRate:P0}). Reduce Kp first.";
+                    _sess.LastMessage = DiagFailLimitCycleMessage(_sess.DiagUMin, _sess.DiagUMax, crossRate, satRate);
                     return;
                 }
                 if (satRate > 0.40)
                 {
                     _autoState = AutoTuneState.Failed;
-                    _sess.LastMessage = $"⚠ Persistent saturation (sat={satRate:P0}).";
+                    _sess.LastMessage = DiagFailSaturationMessage(satRate, uPeak);
                     return;
                 }
 
@@ -1693,26 +1694,37 @@ namespace PIDSupporter
             if (satRate > 0.40 && crossRate > 0.5 && uSwing > 1.6)
             {
                 _autoState = AutoTuneState.Failed;
-                _sess.LastMessage =
-                    $"⚠ Limit cycle (u={_sess.DiagUMin:0.00}~{_sess.DiagUMax:0.00}, " +
-                    $"{crossRate:0.0}/s, sat={satRate:P0}). " +
-                    $"Kp 과대 / Ti 과소 (windup) / Td 과대 의심. 게인 낮춰 재시도.";
+                _sess.LastMessage = DiagFailLimitCycleMessage(_sess.DiagUMin, _sess.DiagUMax, crossRate, satRate);
                 return;
             }
             if (satRate > 0.40)
             {
                 _autoState = AutoTuneState.Failed;
-                _sess.LastMessage =
-                    $"⚠ 지속 포화 (sat={satRate:P0}, uPeak={uPeak:0.00}). " +
-                    $"Kp/Ki 과대 또는 SP 가 액추에이터 한계 초과 의심.";
+                _sess.LastMessage = DiagFailSaturationMessage(satRate, uPeak);
                 return;
             }
 
             // 정상 → 즉시 Recording 단계로
             _sess.DiagYBaseline = _sess.DiagYBaselineSum / Math.Max(1, _sess.DiagYBaselineCnt);
             _recordingYBaseline = _sess.DiagYBaseline;
-            _sess.LastMessage = $"Diag OK (sat={satRate:P0}). 녹화 시작.";
+            _sess.LastMessage = $"Diag OK (sat={satRate:P0}). 녹화 시작 / Recording.";
             StartAutoTuneRecording();
+        }
+
+        // 진단 실패 메시지 — FRIT/Relay 공용 (bilingual + 세부 수치 통일)
+        private static string DiagFailLimitCycleMessage(double uMin, double uMax, double crossRate, double satRate)
+        {
+            double uSwing = uMax - uMin;
+            return $"⚠ Limit cycle (u={uMin:0.00}~{uMax:0.00}, swing={uSwing:0.00}, {crossRate:0.0}/s, sat={satRate:P0})\n" +
+                   $"  Kp 과대 / Ti 과소 (windup) / Td 과대 의심 — 게인 낮춰 재시도\n" +
+                   $"  Kp too high / Ti too low (windup) / Td too high — reduce gains and retry";
+        }
+
+        private static string DiagFailSaturationMessage(double satRate, double uPeak)
+        {
+            return $"⚠ Persistent saturation / 지속 포화 (sat={satRate:P0}, uPeak={uPeak:0.00})\n" +
+                   $"  Kp/Ki 과대 또는 SP 가 액추에이터 한계 초과 의심\n" +
+                   $"  Kp/Ki too high or SP exceeds actuator limit";
         }
 
         private void OnValidateTick(double dt)
