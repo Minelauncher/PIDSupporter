@@ -1,8 +1,8 @@
 {
   "name": "PIDSupporter",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "workshop_id": 3735379602,
-  "gameversion": "4.3.1.1",
+  "gameversion": "4.3.3.0",
   "depends": [],
   "conflicts": [],
   "filename": "PIDSupporterSelector.dll"

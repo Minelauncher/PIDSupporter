@@ -29,9 +29,24 @@ using System.Reflection;
 using BrilliantSkies.Ai.Control.Pids;
 using BrilliantSkies.Core.Logger;
 using HarmonyLib;
+using UnityEngine;
 
 namespace PIDSupporter
 {
+    // ─────────────────────────────────────────────────────────────────────
+    // TTL (time-to-live) 자동 만료:
+    //   FritTuningTab 의 OnUiFixed 가 매 틱 Set() 호출 → LastTime 갱신
+    //   사용자가 창 닫으면 OnUiFixed 안 호출됨 → Set() 중단
+    //   TryGet() 이 Time.fixedTime - LastTime > TTL_SECONDS 면 자동 Clear + 거부
+    //   → 창 닫힘으로 인한 "PID 영구 stuck" 버그 차단
+    //   TTL = 0.2s (8 틱 @ 40Hz) — 정상 한 틱 간격 대비 충분히 크고,
+    //                              비정상 중단 후 회복 시간 충분히 짧음
+    // ─────────────────────────────────────────────────────────────────────
+    internal static class InjectorTtl
+    {
+        public const float TTL_SECONDS = 0.2f;
+    }
+
     /// <summary>
     /// 데이터 수집 중인 컨트롤러별 현재 가진값을 보관.
     /// FritTuningTab 이 매 틱 Set, 종료 시 Clear.
@@ -39,14 +54,15 @@ namespace PIDSupporter
     /// </summary>
     internal static class FritExcitationInjector
     {
+        private struct Entry { public float Value; public float LastTime; }
         // ConcurrentDictionary 안 쓰는 이유: 게임 루프가 단일 스레드 (FixedUpdate).
-        private static readonly Dictionary<VariableControllerMaster, float> _active
-            = new Dictionary<VariableControllerMaster, float>();
+        private static readonly Dictionary<VariableControllerMaster, Entry> _active
+            = new Dictionary<VariableControllerMaster, Entry>();
 
         public static void Set(VariableControllerMaster controller, float excitation)
         {
             if (controller == null) return;
-            _active[controller] = excitation;
+            _active[controller] = new Entry { Value = excitation, LastTime = Time.fixedTime };
         }
 
         public static void Clear(VariableControllerMaster controller)
@@ -57,7 +73,17 @@ namespace PIDSupporter
 
         public static bool TryGet(VariableControllerMaster controller, out float excitation)
         {
-            return _active.TryGetValue(controller, out excitation);
+            excitation = 0f;
+            if (controller == null) return false;
+            if (!_active.TryGetValue(controller, out Entry entry)) return false;
+            if (Time.fixedTime - entry.LastTime > InjectorTtl.TTL_SECONDS)
+            {
+                // TTL 만료 — UI 가 창 닫혀 더 이상 refresh 안 함 → stale, 자동 정리
+                _active.Remove(controller);
+                return false;
+            }
+            excitation = entry.Value;
+            return true;
         }
     }
 
@@ -68,13 +94,14 @@ namespace PIDSupporter
     /// </summary>
     internal static class RelayOutputInjector
     {
-        private static readonly Dictionary<VariableControllerMaster, float> _active
-            = new Dictionary<VariableControllerMaster, float>();
+        private struct Entry { public float Value; public float LastTime; }
+        private static readonly Dictionary<VariableControllerMaster, Entry> _active
+            = new Dictionary<VariableControllerMaster, Entry>();
 
         public static void Set(VariableControllerMaster controller, float relayOutput)
         {
             if (controller == null) return;
-            _active[controller] = relayOutput;
+            _active[controller] = new Entry { Value = relayOutput, LastTime = Time.fixedTime };
         }
 
         public static void Clear(VariableControllerMaster controller)
@@ -85,7 +112,17 @@ namespace PIDSupporter
 
         public static bool TryGet(VariableControllerMaster controller, out float relayOutput)
         {
-            return _active.TryGetValue(controller, out relayOutput);
+            relayOutput = 0f;
+            if (controller == null) return false;
+            if (!_active.TryGetValue(controller, out Entry entry)) return false;
+            if (Time.fixedTime - entry.LastTime > InjectorTtl.TTL_SECONDS)
+            {
+                // TTL 만료 — UI 종료/창 닫힘으로 relay refresh 중단 → PID 정상 복귀
+                _active.Remove(controller);
+                return false;
+            }
+            relayOutput = entry.Value;
+            return true;
         }
     }
 
