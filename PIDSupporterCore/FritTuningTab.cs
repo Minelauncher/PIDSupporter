@@ -1463,10 +1463,11 @@ namespace PIDSupporter
                     _sess.QtRelayCurrent = _s.RelayH;
                 }
                 bool switched = (_sess.QtRelayCurrent != prevRelay);
-                if (switched)
-                {
-                    RelayOutputInjector.Set(this._focus, _sess.QtRelayCurrent);
-                }
+                // 매 틱 재주입: relay 값은 반주기 동안 일정하지만, 전환 시에만 Set 하면
+                // 반주기(보통 >0.2s) 동안 인젝터 TTL(0.2s)이 만료되어 relay 주입이 끊기고
+                // PID 가 복귀 → limit cycle 붕괴. 전환 여부와 무관하게 매 틱 Set 해
+                // LastTime 을 갱신, TTL 만료를 막는다 (FRIT 가진과 동일한 패턴).
+                RelayOutputInjector.Set(this._focus, _sess.QtRelayCurrent);
 
                 // 한 주기 완료 검출: relay + → - → + 사이 (한 full cycle)
                 //   즉 prev = +h, current = -h 로 전환 시점부터 다음 + 전환까지가 반주기.
