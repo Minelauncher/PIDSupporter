@@ -1,0 +1,40 @@
+Spirit high-P diagnosis, latest two Roll records
+Source: autotune-20261025-105401.jsonl; b731cb233e6d4dea96319a4a4ba59a71 and047f7cdf5bca4fc9a4142d493e941e12.
+No mod changes. No BP information used. No artificial measurement noise.
+
+Observed event chain:
+Record1 working PID0.0625,250,.5 -> recommendation.988,2.5,.4, applied.
+Next preparation starts at.988 and records92.5% saturation; after halving P,85%; halves again to.247. Preparation then passes. These are changing-operation observations, not a controlled identical-state PID test.
+Record2 recommends.999,51.1,.4, also applied. No subsequent full validation is in this file.
+Detailed r/u/y and physics telemetry begin at collection, after preparation. Exact replay of the92.5% saturation interval is therefore unavailable; do not claim to reproduce that event from its initial state.
+
+Why the model recommends high gain:
+Existing model predicts stable high-P feedback and low smooth-SP cost. It uses an optimistic fast response: input-linked measured transfer S_zy/S_zu has larger magnitude and additional phase lag in the controller-relevant band.
+Record1 at1Hz: model magnitude.962 vs observed1.973, phase lead17.2deg. At1.8Hz.292 vs.574, lead41.7deg; at3Hz.104 vs.166, lead71.7deg.
+Record2 at1.8Hz.251 vs.455, lead20.2deg; at3Hz.0895 vs.1702, lead44.9deg.
+Observed transfer is an effective closed-loop instrument ratio, NOT guaranteed isolated plant truth; excitation-correlated coupling can contribute.
+
+Information:
+At carrier0.2Hz output coherence>.996 and response is clear. Across0.6-3Hz record1 output coherence~.981, record2~.950-.994. The relevant discrepancy is visible in the existing data, so absent excitation alone is not a sufficient explanation.
+Only six fundamental cycles are available and high-frequency absolute output is small. This does not establish sufficient independent information for arbitrary order or exact stability identification.
+
+Other-axis diagnostic:
+Predict one-step model residual using past0.2s pitch/yaw clipped requests and local3-axis angular rates. Fit0-15s, evaluate20-30s. Final residual RMSE relative to uncorrected:1.065 for record1 (worse6.5%), .945 for record2 (better5.5%). A time-drift control gives1.041 and1.119.
+This simple context regression does not explain most error. Telemetry is5Hz and requests are pre-delivery; clipping is a proxy only. It cannot rule out nonlinear geometric coupling, unobserved actuation or faster interactions.
+
+Train-only dynamic diagnostic:
+Estimate scalar gain correction plus extra delay using injected-carrier cross spectra over0-15s at odd harmonics0.6..3.8Hz, ten-second Hann Welch windows. Evaluate complex-relative frequency error over20-30s without refitting.
+Record1 gain factor1.63674, additional delay65.39ms; final complex-relative RMSE.8543 -> .1699.
+Record2 gain factor1.62238, additional delay43.82ms; final complex-relative RMSE.6361 -> .2587.
+Earlier exploratory unwindowed harmonic regression was strongly transient/leakage-sensitive and did not generalize; no precise physical delay is inferred from this effective band correction. Final holdout is short (one Welch window), not an uncertainty bound.
+
+Feedback sensitivity, P=.988, Ti2.5, Td.4:
+Record1 original closed-loop maximum pole magnitude.98817; gain-only.98797; delay-only.99878; combined1.08940.
+Record2 original.98834; gain-only.98809; delay-only.98833; combined1.00784.
+For P=.247 Ti2.5 Td.4, combined poles remain.98877/.98914.
+Magnitude>1 indicates unstable unsaturated linear dynamics. Saturated nonlinear trajectories may limit-cycle; this is not a proof of real-game instability or reproduction of the observed preparation episode.
+Fractional delay is implemented by integer delay plus a two-tap interpolation; frequency correction itself is fitted with ideal delay. Therefore this is a mechanism sensitivity test, not a validated replacement model. Both gain and lag errors together matter; delay alone is insufficient in record2.
+
+Conclusion:
+Strongest evidence is optimistic fast-band plant approximation/identification: it underestimates gain and phase lag together, moving the predicted stability boundary enough to favor P~1. Existing data contain evidence of the mismatch. Other-axis coupling and time variation remain possible contributors to the effective dynamics; simple context regression does not isolate them as the main cause. Purely weak excitation is not supported as the sole/main explanation.
+Next narrow experiment would separate delay from plant order1-3 and test fast-band validation against high-P stability sensitivity on heldout records. Do not blindly multiply deployed model gain or add44-65ms to all vehicles.
