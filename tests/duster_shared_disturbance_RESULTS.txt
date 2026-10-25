@@ -1,0 +1,45 @@
+Duster two-record common plant / per-record disturbance experiment
+
+Protocol: each record 0-15 s training, 15-20 s selection, 20-30 s untouched final. No measurement noise added. No mod changes.
+Model: y_j = (B/A)u_j + homogeneous initial transient_j + c_j + slope_j*t. A and B shared; initial state and nuisance terms separate. Constant-only nuisance also tested.
+Estimator: separable output-error least squares (variable projection), NOT IV or refined BJ. Poles optimized, numerator and nuisance terms solved jointly by normalized least squares. Thus no closed-loop unbiasedness guarantee is claimed.
+Orders1-3: stable real pole for order1, stable conjugate pair for order2, conjugate pair plus positive real pole for order3. Decay bounds .05..300 s (.025..300 for third pole); frequency .005..5 Hz. No response cap, no ridge. This restricted pole family does not cover all stable order3 systems.
+Multi-start training-cost minimum per structure; model/constant-vs-affine chosen by minimum worst freeY/closedY/closedU normalized validation RMSE across records. Not 1-SE. Same scoring for separate fits.
+Scales from first15s of each record. Known measured inputs used for free rollout. Closed replay uses measured u for first4s, then recorded SP and existing saturated PID; no output corrections. Nuisance terms extrapolated from training only.
+PID comparison: same existing ten centers per record, same neighbors, smooth +/- targets, saturation/integral handling and recent output histories. No DE expansion in this diagnostic. Future nuisance trend extrapolated; hold-at-end sensitivity also tested.
+BP reference is a fresh evaluation of the same historical candidate locations, held other-axis commands; not new game truth. One-step command application matches the current model evaluation. No BP costs enter training/selection. Fits frozen by hash before grading.
+
+Selected shared model: order 3, affine, pole parameters decay_s/frequency_Hz/third_decay_s [3.215945756065049, 0.09175126882160728, 0.5820640585161182]
+
+Results (final normalized RMSE: freeY, closedY, closedU; BP regret relative to best tested center):
+Record 1
+  separate_disturbance: order=2, final=[0.2761090516157523, 0.028482406180980066, 0.11585779587876967], PID=[0.176, 0.6, 0.2], BPregret=0.000000, rank=0.975534
+  shared_disturbance: order=3, final=[0.22737484454562154, 0.022110155328655255, 0.10101469025895213], PID=[0.117, 0.6, 0.3], BPregret=0.592706, rank=0.791471
+  shared_disturbance_hold_future_disturbance: order=3, final=[0.22737484454562154, 0.022110155328655255, 0.10101469025895213], PID=[0.117, 0.6, 0.3], BPregret=0.592706, rank=0.791471
+  single_cap: order=2, final=[0.5509781389883589, 0.09959894786514949, 0.10877018896036138], PID=[0.117, 0.6, 0.2], BPregret=0.904020, rank=0.681033
+  single_nocap: order=3, final=[0.4236070668511942, 0.004907095786879711, 0.003943609640248147], PID=[0.117, 0.6, 0.3], BPregret=0.592706, rank=0.963263
+  single_nocap_nuisance_only: order=3, final=[0.4634415777647129, 0.010636916780093951, 0.006224981296805304], PID=[0.117, 0.6, 0.3], BPregret=0.592706, rank=0.963263
+Record 2
+  separate_disturbance: order=2, final=[4.027955574765987, 0.00693434870795332, 0.038983605709118546], PID=[0.11699999868869781, 0.6000000238418579, 0.20000000298023224], BPregret=0.000000, rank=1.000000
+  shared_disturbance: order=3, final=[0.8957746346864254, 0.023695733269122558, 0.11951775222226467], PID=[0.11699999868869781, 0.6000000238418579, 0.20000000298023224], BPregret=0.000000, rank=0.990811
+  shared_disturbance_hold_future_disturbance: order=3, final=[0.8957746346864254, 0.023695733269122558, 0.11951775222226467], PID=[0.11699999868869781, 0.6000000238418579, 0.20000000298023224], BPregret=0.000000, rank=0.990811
+  single_cap: order=2, final=[0.5482350132431991, 0.043370454703067635, 0.1693114594816194], PID=[0.107, 0.6, 0.2], BPregret=0.196388, rank=0.987805
+  single_nocap: order=2, final=[8.096717280631308, 0.001111274156114315, 0.019260153939633536], PID=[0.11699999868869781, 0.6000000238418579, 0.20000000298023224], BPregret=0.000000, rank=1.000000
+  single_nocap_nuisance_only: order=2, final=[3.514439154298838, 0.0011323971928768185, 0.013994507279391841], PID=[0.11699999868869781, 0.6000000238418579, 0.20000000298023224], BPregret=0.000000, rank=1.000000
+  pooled_cap: order=2, final=[0.5306020693600247, 0.10953492323081869, 0.38400018000701797], PID=[0.09, 0.5, 0.2], BPregret=0.738651, rank=0.268293
+  pooled_nocap: order=3, final=[1.7606392745910342, 0.0012015798944769898, 0.02006183931528779], PID=[0.11699999868869781, 0.6000000238418579, 0.20000000298023224], BPregret=0.000000, rank=1.000000
+  pooled_nocap_nuisance_only: order=3, final=[1.1126483403535277, 0.0012135808144783536, 0.014622779307565982], PID=[0.11699999868869781, 0.6000000238418579, 0.20000000298023224], BPregret=0.000000, rank=1.000000
+
+Pole sensitivity (training record weights changed, final data not used):
+weights=[0.5, 1]: [4.51451482261622, 0.09476600744721188, 0.38266891807457964]
+weights=[1, 0.5]: [2.1662957081701757, 0.09597944137435789, 1.0932923756035862]
+
+Interpretation:
+Shared fitting improves second-record free rollout over ordinary no-cap pooled IV: 1.76064 -> 0.89577 (49.1%). Separate nuisance-only refit with frozen old pooled plant already reaches 1.11265; plant re-estimation adds about19.5% improvement over that control.
+It does NOT improve every metric: second-record closed Y/U errors worsen from 0.00120/0.02006 to 0.02370/0.11952. First-record closed replay likewise worsens versus no-cap IV. The better free rollout is not enough to claim a better control model.
+Against the separately fitted output-error models, shared free error changes record1 .27611 -> .22737 and record2 4.02796 -> .89577. See matched BP regrets above; historical two-step BP grades are not used in final results.
+Against original no-cap IV, the recommended candidate is unchanged in both records. Thus the shared approach does not improve BP selection on this fixed candidate set. No claim is made about unrestricted DE optimization.
+Shared poles are identical across records by construction; that alone is not evidence of stability. Reweighting records by a factor2 keeps frequency near .092-.096Hz but decay changes 2.17-4.51s and third decay .38-1.09s. Frequency is more repeatable, exact pole is still uncertain.
+The chosen slow decay3.22s/frequency.09175Hz differs substantially from prior no-cap pooled decay11.87s/frequency.08147Hz and single-record2 decay11.29s/frequency.03390Hz. Allocation between nuisance and plant changes the fitted poles materially.
+Conclusion: separate disturbance helps long-horizon recorded-input prediction but does not establish better PID choice or uniquely identify real slow poles. Two records and a simple affine nuisance model do not fully resolve closed-loop coupling and time-varying operation.
+Checks: all fitted poles stable; free and closed implementation agree for first4s with measured input; final segment not used for fitting or selection; future other-axis observations unused.
