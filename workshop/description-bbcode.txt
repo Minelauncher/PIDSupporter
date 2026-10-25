@@ -1,5 +1,5 @@
 [h1]PIDSupporter - Tune Helper[/h1]
-Mod latest version 1.1.2
+Mod latest version 1.1.3
 
 A small in-game helper for tuning PID controllers in From the Depths.
 It suggests settings for you to try. It cannot promise a good tune for every vehicle or operating condition.
@@ -24,6 +24,6 @@ The helper uses a small linear model and tests nearby PID settings with output l
 The displayed improvement is a model prediction, not a measured improvement in your vehicle. Strong interaction between axes, changing speed or attitude, and weak control authority can give misleading recommendations. A suggestion is not a stability guarantee or a universal optimum.
 
 [h2]About this version[/h2]
-This version uses linear IV identification instead of the earlier FRIT workflow. Version 1.1.2 removes a model response-magnitude cap that could suppress slow dynamics. Stable-pole constraints, collection, PID search, manual Apply and Restore remain in place. This does not remove the game's actuator limits.
+This version uses linear IV identification instead of the earlier FRIT workflow. Version 1.1.3 checks candidate settings against observed frequency-response discrepancies and evaluates up to 27 nearby PID combinations. If no searched candidate passes, the current settings are retained. These checks can make suggestions more conservative, but do not guarantee stability or improvement. Collection, output limits, integral handling, manual Apply and Restore remain in place. No additional collection is required by the new checks.
 
 AUTOTUNE.txt and AUTOTUNE_THEORY_KO.md are included for details.

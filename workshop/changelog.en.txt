@@ -1,5 +1,6 @@
-1.1.2 - Tune Helper
-Removed the normalized plant response-magnitude cap while retaining stable-pole and finite-response checks.
-Kept existing IV identification, accumulation, excitation, PID search, saturation and integral handling.
-Updated the guide and documentation to describe the change.
-Reworded the Workshop description around reviewing, trying and restoring PID suggestions; no stability or optimality guarantee.
+1.1.3 - Tune Helper
+Added candidate checks based on observed frequency-response discrepancies, using existing recordings.
+Evaluate up to 27 nearby PID combinations, including simultaneous parameter changes.
+Separate current-PID prediction from candidate feasibility; retain current settings if no searched candidate passes.
+Keep IV identification, collection, output limits, integral handling, and manual Apply and Restore.
+Updated the guide and theory documentation. Empirical checks are not a full-band or nonlinear stability guarantee.
