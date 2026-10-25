@@ -1,0 +1,39 @@
+Physics diagnostics (read-only; tuning/identification/search unchanged)
+
+Start an ordinary autotune. Detailed capture runs only during actual collection,
+not gain preparation, and ends on collection completion/cancel/window close.
+The buffer is prepared in the background. If unavailable, physicsTraceSkipped
+explains the omission instead of allocating a large buffer on the physics step.
+
+Output: Diagnostics/physics-<runId>.jsonl, alongside existing autotune logs.
+After collection, a below-normal-priority background thread writes it. Keep the
+game open long enough for physicsTraceSaved in the ordinary diagnostic log.
+Unexpected process termination can lose the buffered capture.
+
+Header includes column schemas, object/block positions, errors, dropped rows,
+unmatched calculations and capture overhead. Fixed memory limit: 100000 rows,
+40 doubles each (~32MB). NaN strings mean unavailable, never zero substitute.
+
+Every row starts: kind, calculation sequence, GameTimer frame, Stopwatch ticks, dt.
+Kind1: force-calculation pre-state. Kind2: individual world force and actual
+AddTorque result; local position when provided by the force subclass. Column19
+is that force's creation frame, which can precede the calculation frame.
+Kind3: pre-limit drag and aggregate forces. Kind4: post-limit aggregate forces.
+Kind5: actuator/power/clearance snapshot at force calculation. Additional columns:
+28=clearance offset index,29=current cell index,30=repeat-current-cell flag.
+Kind6: actual AssessResponse callback argument, NOT a reconstructed PID output.
+Its sequence is the most recent calculation; use frame/ticks for its consumption.
+Kind7: Rigidbody application callback, FIFO-linked calculation sequence, pre-state
+and inertia. Columns33=network responding,34..36=client-interpolated force,
+37..39=client-interpolated torque. Queued forces are authoritative in local play;
+network-client interpolation is a separate path and is not silently equated.
+Kind8: clearance cells on first snapshot/change:
+5=actuator id,6=cell index,7..9=local position,10=clearance factor,
+11=top clearance,12=bottom clearance,13=top counter,14=bottom counter,15=overlap loss.
+
+The next application pre-state provides subsequent motion evidence. This logger
+does NOT claim to execute after Unity integration or prove native timestep order.
+Game hooks are read-only; incomplete hooks emit physicsTraceHooks ready=false.
+No JSON conversion or disk writes occur on the collection/physics callback.
+Actual in-game frame impact still requires the user's Duster run; host-only tests
+cannot establish Unity frame timing.

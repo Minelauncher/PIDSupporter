@@ -1,4 +1,4 @@
-﻿using BrilliantSkies.Core.Logger;
+using BrilliantSkies.Core.Logger;
 using BrilliantSkies.Modding;
 using System;
 using System.IO;
@@ -115,7 +115,6 @@ public class PIDSupporterSelectorPlugin : GamePlugin
         // 1) Harmony를 먼저 로드 (Core DLL이 Harmony 타입을 참조할 가능성이 크기 때문)
         LoadDllIfExists("0Harmony.dll");
 
-        LoadDllIfExists("MathNet.Numerics.dll");
 
         // 2) 실제 기능/패치가 들어있는 Core DLL 로드
         LoadCoreIfExists("PIDSupporterCore.dll");

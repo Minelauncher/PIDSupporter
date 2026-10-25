@@ -39,10 +39,10 @@ namespace PIDSupporter
     [HarmonyPatch]
     public static class AiVariableControllerUiPatch
     {
-        private static readonly ConditionalWeakTable<object, FritTuningTab> _tabsByUiInstance
-            = new ConditionalWeakTable<object, FritTuningTab>();
+        private static readonly ConditionalWeakTable<object, AutoTuneTab> _tabsByUiInstance
+            = new ConditionalWeakTable<object, AutoTuneTab>();
 
-        public static bool TryGetTab(object uiInstance, out FritTuningTab tab)
+        public static bool TryGetTab(object uiInstance, out AutoTuneTab tab)
             => _tabsByUiInstance.TryGetValue(uiInstance, out tab);
 
         static MethodBase? TargetMethod()
@@ -58,14 +58,15 @@ namespace PIDSupporter
             try
             {
                 if (__instance == null || __result == null) return;
-                if (_tabsByUiInstance.TryGetValue(__instance, out _)) return;
+                if (_tabsByUiInstance.TryGetValue(__instance, out var existing)) { if(!existing.IsClosed)return;_tabsByUiInstance.Remove(__instance); }
 
                 // _focus는 이미 VariableControllerMaster
                 object? focusObj = GetFieldInHierarchy(__instance.GetType(), __instance, "_focus");
                 VariableControllerMaster? controller = focusObj as VariableControllerMaster;
                 if (controller == null) return;
+                AutoTuneContext.Bind(controller, __instance, "AI-PID");
 
-                ConsoleWindow? fritWindow = CreateFritWindowViaNewWindow(__instance, "FRIT Tuner Supporter", 700f, 10f, 520f, 720f);
+                ConsoleWindow? fritWindow = CreateFritWindowViaNewWindow(__instance, "PIDSupporter — Auto Tune", 700f, 10f, 520f, 720f);
                 if (fritWindow == null) return;
 
                 fritWindow.MinimumWindowWidth = new ScaledSizing(420f, Dimension.Width);
@@ -73,9 +74,13 @@ namespace PIDSupporter
                 fritWindow.BackgroundType = BackgroundType.Normal;
                 fritWindow.DisplayTextPrompt = false;
 
-                FritTuningTab fritTab = new FritTuningTab(fritWindow, controller);
-                GuideTab guideTab = new GuideTab(fritWindow, controller);
-                fritWindow.SetMultipleTabs(new SuperScreen[] { fritTab, guideTab });
+                AutoTuneTab fritTab = new AutoTuneTab(fritWindow, controller);
+                AutoTuneWindowLifetime.Register(__result,fritWindow,fritTab);
+
+                fritWindow.SetMultipleTabs(new SuperScreen[] { fritTab,
+                    new AutoTuneInfoTab(fritWindow,controller,fritTab,"Data"),
+                    new AutoTuneInfoTab(fritWindow,controller,fritTab,"Excitation"),
+                    new AutoTuneInfoTab(fritWindow,controller,fritTab,"Guide") });
 
                 _tabsByUiInstance.Add(__instance, fritTab);
 
@@ -146,7 +151,7 @@ namespace PIDSupporter
             try
             {
                 if (__instance == null) return;
-                if (AiVariableControllerUiPatch.TryGetTab(__instance, out FritTuningTab tab) && tab != null)
+                if (AiVariableControllerUiPatch.TryGetTab(__instance, out AutoTuneTab tab) && tab != null)
                     tab.OnUiFixed();
             }
             catch (Exception e)

@@ -1,12 +1,14 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>netstandard2.1</TargetFramework>
     <Nullable>enable</Nullable>
+    <GameManagedDir Condition="'$(GameManagedDir)' == ''">C:\Program Files (x86)\Steam\steamapps\common\From The Depths\From_The_Depths_Data\Managed</GameManagedDir>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="MathNet.Numerics" Version="5.0.0" />
+    <!-- Legacy implementations remain in Git/source but are not part of this mod. -->
+    <Compile Remove="NativeRen.cs;FritTuningTab.cs;GuideTab.cs;VariableControllerOutputPatch.cs" />
   </ItemGroup>
 
   <ItemGroup>
@@ -14,42 +16,46 @@
       <HintPath>..\0Harmony.dll</HintPath>
     </Reference>
     <Reference Include="Ai">
-      <HintPath>..\..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\From The Depths\From_The_Depths_Data\Managed\Ai.dll</HintPath>
+      <HintPath>$(GameManagedDir)\Ai.dll</HintPath>
     </Reference>
     <Reference Include="Core">
-      <HintPath>..\..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\From The Depths\From_The_Depths_Data\Managed\Core.dll</HintPath>
+      <HintPath>$(GameManagedDir)\Core.dll</HintPath>
     </Reference>
     <Reference Include="DataManagement">
-      <HintPath>..\..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\From The Depths\From_The_Depths_Data\Managed\DataManagement.dll</HintPath>
+      <HintPath>$(GameManagedDir)\DataManagement.dll</HintPath>
     </Reference>
     <Reference Include="Ftd">
-      <HintPath>..\..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\From The Depths\From_The_Depths_Data\Managed\Ftd.dll</HintPath>
+      <HintPath>$(GameManagedDir)\Ftd.dll</HintPath>
     </Reference>
     <Reference Include="Modding">
-      <HintPath>..\..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\From The Depths\From_The_Depths_Data\Managed\Modding.dll</HintPath>
+      <HintPath>$(GameManagedDir)\Modding.dll</HintPath>
     </Reference>
     <Reference Include="Newtonsoft.Json">
-      <HintPath>..\..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\From The Depths\From_The_Depths_Data\Managed\Newtonsoft.Json.dll</HintPath>
+      <HintPath>$(GameManagedDir)\Newtonsoft.Json.dll</HintPath>
     </Reference>
     <Reference Include="Steamworks">
-      <HintPath>..\..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\From The Depths\From_The_Depths_Data\Managed\Steamworks.dll</HintPath>
+      <HintPath>$(GameManagedDir)\Steamworks.dll</HintPath>
     </Reference>
     <Reference Include="Ui">
-      <HintPath>..\..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\From The Depths\From_The_Depths_Data\Managed\Ui.dll</HintPath>
+      <HintPath>$(GameManagedDir)\Ui.dll</HintPath>
     </Reference>
     <Reference Include="UnityEngine">
-      <HintPath>..\..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\From The Depths\From_The_Depths_Data\Managed\UnityEngine.dll</HintPath>
+      <HintPath>$(GameManagedDir)\UnityEngine.dll</HintPath>
     </Reference>
     <Reference Include="UnityEngine.CoreModule">
-      <HintPath>..\..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\From The Depths\From_The_Depths_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
+      <HintPath>$(GameManagedDir)\UnityEngine.CoreModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.PhysicsModule">
+      <HintPath>$(GameManagedDir)\UnityEngine.PhysicsModule.dll</HintPath>
     </Reference>
     <Reference Include="UnityEngine.IMGUIModule">
-      <HintPath>..\..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\From The Depths\From_The_Depths_Data\Managed\UnityEngine.IMGUIModule.dll</HintPath>
+      <HintPath>$(GameManagedDir)\UnityEngine.IMGUIModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.TextRenderingModule">
+      <HintPath>$(GameManagedDir)\UnityEngine.TextRenderingModule.dll</HintPath>
     </Reference>
   </ItemGroup>
 
-  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
-    <Exec Command="set &quot;MODDIR=C:\Users\user\Documents\From The Depths\Mods\PIDSupporter&quot;&#xD;&#xA;if not exist &quot;%25MODDIR%25&quot; mkdir &quot;%25MODDIR%25&quot;&#xD;&#xA;&#xD;&#xA;copy /Y &quot;$(TargetPath)&quot; &quot;%25MODDIR%25\PIDSupporterCore.dll&quot;&#xD;&#xA;&#xD;&#xA;if exist &quot;$(TargetDir)0Harmony.dll&quot; copy /Y &quot;$(TargetDir)0Harmony.dll&quot; &quot;%25MODDIR%25\0Harmony.dll&quot;&#xD;&#xA;&#xD;&#xA;REM MathNet: try output dir first&#xD;&#xA;if exist &quot;$(TargetDir)MathNet.Numerics.dll&quot; copy /Y &quot;$(TargetDir)MathNet.Numerics.dll&quot; &quot;%25MODDIR%25\MathNet.Numerics.dll&quot;&#xD;&#xA;&#xD;&#xA;REM MathNet: fallback to NuGet global-packages cache&#xD;&#xA;if exist &quot;%25UserProfile%25\.nuget\packages\mathnet.numerics\5.0.0\lib\netstandard2.0\MathNet.Numerics.dll&quot; (&#xD;&#xA;  copy /Y &quot;%25UserProfile%25\.nuget\packages\mathnet.numerics\5.0.0\lib\netstandard2.0\MathNet.Numerics.dll&quot; &quot;%25MODDIR%25\MathNet.Numerics.dll&quot;&#xD;&#xA;)&#xD;&#xA;" />
-  </Target>
+
 
 </Project>

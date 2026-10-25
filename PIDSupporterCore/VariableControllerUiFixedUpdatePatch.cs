@@ -1,4 +1,4 @@
-﻿// ============================================================================
+// ============================================================================
 // VariableControllerUiFixedUpdatePatch.cs — 매 물리 틱마다 FRIT 탭에 알려주는 패치
 //
 // ■ 메서드/타입 출처
@@ -50,7 +50,7 @@ namespace PIDSupporter
                 if (__instance == null) return;
 
                 // 이 UI에 FRIT 탭이 등록되어 있는지 확인 → 있으면 틱 전달
-                if (VariableControllerUiPatch.TryGetTab(__instance, out FritTuningTab tab) && tab != null)
+                if (VariableControllerUiPatch.TryGetTab(__instance, out AutoTuneTab tab) && tab != null)
                 {
                     tab.OnUiFixed();
                 }

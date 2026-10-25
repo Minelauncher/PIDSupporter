@@ -1,4 +1,4 @@
-﻿// ============================================================================
+// ============================================================================
 // VariableControllerUiPatch.cs — GP-PID 편집 UI에 FRIT 창을 끼워넣는 Harmony 패치
 //
 // ■ 메서드/타입 출처
@@ -56,11 +56,11 @@ namespace PIDSupporter
         // UI 인스턴스 → FRIT 탭 매핑. PID 편집 창 하나당 FRIT 탭 하나.
         // ConditionalWeakTable = key가 GC되면 엔트리도 자동 제거 → 메모리 누수 방지.
         // Dictionary는 key를 강참조해서 GC를 막지만, 이건 약참조라 UI 닫히면 정리됨.
-        private static readonly ConditionalWeakTable<object, FritTuningTab> _tabsByUiInstance
-            = new ConditionalWeakTable<object, FritTuningTab>();
+        private static readonly ConditionalWeakTable<object, AutoTuneTab> _tabsByUiInstance
+            = new ConditionalWeakTable<object, AutoTuneTab>();
 
         // FixedUpdate 패치에서 "이 UI에 FRIT 탭이 있나?" 확인할 때 사용.
-        public static bool TryGetTab(object uiInstance, out FritTuningTab tab)
+        public static bool TryGetTab(object uiInstance, out AutoTuneTab tab)
             => _tabsByUiInstance.TryGetValue(uiInstance, out tab);
 
         /// <summary>
@@ -83,7 +83,7 @@ namespace PIDSupporter
         /// 여기서 하는 일:
         /// 1) __instance에서 리플렉션으로 PID 제어기(VariableControllerMaster) 추출
         /// 2) 새 ConsoleWindow(FRIT 전용 창) 생성
-        /// 3) FritTuningTab을 만들어서 창에 넣기
+        /// 3) AutoTuneTab을 만들어서 창에 넣기
         /// </summary>
         static void Postfix(object __instance, ref ConsoleWindow __result)
         {
@@ -92,7 +92,7 @@ namespace PIDSupporter
                 if (__instance == null || __result == null) return;
 
                 // 같은 UI 인스턴스에 대해 중복 생성 방지
-                if (_tabsByUiInstance.TryGetValue(__instance, out _)) return;
+                if (_tabsByUiInstance.TryGetValue(__instance, out var existing)) { if(!existing.IsClosed)return;_tabsByUiInstance.Remove(__instance); }
 
                 // ── 리플렉션으로 PID 제어기 꺼내기 ──
                 // GP-PID의 구조: VariableControllerUi._focus = IPidBlock
@@ -105,10 +105,11 @@ namespace PIDSupporter
                 PropertyInfo? controllerProp = focusObj.GetType().GetProperty("Controller", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
                 VariableControllerMaster? controller = controllerProp != null ? controllerProp.GetValue(focusObj, null) as VariableControllerMaster : null;
                 if (controller == null) return;
+                AutoTuneContext.Bind(controller, focusObj, "GP-PID");
 
                 // FRIT 전용 별도 창 생성 (기존 PID 창에 탭으로 넣지 않고 새 창)
                 // 700, 10, 520, 720 = 화면상 x, y, 폭, 높이
-                ConsoleWindow? fritWindow = CreateFritWindowViaNewWindow(__instance, "FRIT Tuner Supporter", 700f, 10f, 520f, 720f);
+                ConsoleWindow? fritWindow = CreateFritWindowViaNewWindow(__instance, "PIDSupporter — Auto Tune", 700f, 10f, 520f, 720f);
                 if (fritWindow == null) return;
 
                 fritWindow.MinimumWindowWidth = new ScaledSizing(420f, Dimension.Width);
@@ -116,10 +117,14 @@ namespace PIDSupporter
                 fritWindow.BackgroundType = BackgroundType.Normal;
                 fritWindow.DisplayTextPrompt = false;
 
-                FritTuningTab fritTab = new FritTuningTab(fritWindow, controller);
-                GuideTab guideTab = new GuideTab(fritWindow, controller);
+                AutoTuneTab fritTab = new AutoTuneTab(fritWindow, controller);
+                AutoTuneWindowLifetime.Register(__result,fritWindow,fritTab);
 
-                fritWindow.SetMultipleTabs(new SuperScreen[] { fritTab, guideTab });
+
+                fritWindow.SetMultipleTabs(new SuperScreen[] { fritTab,
+                    new AutoTuneInfoTab(fritWindow,controller,fritTab,"Data"),
+                    new AutoTuneInfoTab(fritWindow,controller,fritTab,"Excitation"),
+                    new AutoTuneInfoTab(fritWindow,controller,fritTab,"Guide") });
 
                 _tabsByUiInstance.Add(__instance, fritTab);
 

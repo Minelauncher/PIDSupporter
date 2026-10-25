@@ -1,24 +1,23 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>netstandard2.1</TargetFramework>
     <Nullable>enable</Nullable>
+    <GameManagedDir Condition="'$(GameManagedDir)' == ''">C:\Program Files (x86)\Steam\steamapps\common\From The Depths\From_The_Depths_Data\Managed</GameManagedDir>
   </PropertyGroup>
 
   <ItemGroup>
     <Reference Include="Core">
-      <HintPath>..\..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\From The Depths\From_The_Depths_Data\Managed\Core.dll</HintPath>
+      <HintPath>$(GameManagedDir)\Core.dll</HintPath>
     </Reference>
     <Reference Include="Ftd">
-      <HintPath>..\..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\From The Depths\From_The_Depths_Data\Managed\Ftd.dll</HintPath>
+      <HintPath>$(GameManagedDir)\Ftd.dll</HintPath>
     </Reference>
     <Reference Include="Modding">
-      <HintPath>..\..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\From The Depths\From_The_Depths_Data\Managed\Modding.dll</HintPath>
+      <HintPath>$(GameManagedDir)\Modding.dll</HintPath>
     </Reference>
   </ItemGroup>
 
-  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
-    <Exec Command="set MODDIR=C:\Users\user\Documents\From The Depths\Mods\PIDSupporter&#xD;&#xA;if not exist &quot;%25MODDIR%25&quot; mkdir &quot;%25MODDIR%25&quot;&#xD;&#xA;&#xD;&#xA;copy /Y &quot;$(TargetPath)&quot; &quot;%25MODDIR%25\PIDSupporterSelector.dll&quot;" />
-  </Target>
+
 
 </Project>

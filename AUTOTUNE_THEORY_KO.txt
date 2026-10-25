@@ -1,0 +1,3 @@
+이론 문서의 최신 원본은 AUTOTUNE_THEORY_KO.md입니다.
+GitHub 또는 LaTeX 수식을 지원하는 Markdown 뷰어에서 열어 주세요.
+https://github.com/Minelauncher/PIDSupporter/blob/main/AUTOTUNE_THEORY_KO.md

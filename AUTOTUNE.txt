@@ -1,0 +1,46 @@
+PIDSupporter - native C# linear Auto Tune
+
+Current collection protocol (2026-10-25)
+Observe without injected excitation in4-second gain windows; require two consecutive passes.
+Existing gain up/down rules remain, with a fast input-oscillation RMS check that reduces P by0.7.
+No preparation timeout or attempt cap. Ti/Td remain unchanged. This is not a stability proof.
+After passing, recompute the cap min(5,0.1*(upper-lower)/workingKp).
+Rebase amplitude to half this cap and retain the observed-peak factor clamp(0.6*limit/peak,0.5,1.5).
+No new RMS/response-bound amplitude formula is used.
+
+Collect30s of0.2Hz square SP excitation with1s endpoint tapers.
+Fresh random phase/sign are drawn AFTER preparation; a bounded600-point midpoint
+calculation centers the tapered carrier approximately. PID, amplitude and carrier stay fixed.
+E-optimal multisine band allocation is no longer used on this path.
+IV uses the unit carrier BEFORE amplitude scaling and game float quantization;
+actual injected SP, base SP and post-limit u are recorded separately.
+Independent carrier requires independent external disturbance for the usual IV argument;
+it does not guarantee finite-sample unbiasedness or handle arbitrary nonlinear mismatch.
+Preparation records are excluded. Cancellation retains prepared P; Restore previous PID undoes it.
+Window close cancels and restores SP; external manual edits are preserved.
+
+The latest5 complete records share plant coefficients but have separate offsets,
+initial histories and recorded PID settings. Each uses 15 s fit, 5 s selection and
+10 s final diagnostics. Window closure clears data for this controller.
+Fit orders1-3 use no coefficient ridge; stable poles and normalized response caps
+remain. Direct SVD removes only numerical-zero directions at max(n,d)*eps*sigma_max.
+The nearby-PID search and hierarchical objective are unchanged. Apply remains manual.
+
+UI: Auto Tune / Data / Excitation / Guide. Explanatory text uses no background fill
+or hover highlight; thin horizontal lines separate categories and table rows.
+Tables, graphs and progress retain their solid dark rectangular panel background.
+Their text uses a background-free style rather than inheriting skin label highlights.
+Buttons and choice toggles keep their normal interactive styling. Graphs show
+cached actual SP/u/y spectra and rough coherence, not a model-quality guarantee.
+Coherence below .1 Hz is unavailable.30 s yields 5 overlapping 10 s windows.
+Gentle/Balanced/Fast changes candidate evaluation reference speed, not acquisition.
+
+Native C# worker performs fitting; no Python runtime is required.
+There is no hard OS frame-time guarantee. In-game layout, preparation behavior and
+control performance must be checked separately; building does not install the DLL.
+
+Fake SP: the game substitutes FakeSetPoint before applying SetPointAdjust and
+SetPointMultiple, so injected excitation remains active. Effective R and base R
+are recorded separately; IV uses only the unscaled independent carrier. Changing fake
+SP mode or its active value during a run cancels without overwriting the edit.
+A large fake target can still change operating conditions or cause saturation.

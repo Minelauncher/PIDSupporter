@@ -1,0 +1,17 @@
+Native C# REN implementation attribution
+
+The constrained LipschitzREN parameterization and triangular equilibrium
+evaluation are adapted from R2DN by Nicholas Barbara and contributors:
+https://github.com/nic-barbara/R2DN
+Revision bfea8a4108549cc574897c1f1de48bf7b8e550bc
+Source files robustnn/ren.py, ren_base.py, utils.py.
+Original copyright and MIT license: REN-LICENSE.txt.
+
+NativeRen.cs implements the SISO nx=nv=8, tanh, D22=0 specialization with polar
+H parameterization. The reusable reverse-AD tape, explicit BPTT, Adam loop,
+worker scheduling and game integration are C# implementations in this project.
+No Python/JAX code runs or is required when using the packaged mod.
+
+Mathematical parameterization is compared against the original implementation
+using shared direct parameters. Initialization randomness differs, so training
+trajectories and benchmark outcomes are not claimed identical.

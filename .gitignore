@@ -28,3 +28,18 @@ PIDSupporter_Release/
 
 # MakePreview.ps1 의 원본 백업
 *.bak
+
+# Local REN interpreter and recordings
+runtime/python-path.txt
+__pycache__/
+runtime/smoke-output/
+tests/output/
+
+# Local recordings, release staging and account-specific publisher journals
+installation-backups/
+workshop/content-*/
+workshop/publish-runs/
+workshop/publish-state.json
+workshop/publish-job.json
+workshop/release-*.json
+research_lti/.venv*/

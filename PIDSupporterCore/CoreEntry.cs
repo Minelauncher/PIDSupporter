@@ -67,6 +67,11 @@ namespace PIDSupporter
             // Harmony ID는 모드 고유 문자열로 고정 권장
             Harmony harmony = new Harmony("PIDSupporter");
             harmony.PatchAll(Assembly.GetExecutingAssembly());
+            PhysicsTrace.Install(harmony);
+
+            var watchdog = new UnityEngine.GameObject("PIDSupporter AutoTune watchdog");
+            watchdog.AddComponent<AutoTuneWatchdog>();
+            UnityEngine.Object.DontDestroyOnLoad(watchdog);
 
             AdvLogger.LogInfo("[PIDSupporter] Harmony PatchAll done (Core)", LogOptions.None);
         }
