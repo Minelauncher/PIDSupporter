@@ -1,0 +1,20 @@
+[h1]PIDSupporter - Auto Tune[/h1]
+Mod latest version 1.1.1
+
+An in-game PID tuning assistant for From the Depths. Identification and PID search run in C#; no Python installation is required.
+
+[h2]How it works[/h2]
+Open a PID window and use Auto Tune. The preparation stage observes the response and adjusts the working gain. Once preparation passes, the mod recalculates its excitation for the final PID and collects a fixed 30-second square-wave setpoint excitation. An independent reference waveform is used for instrumental-variable identification.
+
+Low-order linear models (orders 1-3) are fitted from measured input and output. Candidate PIDs are evaluated with actuator saturation and integral handling, using a hierarchical objective and neighboring parameter values. You can review the recommendation, apply it, or restore the original settings.
+
+[h2]Repeated collection[/h2]
+Up to five recent recordings from the same PID window are used together. Closing the window cancels collection and clears this session history, keeping different axes separate. The interface includes collection, excitation and frequency-band diagnostics, plus a guide.
+
+[h2]Use[/h2]
+Enable the mod and restart the game. Open the PID you want to tune, keep the vehicle in representative operating conditions, and start Auto Tune. Review the result before applying it. Background computation keeps fitting and search off the main game thread.
+
+[h2]Limits[/h2]
+This is a local linear approximation, not a guarantee of stability or optimal performance. Strong coupling between axes, changing operating conditions or insufficient response can make identification unreliable. Keep a known working PID available and test recommendations under normal operation.
+
+This release replaces the previous FRIT workflow. AUTOTUNE.txt and AUTOTUNE_THEORY_KO.md are included in the mod files.

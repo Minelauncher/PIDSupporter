@@ -8,6 +8,10 @@ The current runtime uses preparation-stage gain adjustment, fixed 30-second squa
 
 The theory document uses GitHub Markdown math (`$...$` and `$$...$$`). Open its rendered GitHub page or a math-capable Markdown viewer to see the equations.
 
+## In-game interface
+
+![Actual PID editor and Auto Tune window](workshop/tuning-screen.jpg)
+
 ## Build
 
 Install the .NET SDK and From the Depths, then run:
