@@ -1,5 +1,1 @@
-1.1.1 presentation update
-- Replaced the cover with an actual in-game Auto Tune screenshot.
-- Added the full tuning screen as a gallery image.
-- Included the theory document as Markdown with LaTeX equations.
-- Tuning binaries are unchanged.
+Presentation only: added PID Supporter / TUNE HELPER to the in-game screenshot cover. Existing usage limitations and manual review/apply guidance remain. No tuning code changes.

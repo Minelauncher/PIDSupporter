@@ -1,4 +1,4 @@
-[h1]PIDSupporter - Auto Tune[/h1]
+[h1]PIDSupporter - Tune Helper[/h1]
 Mod latest version 1.1.1
 
 An in-game PID tuning assistant for From the Depths. Identification and PID search run in C#; no Python installation is required.
