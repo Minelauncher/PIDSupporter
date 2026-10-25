@@ -48,6 +48,9 @@ namespace PIDSupporter
             public double NominalCost { get; set; }
             public double BaselineRobust { get; set; }
             public double BaselineNominal { get; set; }
+            public double RawBaselineRobust { get; set; }
+            public bool BaselinePassesConstraint { get; set; }
+            public bool CandidatePassesConstraint { get; set; }
             public double[] GridPid { get; set; } = null!;
             public double GridCost { get; set; }
             public double GridRobust { get; set; }
@@ -82,14 +85,14 @@ namespace PIDSupporter
             Math.Round(Math.Exp(Math.Log(.001) + x[0] * Math.Log(1000)), 3),
             (mode & 1) != 0 ? 250 : Math.Min(249.9, Math.Round(Math.Exp(Math.Log(.1) + x[1] * Math.Log(2499)), 1)),
             (mode & 2) != 0 ? 0 : Math.Round(Math.Exp(Math.Log(.1) + x[2] * Math.Log(1000)), 1) };
-        internal static Result Run(double[] original, Func<double[], double> cost, WorkBudget budget, Action<string> progress, bool joint = false, Func<double[], Motion>? motion = null)
+        internal static Result Run(double[] original, Func<double[], double> cost, WorkBudget budget, Action<string> progress, bool joint = false, Func<double[], Motion>? motion = null, Func<double[], bool>? admissible = null)
         {
             var timer = Stopwatch.StartNew(); var result = new Result();
             var cache = new Dictionary<(double,double,double),double>();
             double Eval(double[] p)
             {
                 budget.Check(); var key=(p[0],p[1],p[2]);
-                if (!cache.TryGetValue(key,out double c)) { c=cost(p); if (!NativeLinear.Finite(c)) c=1e12; cache.Add(key,c); }
+                if (!cache.TryGetValue(key,out double c)) { c=(admissible==null || admissible(p)) ? cost(p) : 1e12; if (!NativeLinear.Finite(c)) c=1e12; cache.Add(key,c); }
                 return c;
             }
             var robustCache = new Dictionary<(double,double,double),double>();
@@ -191,6 +194,9 @@ namespace PIDSupporter
                 }
             }
             result.RobustCost=Robust(result.Pid);result.NominalCost=Eval(result.Pid);
+            result.RawBaselineRobust=Neighborhood(original,cost,joint);
+            result.BaselinePassesConstraint=result.BaselineRobust<1e10;
+            result.CandidatePassesConstraint=result.RobustCost<1e10;
             result.RobustSeconds=timer.Elapsed.TotalSeconds-started;result.Seconds=timer.Elapsed.TotalSeconds;
             result.JointNeighborhood=joint;
             result.SelectedAxisCost=Neighborhood(result.Pid, Eval, false);

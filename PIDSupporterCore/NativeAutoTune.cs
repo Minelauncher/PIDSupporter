@@ -63,7 +63,7 @@ namespace PIDSupporter
         { double s = 0; for (int i = 0; i < n; i++) s += (a[i] - mean) * (a[i] - mean); return Math.Sqrt(s / n); }
         internal static double Clamp(double x, double low, double high) => Math.Max(low, Math.Min(high, x));
 
-        internal static TuneResult Run(TuneRecord r, CancellationToken token, Action<string> progress, bool jointNeighborhood = false, IReadOnlyList<TuneRecord>? records = null)
+        internal static TuneResult Run(TuneRecord r, CancellationToken token, Action<string> progress, bool jointNeighborhood = true, IReadOnlyList<TuneRecord>? records = null)
         {
             token.ThrowIfCancellationRequested();
             var wall = Stopwatch.StartNew(); var budget = new WorkBudget(token);
@@ -85,6 +85,10 @@ namespace PIDSupporter
             // Reproduction errors rank models and remain diagnostics, not an acceptance threshold.
             if (!NativeLinear.Finite(best) || !NativeLinear.Finite(selected.FinalWorst))
                 return More("model response could not be predicted.");
+            EmpiricalFrequencyGate gate;
+            try { gate=new EmpiricalFrequencyGate(net,records ?? new[]{r},budget); }
+            catch(ArgumentException ex){return More(ex.Message);}
+            AutoTuneDiagnostics.Event("empiricalFrequencyBounds",new{frequencies=gate.Frequencies,radius=gate.Radii,policy="observed-harmonic-disks",fullBandGuarantee=false});
             var warm = net.RecentState(r);
             progress("Evaluating PID candidates...");
             var x = new double[net.Order * 2];
@@ -122,9 +126,11 @@ namespace PIDSupporter
                 var value = new PidSearch.Motion { Tracking=cost, Slew=worstSlew, Effort=worstEffort };
                 metrics.Add(key,value);return value;
             }
-            var search = PidSearch.Run(r.Pid, p => Measure(p).Tracking, budget, progress, jointNeighborhood, Measure);
-            double bestCost = search.RobustCost, baseline = search.BaselineRobust;
+            var search = PidSearch.Run(r.Pid, p => Measure(p).Tracking, budget, progress, jointNeighborhood, Measure, gate.Accept);
+            double bestCost = search.RobustCost, baseline = search.RawBaselineRobust;
             AutoTuneDiagnostics.Event("pidSearch", search);
+            AutoTuneDiagnostics.Event("empiricalFrequencyChecks",new{checks=gate.Checks,rejected=gate.Rejected,search.BaselinePassesConstraint,search.CandidatePassesConstraint});
+            if(!search.CandidatePassesConstraint)return new TuneResult{reason="no_robust_candidate",accepted=false,pid=(double[])r.Pid.Clone(),seconds=wall.Elapsed.TotalSeconds,message="No searched PID passed the model and frequency checks. Current PID retained; another test can add data."};
             string reason = DecisionReason(bestCost, baseline);
             bool accepted = reason == "recommended";
             if(reason=="baseline_prediction_failed"||reason=="candidate_prediction_failed")return More("PID response prediction failed.");

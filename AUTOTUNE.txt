@@ -24,7 +24,15 @@ initial histories and recorded PID settings. Each uses 15 s fit, 5 s selection a
 10 s final diagnostics. Window closure clears data for this controller.
 Fit orders1-3 use no coefficient ridge; stable poles (no normalized response magnitude cap)
 remain. Direct SVD removes only numerical-zero directions at max(n,d)*eps*sigma_max.
-The nearby-PID search and hierarchical objective are unchanged. Apply remains manual.
+Version 1.1.3: candidates must pass nominal model stability and empirical frequency
+checks at the measured 0.2..3.8 Hz odd harmonics. The first 20 s of each retained
+30 s record forms discrepancy disks from four 5 s Hann windows; no new game test.
+These are empirical bounds, not confidence intervals or full-band stability guarantees.
+Single-window cross-spectrum ratios do not remove correlated external disturbances.
+Search evaluates up to 27 simultaneous nearby PID combinations. The tracking-first
+hierarchy is retained. Baseline performance is evaluated separately from feasibility.
+No passing searched candidate retains the current PID. Apply and Restore remain manual.
+All calculations run in the existing managed background worker; no Python dependency.
 
 UI: Auto Tune / Data / Excitation / Guide. Explanatory text uses no background fill
 or hover highlight; thin horizontal lines separate categories and table rows.

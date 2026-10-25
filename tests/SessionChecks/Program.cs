@@ -41,6 +41,7 @@ internal static class Program
     static void Assert(bool condition, string name) { if (!condition) throw new Exception(name); }
     static void Main(string[] args)
     {
+        if(args.Length==3 && args[0]=="--robust-release") { RobustReleaseChecks.Run(args[1],args[2]); return; }
         if(args.Length==4 && args[0]=="--stabilized-square") { StabilizedSquareChecks.Run(args[1],args[2],int.Parse(args[3])); return; }
         if(args.Length==4 && args[0]=="--square-design") { SquareDesignChecks.Run(args[1],args[2],int.Parse(args[3])); return; }
         if(args.Length==4 && args[0]=="--smooth-holdout") { SmoothHoldoutChecks.Run(args[1],args[2],int.Parse(args[3])); return; }

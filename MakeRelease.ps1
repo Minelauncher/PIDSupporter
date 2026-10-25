@@ -1,4 +1,4 @@
-﻿# Build a new local test package; never overwrite the installed mod or older packages.
+# Build a new local test package; never overwrite the installed mod or older packages.
 param(
     [string]$GameManagedDir = "C:\Program Files (x86)\Steam\steamapps\common\From The Depths\From_The_Depths_Data\Managed"
 )
@@ -17,7 +17,7 @@ foreach ($name in @("0Harmony.dll", "header.header", "header.jpg", "AUTOTUNE.txt
     Copy-Item -LiteralPath (Join-Path $projectRoot $name) -Destination $package
 }
 $metadata = Get-Content -LiteralPath (Join-Path $projectRoot "plugin.json") -Raw -Encoding utf8 | ConvertFrom-Json
-$metadata.version = "1.1.2"
+$metadata.version = "1.1.3"
 $metadata.workshop_id = 0
 $metadata | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $package "plugin.json") -Encoding utf8
 Write-Output "Local test package: $package"
