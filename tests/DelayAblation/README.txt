@@ -1,0 +1,1 @@
+Offline copies of ResponseCapAudit native fitter/search. Delay1..6, orders1..3. NativeAutoTune evaluates max cost across Audit.Ensemble. Game source and installed DLL unchanged. Reproduction: prepare_delay_ablation.py, dotnet run Audit.csproj outputdir, select_delay_ablation.py, dotnet run Audit.csproj outputdir search.
