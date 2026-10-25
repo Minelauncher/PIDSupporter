@@ -1,0 +1,29 @@
+FRIT / current IV / no-response-cap IV: matched Duster BP comparison
+
+Two records: autotune-20261023-162529.jsonl. Frozen recommendations, no BP truth used for recommendations. No mod changes.
+Current means frozen native IV audit with normalized response cap10, orders1-3, min validation selection, current neighborhood PID search. No-cap changes only that response cap; stable pole constraint retained. Primary record2 uses both records; single-record result also listed.
+FRIT is the existing reproduction of Git715d44b automatic bandwidth target sweep and D cap. SciPy LM replaces MathNet LM; not binary-identical legacy execution. FRIT used its original full30s calculation; IV uses0-15s training and15-20s validation. This is an operational-method comparison, not an equal training-window estimator comparison.
+BP physics initial state comes from record endpoint; other-axis commands held at final values. 15s smooth +/- SP, tau1.25s, amplitude max(half excitation, 0.1 training output std), saturation and integral clamp. Same initial controller state for all choices. One-step application delay. No added measurement noise.
+Metric: nominal tracking MSE normalized by SP amplitude, worse of +/- direction. Robust metric is worst tracking cost over center and existing axis neighbors. This is the established axis-neighbor benchmark, not an exhaustive simultaneous-neighbor robustness certificate.
+Oracle: best robust center in union of historical ten centers, incumbents, and all method recommendations (including single-record control), with neighborhoods. A finite candidate best, not global plant optimum. New recommendations evaluated directly, not snapped to historical grid.
+Failure means response leaves20*target-amplitude envelope or nonfinite. Its1e12 penalty is not a physically meaningful regret magnitude.
+
+Results:
+Record 1; incumbent=[0.019999999552965164, 250.0, 1.0]; centers=13; best robust=0.00193083087294
+  FRIT: PID=[0.06, 0.4, 0.02]; nominal/old=48.6617925; robust/old=70.4531982; robust regret=16815.5814; failure=False
+  current_single: PID=[0.12, 0.7, 0.2]; nominal/old=0.00768864749; robust/old=0.00787621297; robust regret=0.879985291; failure=False
+  no_response_cap_single: PID=[0.172, 1.1, 0.2]; nominal/old=0.00381194215; robust/old=0.00418970555; robust regret=4.72089852e-05; failure=False
+Record 2; incumbent=[0.11699999868869781, 0.6000000238418579, 0.20000000298023224]; centers=13; best robust=4.67287990023e-05
+  FRIT: PID=[0.058, 0.3, 0.03]; nominal/old=2.05117485e+16; robust/old=7.08558175e+15; robust regret=2.14000792e+16; failure=True
+  current_single: PID=[0.11, 0.6, 0.2]; nominal/old=1.14798815; robust/old=0.966345746; robust regret=1.91858541; failure=False
+  no_response_cap_single: PID=[0.172, 0.9, 0.2]; nominal/old=0.509978601; robust/old=0.331100725; robust regret=0; failure=False
+  current_pooled: PID=[0.09, 0.5, 0.2]; nominal/old=1.80560736; robust/old=1.73865084; robust regret=4.25112361; failure=False
+  no_response_cap_pooled: PID=[0.172, 0.9, 0.2]; nominal/old=0.509978601; robust/old=0.331100725; robust regret=0; failure=False
+
+Primary result:
+FRIT reproduction worsens both records (2/2); current IV worsens second pooled record (1/2); no-response-cap IV worsens neither (0/2). Both nominal and robust comparisons agree for these primary choices.
+Record1 current->no cap robust BP cost improves46.8%; record2 pooled improves81.0%. Against incumbent, no-cap nominal tracking MSE improves99.62% and49.00%, respectively. These are tracking-cost improvements, not percentages of every operational performance measure.
+Current single-record control on record2 nominal cost worsens14.8% but robust cost improves3.4%; pooled current worsens both. Thus pooling and score interpretation matter.
+No-cap robust regret versus union-best is0.00472% for record1 and0% for record2. This does not demonstrate global optimality: the union includes the recommendations themselves.
+This supports removing the response cap as a narrow Duster fix, but two records/one conditional BP scenario cannot establish fleet-wide superiority over FRIT or safety in game.
+FRIT large losses apply to the reproduced legacy implementation, not FRIT theory in general. Its very small final D term is a plausible contributor; this comparison alone does not isolate that causal mechanism.
