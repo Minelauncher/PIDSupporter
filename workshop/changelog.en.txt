@@ -1,1 +1,5 @@
-Presentation only: added PID Supporter / TUNE HELPER to the in-game screenshot cover. Existing usage limitations and manual review/apply guidance remain. No tuning code changes.
+1.1.2 - Tune Helper
+Removed the normalized plant response-magnitude cap while retaining stable-pole and finite-response checks.
+Kept existing IV identification, accumulation, excitation, PID search, saturation and integral handling.
+Updated the guide and documentation to describe the change.
+Reworded the Workshop description around reviewing, trying and restoring PID suggestions; no stability or optimality guarantee.

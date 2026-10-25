@@ -4,7 +4,8 @@ namespace PIDSupporter
 {
     internal sealed partial class NativeLinear
     {
-        internal const double ResponseLimit = 10;
+        // Preserve finite-response checks without clipping genuine slow/high-gain dynamics.
+        internal const double ResponseLimit = double.PositiveInfinity;
         internal const double LongestTimeConstant = 300;
         internal sealed class ConstrainedFit
         {

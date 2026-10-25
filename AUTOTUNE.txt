@@ -22,7 +22,7 @@ Window close cancels and restores SP; external manual edits are preserved.
 The latest5 complete records share plant coefficients but have separate offsets,
 initial histories and recorded PID settings. Each uses 15 s fit, 5 s selection and
 10 s final diagnostics. Window closure clears data for this controller.
-Fit orders1-3 use no coefficient ridge; stable poles and normalized response caps
+Fit orders1-3 use no coefficient ridge; stable poles (no normalized response magnitude cap)
 remain. Direct SVD removes only numerical-zero directions at max(n,d)*eps*sigma_max.
 The nearby-PID search and hierarchical objective are unchanged. Apply remains manual.
 

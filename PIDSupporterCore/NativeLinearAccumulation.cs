@@ -52,7 +52,7 @@ namespace PIDSupporter
                         // Keep per-record validation units unchanged despite pooled fit scaling.
                         score=Math.Max(score,Math.Max(e[0]*ys/scalesY[k],Math.Max(e[1]*ys/scalesY[k],e[2]*us/scalesU[k])));
                     }
-                    AutoTuneDiagnostics.Event("linearConstrainedCandidate",new{records=count,order,method="injected-sp-iv-constrained",ridge=0.0,structure=fitted.Structure,trainingLoss=fitted.Loss,responsePeak=fitted.Peak,responseLimit=ResponseLimit,poleRadius=PoleRadius(c,order),score});
+                    AutoTuneDiagnostics.Event("linearConstrainedCandidate",new{records=count,order,method="injected-sp-iv-constrained",ridge=0.0,structure=fitted.Structure,trainingLoss=fitted.Loss,responsePeak=fitted.Peak,responseLimit=(double?)null,responseCapEnabled=false,poleRadius=PoleRadius(c,order),score});
                     if(Finite(score)&&score<best.Score){best.Score=score;best.Model=models[count-1];bestModels=models;}
                 }
                 progress($"Joint identification: {count} records | order {order} | error {best.Score:0.000}");
@@ -60,7 +60,7 @@ namespace PIDSupporter
             if(bestModels==null)throw new InvalidOperationException("No finite accumulated model.");
             int last=count-1;var latest=records[last];var final=best.Model.Errors(latest,steps[last],latest.U.Length*2/3,latest.U.Length,budget);
             best.FinalFree=final[0]*ys/scalesY[last];best.FinalY=final[1]*ys/scalesY[last];best.FinalU=final[2]*us/scalesU[last];
-            AutoTuneDiagnostics.Event("linearAccumulatedSelected",new{records=count,method="injected-sp-iv-constrained",ridge=0.0,order=best.Model.Order,coefficients=best.Model.Coefficients,best.Model.Um,best.Model.Us,best.Model.Ym,best.Model.Ys,validation=best.Score,best.FinalFree,best.FinalY,best.FinalU,poleRadius=PoleRadius(best.Model.Coefficients,best.Model.Order),poleLimit=Math.Exp(-steps[last]/LongestTimeConstant),responsePeak=ResponsePeak(best.Model.Coefficients,best.Model.Order,steps[last]),responseLimit=ResponseLimit});
+            AutoTuneDiagnostics.Event("linearAccumulatedSelected",new{records=count,method="injected-sp-iv-constrained",ridge=0.0,order=best.Model.Order,coefficients=best.Model.Coefficients,best.Model.Um,best.Model.Us,best.Model.Ym,best.Model.Ys,validation=best.Score,best.FinalFree,best.FinalY,best.FinalU,poleRadius=PoleRadius(best.Model.Coefficients,best.Model.Order),poleLimit=Math.Exp(-steps[last]/LongestTimeConstant),responsePeak=ResponsePeak(best.Model.Coefficients,best.Model.Order,steps[last]),responseLimit=(double?)null,responseCapEnabled=false});
             return best;
         }
         internal double DcGain()

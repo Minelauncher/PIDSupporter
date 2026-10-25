@@ -17,7 +17,7 @@ foreach ($name in @("0Harmony.dll", "header.header", "header.jpg", "AUTOTUNE.txt
     Copy-Item -LiteralPath (Join-Path $projectRoot $name) -Destination $package
 }
 $metadata = Get-Content -LiteralPath (Join-Path $projectRoot "plugin.json") -Raw -Encoding utf8 | ConvertFrom-Json
-$metadata.version = "1.1.1"
+$metadata.version = "1.1.2"
 $metadata.workshop_id = 0
 $metadata | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $package "plugin.json") -Encoding utf8
 Write-Output "Local test package: $package"
