@@ -1,0 +1,131 @@
+[
+  {
+    "id": "old_new_pid_best",
+    "type": "nonlinear",
+    "p1": 0.8,
+    "p2": 0.6,
+    "n": 2,
+    "nominalOrder": 2,
+    "provenance": "ExcitationStudy.cs recurrence"
+  },
+  {
+    "id": "old_new_pid_worst",
+    "type": "nonlinear",
+    "p1": 0.95,
+    "p2": 0.85,
+    "n": 2,
+    "nominalOrder": 2,
+    "provenance": "ExcitationStudy.cs recurrence"
+  },
+  {
+    "id": "old_first",
+    "type": "linear",
+    "A": [
+      [
+        0.9394130628134758
+      ]
+    ],
+    "B": [
+      0.04846954974921938
+    ],
+    "C": [
+      1.7499999999999998
+    ],
+    "n": 1,
+    "nominalOrder": 1,
+    "provenance": "fritlab/core.py transfer function"
+  },
+  {
+    "id": "old_oscillator",
+    "type": "linear",
+    "A": [
+      [
+        0.9183584932371658,
+        -0.15540264809752596
+      ],
+      [
+        0.04796378027701417,
+        0.9960598172859287
+      ]
+    ],
+    "B": [
+      0.04796378027701418,
+      0.001216105775947918
+    ],
+    "C": [
+      0.0,
+      3.24
+    ],
+    "n": 2,
+    "nominalOrder": 2,
+    "provenance": "fritlab/core.py transfer function"
+  },
+  {
+    "id": "third_cascade",
+    "type": "linear",
+    "A": [
+      [
+        0.7188685511904869,
+        -0.44997688202657377,
+        -0.20211229790637608
+      ],
+      [
+        0.04269622293272195,
+        0.988183188150733,
+        -0.005329826632546404
+      ],
+      [
+        0.0011259258761254286,
+        0.04979821692059005,
+        0.9999088067423352
+      ]
+    ],
+    "B": [
+      0.04269622293272194,
+      0.001125925876125428,
+      1.9264575681703368e-05
+    ],
+    "C": [
+      0.0,
+      0.0,
+      5.680473372781064
+    ],
+    "n": 3,
+    "nominalOrder": 3,
+    "provenance": "new minimal third-order no pole-zero cancellation"
+  },
+  {
+    "id": "third_resonance",
+    "type": "linear",
+    "A": [
+      [
+        0.8575762387996008,
+        -0.2331450540877518,
+        -0.3340849201220707
+      ],
+      [
+        0.04640068335028758,
+        0.9940973604791136,
+        -0.008565746672359867
+      ],
+      [
+        0.0011896870378277592,
+        0.049901006990474145,
+        0.9998554457422
+      ]
+    ],
+    "B": [
+      0.04640068335028759,
+      0.0011896870378277592,
+      2.0076980250010214e-05
+    ],
+    "C": [
+      0.0,
+      0.0,
+      7.2
+    ],
+    "n": 3,
+    "nominalOrder": 3,
+    "provenance": "new minimal third-order no pole-zero cancellation"
+  }
+]

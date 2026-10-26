@@ -1,0 +1,18 @@
+{
+  "cases": 72,
+  "noise": 0,
+  "production": "Linked production AutoTuneSession, measurement prefix/postfix, AdaptiveExcitation, NativeLinear, history, PidSearch and EmpiricalFrequencyGate; no source edits or overrides. Fake host only supplies clock/PID state and synthetic measurements. Excitation seed injected by reflection for reproducibility.",
+  "conditions": [
+    "baseline",
+    "nonzero initial state",
+    "300ms command delay",
+    "20% input effectiveness",
+    "4x slower dynamics",
+    "physical coupled-output disturbance"
+  ],
+  "preparation": "Actual repeating4s gain observation; test harness stops at180s if still preparing, reports timeout. Production itself has no such timeout.",
+  "collection": "Actual fixed30s square-wave SP policy, limits[-1,1], independent carrier instrument, amplitude after preparation. One collection per fresh window; no accumulation in this sweep.",
+  "selection": "Current full production identification and27-neighbor DE/hierarchy/frequency gate. No frozen model or research1SE/delay separation substituted.",
+  "grading": "After freezing choices: same endpoint plant state, controller integral/error, command queue and physical disturbance phase for every candidate. Nine smooth-SP tasks (amplitudes .1,.3,.6 times tau .5,1.25,2), each worst of +/- sign over15s; separate matched-amplitude tau1.25 task and zero-action baseline. Compare pre-preparation PID, collection PID, recommendation, and finite grid reference best including all recommendations. Truth only simulator/evaluator; no coefficients or states passed to tuner.",
+  "scope": "Synthetic plant families, not FTD physics/frame benchmark. No sensor noise; disturbances/nonlinearity remain. Slider limits unchanged. External truth unavailable to production tuner."
+}

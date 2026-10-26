@@ -1,0 +1,264 @@
+{
+  "overall": {
+    "current": {
+      "n": 72,
+      "improved": 61,
+      "worse": 5,
+      "unchanged": 6,
+      "medianVsWorking": 0.5060982023696365,
+      "worstVsWorking": 1.290400772036156,
+      "meanBestRatio": 1.457215138146473,
+      "worstBestRatio": 6.71655340371036,
+      "failures": 0,
+      "nominalImproved": 49,
+      "nominalWorse": 8,
+      "nominalMedianVsWorking": 0.6173887347637951,
+      "neighborhoodFailureCases": 0,
+      "finiteMedianBestRatio": 1.0,
+      "finiteMeanBestRatio": 1.457215138146473
+    },
+    "frit": {
+      "n": 72,
+      "improved": 24,
+      "worse": 48,
+      "unchanged": 0,
+      "medianVsWorking": 2.061929132724945,
+      "worstVsWorking": 51427115388.97833,
+      "meanBestRatio": 3747021365.0195613,
+      "worstBestRatio": 147175608936.18607,
+      "failures": 0,
+      "nominalImproved": 20,
+      "nominalWorse": 47,
+      "nominalMedianVsWorking": 2.074768770351367,
+      "neighborhoodFailureCases": 2,
+      "finiteMedianBestRatio": 5.063388765695749,
+      "finiteMeanBestRatio": 9.752878393859964
+    },
+    "currentVsFrit": {
+      "better": 53,
+      "worse": 18,
+      "similar": 1,
+      "median": 0.200967884419541
+    }
+  },
+  "conditions": {
+    "baseline": {
+      "current": {
+        "n": 12,
+        "improved": 12,
+        "worse": 0,
+        "unchanged": 0,
+        "medianVsWorking": 0.2684856876395193,
+        "worstVsWorking": 0.5561360650261793,
+        "meanBestRatio": 1.0126926939037653,
+        "worstBestRatio": 1.1523123268451834,
+        "failures": 0,
+        "nominalImproved": 12,
+        "nominalWorse": 0,
+        "nominalMedianVsWorking": 0.2074136170238754
+      },
+      "frit": {
+        "n": 12,
+        "improved": 1,
+        "worse": 11,
+        "unchanged": 0,
+        "medianVsWorking": 3.223115630380388,
+        "worstVsWorking": 20.93420063853102,
+        "meanBestRatio": 17.840520291194427,
+        "worstBestRatio": 85.83263676025915,
+        "failures": 0,
+        "nominalImproved": 1,
+        "nominalWorse": 11,
+        "nominalMedianVsWorking": 3.083260477800552
+      },
+      "currentVsFrit": {
+        "better": 12,
+        "worse": 0,
+        "similar": 0,
+        "median": 0.07813366365681507
+      }
+    },
+    "coupled_disturbance": {
+      "current": {
+        "n": 12,
+        "improved": 2,
+        "worse": 4,
+        "unchanged": 6,
+        "medianVsWorking": 1.0,
+        "worstVsWorking": 1.290400772036156,
+        "meanBestRatio": 3.390004338298427,
+        "worstBestRatio": 6.71655340371036,
+        "failures": 0,
+        "nominalImproved": 1,
+        "nominalWorse": 4,
+        "nominalMedianVsWorking": 1.0
+      },
+      "frit": {
+        "n": 12,
+        "improved": 8,
+        "worse": 4,
+        "unchanged": 0,
+        "medianVsWorking": 0.737580739835175,
+        "worstVsWorking": 51427115388.97833,
+        "meanBestRatio": 22482128135.244453,
+        "worstBestRatio": 147175608936.18607,
+        "failures": 0,
+        "nominalImproved": 8,
+        "nominalWorse": 4,
+        "nominalMedianVsWorking": 0.642023611583804
+      },
+      "currentVsFrit": {
+        "better": 4,
+        "worse": 8,
+        "similar": 0,
+        "median": 1.4011233199215631
+      }
+    },
+    "delay_300ms": {
+      "current": {
+        "n": 12,
+        "improved": 11,
+        "worse": 1,
+        "unchanged": 0,
+        "medianVsWorking": 0.6119034813902722,
+        "worstVsWorking": 1.0238830066062572,
+        "meanBestRatio": 1.2858482847173862,
+        "worstBestRatio": 2.2676869988562887,
+        "failures": 0,
+        "nominalImproved": 9,
+        "nominalWorse": 2,
+        "nominalMedianVsWorking": 0.5969402180850791
+      },
+      "frit": {
+        "n": 12,
+        "improved": 0,
+        "worse": 12,
+        "unchanged": 0,
+        "medianVsWorking": 3.2212884885818807,
+        "worstVsWorking": 23.892867205389376,
+        "meanBestRatio": 10.449984356896396,
+        "worstBestRatio": 39.3962646367838,
+        "failures": 0,
+        "nominalImproved": 1,
+        "nominalWorse": 11,
+        "nominalMedianVsWorking": 2.6155052769335536
+      },
+      "currentVsFrit": {
+        "better": 12,
+        "worse": 0,
+        "similar": 0,
+        "median": 0.136399259829237
+      }
+    },
+    "four_times_slower": {
+      "current": {
+        "n": 12,
+        "improved": 12,
+        "worse": 0,
+        "unchanged": 0,
+        "medianVsWorking": 0.4391389178447504,
+        "worstVsWorking": 0.544662320315231,
+        "meanBestRatio": 1.0,
+        "worstBestRatio": 1.0,
+        "failures": 0,
+        "nominalImproved": 12,
+        "nominalWorse": 0,
+        "nominalMedianVsWorking": 0.5553785933508553
+      },
+      "frit": {
+        "n": 12,
+        "improved": 3,
+        "worse": 9,
+        "unchanged": 0,
+        "medianVsWorking": 2.6256687965293124,
+        "worstVsWorking": 10.097179929500129,
+        "meanBestRatio": 8.322434901054452,
+        "worstBestRatio": 22.754310219958175,
+        "failures": 0,
+        "nominalImproved": 3,
+        "nominalWorse": 9,
+        "nominalMedianVsWorking": 3.576844742178321
+      },
+      "currentVsFrit": {
+        "better": 12,
+        "worse": 0,
+        "similar": 0,
+        "median": 0.1881716460801801
+      }
+    },
+    "nonzero_initial": {
+      "current": {
+        "n": 12,
+        "improved": 12,
+        "worse": 0,
+        "unchanged": 0,
+        "medianVsWorking": 0.3091026698962083,
+        "worstVsWorking": 0.6129614226808601,
+        "meanBestRatio": 1.0,
+        "worstBestRatio": 1.0,
+        "failures": 0,
+        "nominalImproved": 12,
+        "nominalWorse": 0,
+        "nominalMedianVsWorking": 0.2646826954266338
+      },
+      "frit": {
+        "n": 12,
+        "improved": 1,
+        "worse": 11,
+        "unchanged": 0,
+        "medianVsWorking": 3.2024224144770357,
+        "worstVsWorking": 20.912124130848987,
+        "meanBestRatio": 17.0758722569051,
+        "worstBestRatio": 85.71963374475172,
+        "failures": 0,
+        "nominalImproved": 1,
+        "nominalWorse": 11,
+        "nominalMedianVsWorking": 2.9641528511879924
+      },
+      "currentVsFrit": {
+        "better": 12,
+        "worse": 0,
+        "similar": 0,
+        "median": 0.09506848762235992
+      }
+    },
+    "weak_actuator": {
+      "current": {
+        "n": 12,
+        "improved": 12,
+        "worse": 0,
+        "unchanged": 0,
+        "medianVsWorking": 0.905545491546158,
+        "worstVsWorking": 0.975916852083056,
+        "meanBestRatio": 1.0547455119592601,
+        "worstBestRatio": 1.1749239637004631,
+        "failures": 0,
+        "nominalImproved": 3,
+        "nominalWorse": 2,
+        "nominalMedianVsWorking": 0.9993798947948196
+      },
+      "frit": {
+        "n": 12,
+        "improved": 11,
+        "worse": 1,
+        "unchanged": 0,
+        "medianVsWorking": 0.8728106434564397,
+        "worstVsWorking": 2.912187473817984,
+        "meanBestRatio": 1.1841041127190115,
+        "worstBestRatio": 3.2015662893678076,
+        "failures": 0,
+        "nominalImproved": 6,
+        "nominalWorse": 1,
+        "nominalMedianVsWorking": 0.992497577619758
+      },
+      "currentVsFrit": {
+        "better": 1,
+        "worse": 10,
+        "similar": 1,
+        "median": 1.0183538534951166
+      }
+    }
+  },
+  "fritFailures": 0,
+  "scope": "Same current-policy 30s records; historical C#/MathNet tuner, not old end-to-end excitation. Finite-pool truth only evaluation."
+}
