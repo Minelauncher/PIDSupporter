@@ -1,0 +1,162 @@
+[
+  {
+    "id": "p061",
+    "arm": "single30",
+    "order": 3,
+    "validation": 9.874964274811508e-07,
+    "actualModelMaxFrequencyError": 7.799581906089779e-07,
+    "previousPid": [
+      0.973,
+      3.9,
+      0.4
+    ],
+    "previousPidMaxRho": 0.6462921048552024,
+    "worstWindow": {
+      "record": 1,
+      "block": 0,
+      "frequency": 0.6000000000000001,
+      "inputFourier": 1.752268255197427,
+      "observedError": 0.2680747913884323
+    }
+  },
+  {
+    "id": "p061",
+    "arm": "repeat2",
+    "order": 3,
+    "validation": 1.8143751293807987e-06,
+    "actualModelMaxFrequencyError": 1.2132660844777256e-06,
+    "previousPid": [
+      0.973,
+      3.9,
+      0.4
+    ],
+    "previousPidMaxRho": 1.0285188615355538,
+    "worstWindow": {
+      "record": 2,
+      "block": 0,
+      "frequency": 0.6000000000000001,
+      "inputFourier": 1.9051268248238518,
+      "observedError": 0.42661907181961833
+    }
+  },
+  {
+    "id": "p061",
+    "arm": "repeat4",
+    "order": 3,
+    "validation": 2.784210226718358e-06,
+    "actualModelMaxFrequencyError": 2.1933966538704764e-06,
+    "previousPid": [
+      0.973,
+      3.9,
+      0.4
+    ],
+    "previousPidMaxRho": 1.0285232113673766,
+    "worstWindow": {
+      "record": 2,
+      "block": 0,
+      "frequency": 0.6000000000000001,
+      "inputFourier": 1.9051268248238518,
+      "observedError": 0.42661924498754367
+    }
+  },
+  {
+    "id": "p061",
+    "arm": "continuous120",
+    "order": 3,
+    "validation": 5.380957682665949e-07,
+    "actualModelMaxFrequencyError": 7.712256185939127e-07,
+    "previousPid": [
+      0.973,
+      3.9,
+      0.4
+    ],
+    "previousPidMaxRho": 0.6454202345403856,
+    "worstWindow": {
+      "record": 1,
+      "block": 0,
+      "frequency": 0.6000000000000001,
+      "inputFourier": 1.7871389622144302,
+      "observedError": 0.26771261084621406
+    }
+  },
+  {
+    "id": "p063",
+    "arm": "single30",
+    "order": 3,
+    "validation": 3.107798107570865e-06,
+    "actualModelMaxFrequencyError": 3.294217705379733e-06,
+    "previousPid": [
+      1,
+      4,
+      0.5
+    ],
+    "previousPidMaxRho": 0.29182667224616016,
+    "worstWindow": {
+      "record": 1,
+      "block": 0,
+      "frequency": 0.6000000000000001,
+      "inputFourier": 1.8403616956782263,
+      "observedError": 0.0929684026953752
+    }
+  },
+  {
+    "id": "p063",
+    "arm": "repeat2",
+    "order": 3,
+    "validation": 3.484272694542001e-06,
+    "actualModelMaxFrequencyError": 2.0142250909315316e-06,
+    "previousPid": [
+      1,
+      4,
+      0.5
+    ],
+    "previousPidMaxRho": 1.338167254487161,
+    "worstWindow": {
+      "record": 2,
+      "block": 0,
+      "frequency": 0.6000000000000001,
+      "inputFourier": 1.905224202392636,
+      "observedError": 0.4263053365643073
+    }
+  },
+  {
+    "id": "p063",
+    "arm": "repeat4",
+    "order": 3,
+    "validation": 1.5986016658379128e-06,
+    "actualModelMaxFrequencyError": 1.8948463312114201e-06,
+    "previousPid": [
+      1,
+      4,
+      0.5
+    ],
+    "previousPidMaxRho": 1.3381704917270965,
+    "worstWindow": {
+      "record": 2,
+      "block": 0,
+      "frequency": 0.6000000000000001,
+      "inputFourier": 1.905224202392636,
+      "observedError": 0.42630523764439304
+    }
+  },
+  {
+    "id": "p063",
+    "arm": "continuous120",
+    "order": 3,
+    "validation": 4.960060537156593e-07,
+    "actualModelMaxFrequencyError": 3.4155284810391204e-07,
+    "previousPid": [
+      1,
+      4,
+      0.5
+    ],
+    "previousPidMaxRho": 0.29795791119350545,
+    "worstWindow": {
+      "record": 1,
+      "block": 0,
+      "frequency": 0.6000000000000001,
+      "inputFourier": 1.8732115304218881,
+      "observedError": 0.0949214695910473
+    }
+  }
+]

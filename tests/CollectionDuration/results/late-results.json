@@ -1,0 +1,5834 @@
+[
+  {
+    "id": "p000",
+    "condition": "baseline",
+    "arms": {
+      "single30": {
+        "cost": 0.07642124335459671,
+        "oracle": 0.07642124335459671,
+        "loss": 1.0,
+        "vsWorking": 0.24668774077695502,
+        "nominalVsWorking": 0.19846332631754043,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.19551407004358792,
+        "saturation": 0.2751851851851845,
+        "pid": [
+          0.994,
+          0.1,
+          0.7
+        ]
+      },
+      "repeat2": {
+        "cost": 0.07642124335459671,
+        "oracle": 0.07642124335459671,
+        "loss": 1.0,
+        "vsWorking": 0.24668774077695502,
+        "nominalVsWorking": 0.19846332631754043,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.19551407004358792,
+        "saturation": 0.2751851851851845,
+        "pid": [
+          0.994,
+          0.1,
+          0.7
+        ]
+      },
+      "continuous60": {
+        "cost": 0.07642124335459671,
+        "oracle": 0.07642124335459671,
+        "loss": 1.0,
+        "vsWorking": 0.24668774077695502,
+        "nominalVsWorking": 0.19846332631754043,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.19551407004358792,
+        "saturation": 0.2751851851851845,
+        "pid": [
+          0.994,
+          0.1,
+          0.7
+        ]
+      },
+      "repeat4": {
+        "cost": 0.07642124335459671,
+        "oracle": 0.07642124335459671,
+        "loss": 1.0,
+        "vsWorking": 0.24668774077695502,
+        "nominalVsWorking": 0.19846332631754043,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.19551407004358792,
+        "saturation": 0.2751851851851845,
+        "pid": [
+          0.994,
+          0.1,
+          0.7
+        ]
+      },
+      "continuous120": {
+        "cost": 0.07642124335459671,
+        "oracle": 0.07642124335459671,
+        "loss": 1.0,
+        "vsWorking": 0.24668774077695502,
+        "nominalVsWorking": 0.19846332631754043,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.19551407004358792,
+        "saturation": 0.2751851851851845,
+        "pid": [
+          0.994,
+          0.1,
+          0.7
+        ]
+      }
+    }
+  },
+  {
+    "id": "p001",
+    "condition": "baseline",
+    "arms": {
+      "single30": {
+        "cost": 0.07905121759459612,
+        "oracle": 0.07905121759459612,
+        "loss": 1.0,
+        "vsWorking": 0.24508695289213187,
+        "nominalVsWorking": 0.20181059925920605,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.19449054098146917,
+        "saturation": 0.2674074074074068,
+        "pid": [
+          0.994,
+          0.1,
+          0.7
+        ]
+      },
+      "repeat2": {
+        "cost": 0.07905121759459612,
+        "oracle": 0.07905121759459612,
+        "loss": 1.0,
+        "vsWorking": 0.24508695289213187,
+        "nominalVsWorking": 0.20181059925920605,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.19449054098146917,
+        "saturation": 0.2674074074074068,
+        "pid": [
+          0.994,
+          0.1,
+          0.7
+        ]
+      },
+      "continuous60": {
+        "cost": 0.07905121759459612,
+        "oracle": 0.07905121759459612,
+        "loss": 1.0,
+        "vsWorking": 0.24508695289213187,
+        "nominalVsWorking": 0.20181059925920605,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.19449054098146917,
+        "saturation": 0.2674074074074068,
+        "pid": [
+          0.994,
+          0.1,
+          0.7
+        ]
+      },
+      "repeat4": {
+        "cost": 0.07905121759459612,
+        "oracle": 0.07905121759459612,
+        "loss": 1.0,
+        "vsWorking": 0.24508695289213187,
+        "nominalVsWorking": 0.20181059925920605,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.19449054098146917,
+        "saturation": 0.2674074074074068,
+        "pid": [
+          0.994,
+          0.1,
+          0.7
+        ]
+      },
+      "continuous120": {
+        "cost": 0.07905121759459612,
+        "oracle": 0.07905121759459612,
+        "loss": 1.0,
+        "vsWorking": 0.24508695289213187,
+        "nominalVsWorking": 0.20181059925920605,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.19449054098146917,
+        "saturation": 0.2674074074074068,
+        "pid": [
+          0.994,
+          0.1,
+          0.7
+        ]
+      }
+    }
+  },
+  {
+    "id": "p002",
+    "condition": "nonzero_initial",
+    "arms": {
+      "single30": {
+        "cost": 0.07642124335459671,
+        "oracle": 0.07642124335459671,
+        "loss": 1.0,
+        "vsWorking": 0.24668774077695502,
+        "nominalVsWorking": 0.19846332631754043,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.19551407004358792,
+        "saturation": 0.2751851851851845,
+        "pid": [
+          0.994,
+          0.1,
+          0.7
+        ]
+      },
+      "repeat2": {
+        "cost": 0.07642124335459671,
+        "oracle": 0.07642124335459671,
+        "loss": 1.0,
+        "vsWorking": 0.24668774077695502,
+        "nominalVsWorking": 0.19846332631754043,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.19551407004358792,
+        "saturation": 0.2751851851851845,
+        "pid": [
+          0.994,
+          0.1,
+          0.7
+        ]
+      },
+      "continuous60": {
+        "cost": 0.07642124335459671,
+        "oracle": 0.07642124335459671,
+        "loss": 1.0,
+        "vsWorking": 0.24668774077695502,
+        "nominalVsWorking": 0.19846332631754043,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.19551407004358792,
+        "saturation": 0.2751851851851845,
+        "pid": [
+          0.994,
+          0.1,
+          0.7
+        ]
+      },
+      "repeat4": {
+        "cost": 0.07642124335459671,
+        "oracle": 0.07642124335459671,
+        "loss": 1.0,
+        "vsWorking": 0.24668774077695502,
+        "nominalVsWorking": 0.19846332631754043,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.19551407004358792,
+        "saturation": 0.2751851851851845,
+        "pid": [
+          0.994,
+          0.1,
+          0.7
+        ]
+      },
+      "continuous120": {
+        "cost": 0.07642124335459671,
+        "oracle": 0.07642124335459671,
+        "loss": 1.0,
+        "vsWorking": 0.24668774077695502,
+        "nominalVsWorking": 0.19846332631754043,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.19551407004358792,
+        "saturation": 0.2751851851851845,
+        "pid": [
+          0.994,
+          0.1,
+          0.7
+        ]
+      }
+    }
+  },
+  {
+    "id": "p003",
+    "condition": "nonzero_initial",
+    "arms": {
+      "single30": {
+        "cost": 0.07905122445258667,
+        "oracle": 0.07905122445258667,
+        "loss": 1.0,
+        "vsWorking": 0.2450869488821134,
+        "nominalVsWorking": 0.20181059775009014,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.1944905194304209,
+        "saturation": 0.2674074074074068,
+        "pid": [
+          0.994,
+          0.1,
+          0.7
+        ]
+      },
+      "repeat2": {
+        "cost": 0.07905122445258667,
+        "oracle": 0.07905122445258667,
+        "loss": 1.0,
+        "vsWorking": 0.2450869488821134,
+        "nominalVsWorking": 0.20181059775009014,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.1944905194304209,
+        "saturation": 0.2674074074074068,
+        "pid": [
+          0.994,
+          0.1,
+          0.7
+        ]
+      },
+      "continuous60": {
+        "cost": 0.07905122445258667,
+        "oracle": 0.07905122445258667,
+        "loss": 1.0,
+        "vsWorking": 0.2450869488821134,
+        "nominalVsWorking": 0.20181059775009014,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.1944905194304209,
+        "saturation": 0.2674074074074068,
+        "pid": [
+          0.994,
+          0.1,
+          0.7
+        ]
+      },
+      "repeat4": {
+        "cost": 0.07905122445258667,
+        "oracle": 0.07905122445258667,
+        "loss": 1.0,
+        "vsWorking": 0.2450869488821134,
+        "nominalVsWorking": 0.20181059775009014,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.1944905194304209,
+        "saturation": 0.2674074074074068,
+        "pid": [
+          0.994,
+          0.1,
+          0.7
+        ]
+      },
+      "continuous120": {
+        "cost": 0.07905122445258667,
+        "oracle": 0.07905122445258667,
+        "loss": 1.0,
+        "vsWorking": 0.2450869488821134,
+        "nominalVsWorking": 0.20181059775009014,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.1944905194304209,
+        "saturation": 0.2674074074074068,
+        "pid": [
+          0.994,
+          0.1,
+          0.7
+        ]
+      }
+    }
+  },
+  {
+    "id": "p004",
+    "condition": "delay_300ms",
+    "arms": {
+      "single30": {
+        "cost": 0.3093318300327321,
+        "oracle": 0.2561899506807655,
+        "loss": 1.2074315530751865,
+        "vsWorking": 0.9614456569021971,
+        "nominalVsWorking": 1.173906092951242,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.8726408684425028,
+        "saturation": 0.2748148148148142,
+        "pid": [
+          1,
+          0.4,
+          0.1
+        ]
+      },
+      "repeat2": {
+        "cost": 0.3093318300327321,
+        "oracle": 0.2561899506807655,
+        "loss": 1.2074315530751865,
+        "vsWorking": 0.9614456569021971,
+        "nominalVsWorking": 1.173906092951242,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.8726408684425028,
+        "saturation": 0.2748148148148142,
+        "pid": [
+          1,
+          0.4,
+          0.1
+        ]
+      },
+      "continuous60": {
+        "cost": 0.311053512501769,
+        "oracle": 0.2561899506807655,
+        "loss": 1.2141518887654112,
+        "vsWorking": 0.966796881612066,
+        "nominalVsWorking": 1.181641204648664,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.8776958361420537,
+        "saturation": 0.2748148148148142,
+        "pid": [
+          0.994,
+          0.4,
+          0.1
+        ]
+      },
+      "repeat4": {
+        "cost": 0.3100171643196337,
+        "oracle": 0.2561899506807655,
+        "loss": 1.2101066552213888,
+        "vsWorking": 0.9635757696474583,
+        "nominalVsWorking": 1.1764712606973475,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.8746532764589965,
+        "saturation": 0.2748148148148142,
+        "pid": [
+          0.998,
+          0.4,
+          0.1
+        ]
+      },
+      "continuous120": {
+        "cost": 0.311053512501769,
+        "oracle": 0.2561899506807655,
+        "loss": 1.2141518887654112,
+        "vsWorking": 0.966796881612066,
+        "nominalVsWorking": 1.181641204648664,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.8776958361420537,
+        "saturation": 0.2748148148148142,
+        "pid": [
+          0.994,
+          0.4,
+          0.1
+        ]
+      }
+    }
+  },
+  {
+    "id": "p005",
+    "condition": "delay_300ms",
+    "arms": {
+      "single30": {
+        "cost": 0.3049523852544692,
+        "oracle": 0.18601829912123066,
+        "loss": 1.6393676681009086,
+        "vsWorking": 0.7986426221737937,
+        "nominalVsWorking": 1.1441860316019479,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.655976981944815,
+        "saturation": 0.2937037037037029,
+        "pid": [
+          0.999,
+          0.4,
+          0.1
+        ]
+      },
+      "repeat2": {
+        "cost": 0.23130556286255022,
+        "oracle": 0.18601829912123066,
+        "loss": 1.2434559608127866,
+        "vsWorking": 0.6057682778699468,
+        "nominalVsWorking": 0.6265946088361684,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.6057746896849779,
+        "saturation": 0.0,
+        "pid": [
+          1,
+          6.1,
+          0
+        ]
+      },
+      "continuous60": {
+        "cost": 0.3049523852544692,
+        "oracle": 0.18601829912123066,
+        "loss": 1.6393676681009086,
+        "vsWorking": 0.7986426221737937,
+        "nominalVsWorking": 1.1441860316019479,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.655976981944815,
+        "saturation": 0.2937037037037029,
+        "pid": [
+          0.999,
+          0.4,
+          0.1
+        ]
+      },
+      "repeat4": {
+        "cost": 0.36695405484627935,
+        "oracle": 0.18601829912123066,
+        "loss": 1.9726771859532508,
+        "vsWorking": 0.9610193681062333,
+        "nominalVsWorking": 1.2676160694366352,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.7937515885943933,
+        "saturation": 0.29925925925925845,
+        "pid": [
+          0.561,
+          0.1,
+          0.3
+        ]
+      },
+      "continuous120": {
+        "cost": 0.3049523852544692,
+        "oracle": 0.18601829912123066,
+        "loss": 1.6393676681009086,
+        "vsWorking": 0.7986426221737937,
+        "nominalVsWorking": 1.1441860316019479,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.655976981944815,
+        "saturation": 0.2937037037037029,
+        "pid": [
+          0.999,
+          0.4,
+          0.1
+        ]
+      }
+    }
+  },
+  {
+    "id": "p006",
+    "condition": "weak_actuator",
+    "arms": {
+      "single30": {
+        "cost": 0.8641273814921994,
+        "oracle": 0.8546503632710416,
+        "loss": 1.0110887663873283,
+        "vsWorking": 0.9094104026235205,
+        "nominalVsWorking": 0.9995859673407002,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.9378990459763321,
+        "saturation": 0.9966666666666628,
+        "pid": [
+          0.169,
+          0.9,
+          0
+        ]
+      },
+      "repeat2": {
+        "cost": 0.8546504488824742,
+        "oracle": 0.8546503632710416,
+        "loss": 1.0000001001712937,
+        "vsWorking": 0.8994368486257712,
+        "nominalVsWorking": 0.9995860062111268,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.9305984499118654,
+        "saturation": 0.9966666666666628,
+        "pid": [
+          0.22,
+          1.1,
+          0
+        ]
+      },
+      "continuous60": {
+        "cost": 0.8641273814921994,
+        "oracle": 0.8546503632710416,
+        "loss": 1.0110887663873283,
+        "vsWorking": 0.9094104026235205,
+        "nominalVsWorking": 0.9995859673407002,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.9378990459763321,
+        "saturation": 0.9966666666666628,
+        "pid": [
+          0.169,
+          0.9,
+          0
+        ]
+      },
+      "repeat4": {
+        "cost": 0.8546504488824742,
+        "oracle": 0.8546503632710416,
+        "loss": 1.0000001001712937,
+        "vsWorking": 0.8994368486257712,
+        "nominalVsWorking": 0.9995860062111268,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.9305984499118654,
+        "saturation": 0.9966666666666628,
+        "pid": [
+          0.22,
+          1.1,
+          0
+        ]
+      },
+      "continuous120": {
+        "cost": 0.8641273814921994,
+        "oracle": 0.8546503632710416,
+        "loss": 1.0110887663873283,
+        "vsWorking": 0.9094104026235205,
+        "nominalVsWorking": 0.9995859673407002,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.9378990459763321,
+        "saturation": 0.9966666666666628,
+        "pid": [
+          0.169,
+          0.9,
+          0
+        ]
+      }
+    }
+  },
+  {
+    "id": "p007",
+    "condition": "weak_actuator",
+    "arms": {
+      "single30": {
+        "cost": 0.8807820053247561,
+        "oracle": 0.8724612522191515,
+        "loss": 1.0095371033205662,
+        "vsWorking": 0.9133086163009165,
+        "nominalVsWorking": 0.9996246540823914,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.9410203705108765,
+        "saturation": 0.999999999999996,
+        "pid": [
+          0.169,
+          0.9,
+          0
+        ]
+      },
+      "repeat2": {
+        "cost": 0.8724612567592659,
+        "oracle": 0.8724612522191515,
+        "loss": 1.0000000052038005,
+        "vsWorking": 0.9046805888060386,
+        "nominalVsWorking": 0.9996246562055948,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.9347426009661779,
+        "saturation": 0.999999999999996,
+        "pid": [
+          0.22,
+          1.1,
+          0
+        ]
+      },
+      "continuous60": {
+        "cost": 0.8807820053247561,
+        "oracle": 0.8724612522191515,
+        "loss": 1.0095371033205662,
+        "vsWorking": 0.9133086163009165,
+        "nominalVsWorking": 0.9996246540823914,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.9410203705108765,
+        "saturation": 0.999999999999996,
+        "pid": [
+          0.169,
+          0.9,
+          0
+        ]
+      },
+      "repeat4": {
+        "cost": 0.8724612567592659,
+        "oracle": 0.8724612522191515,
+        "loss": 1.0000000052038005,
+        "vsWorking": 0.9046805888060386,
+        "nominalVsWorking": 0.9996246562055948,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.9347426009661779,
+        "saturation": 0.999999999999996,
+        "pid": [
+          0.22,
+          1.1,
+          0
+        ]
+      },
+      "continuous120": {
+        "cost": 0.8807820053247561,
+        "oracle": 0.8724612522191515,
+        "loss": 1.0095371033205662,
+        "vsWorking": 0.9133086163009165,
+        "nominalVsWorking": 0.9996246540823914,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.9410203705108765,
+        "saturation": 0.999999999999996,
+        "pid": [
+          0.169,
+          0.9,
+          0
+        ]
+      }
+    }
+  },
+  {
+    "id": "p008",
+    "condition": "four_times_slower",
+    "arms": {
+      "single30": {
+        "cost": 0.08900665215626885,
+        "oracle": 0.08870725115063494,
+        "loss": 1.0033751581945145,
+        "vsWorking": 0.26689384021022666,
+        "nominalVsWorking": 0.2029936532924356,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.23875550516793723,
+        "saturation": 0.20037037037036998,
+        "pid": [
+          1,
+          0.1,
+          11.9
+        ]
+      },
+      "repeat2": {
+        "cost": 0.08894682400808102,
+        "oracle": 0.08870725115063494,
+        "loss": 1.0027007133502452,
+        "vsWorking": 0.26671444053800347,
+        "nominalVsWorking": 0.20287055115251776,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.23851113636594476,
+        "saturation": 0.19962962962962927,
+        "pid": [
+          1,
+          0.1,
+          12
+        ]
+      },
+      "continuous60": {
+        "cost": 0.08870725115063494,
+        "oracle": 0.08870725115063494,
+        "loss": 1.0,
+        "vsWorking": 0.26599606142380355,
+        "nominalVsWorking": 0.202353750329052,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.23733196276183602,
+        "saturation": 0.19481481481481447,
+        "pid": [
+          1,
+          0.1,
+          12.6
+        ]
+      },
+      "repeat4": {
+        "cost": 0.08894682400808102,
+        "oracle": 0.08870725115063494,
+        "loss": 1.0027007133502452,
+        "vsWorking": 0.26671444053800347,
+        "nominalVsWorking": 0.20287055115251776,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.23851113636594476,
+        "saturation": 0.19962962962962927,
+        "pid": [
+          1,
+          0.1,
+          12
+        ]
+      },
+      "continuous120": {
+        "cost": 0.08870725115063494,
+        "oracle": 0.08870725115063494,
+        "loss": 1.0,
+        "vsWorking": 0.26599606142380355,
+        "nominalVsWorking": 0.202353750329052,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.23733196276183602,
+        "saturation": 0.19481481481481447,
+        "pid": [
+          1,
+          0.1,
+          12.6
+        ]
+      }
+    }
+  },
+  {
+    "id": "p009",
+    "condition": "four_times_slower",
+    "arms": {
+      "single30": {
+        "cost": 0.08739773492834699,
+        "oracle": 0.08734035307306359,
+        "loss": 1.0006569913363574,
+        "vsWorking": 0.2343441866231222,
+        "nominalVsWorking": 0.20442566650904054,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.19341783445867217,
+        "saturation": 0.21370370370370326,
+        "pid": [
+          1,
+          0.1,
+          11.9
+        ]
+      },
+      "repeat2": {
+        "cost": 0.08734035307306359,
+        "oracle": 0.08734035307306359,
+        "loss": 1.0,
+        "vsWorking": 0.23419032560813896,
+        "nominalVsWorking": 0.2042876469292123,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.19322001554985097,
+        "saturation": 0.2129629629629625,
+        "pid": [
+          1,
+          0.1,
+          12
+        ]
+      },
+      "continuous60": {
+        "cost": 0.08739773492834699,
+        "oracle": 0.08734035307306359,
+        "loss": 1.0006569913363574,
+        "vsWorking": 0.2343441866231222,
+        "nominalVsWorking": 0.20442566650904054,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.19341783445867217,
+        "saturation": 0.21370370370370326,
+        "pid": [
+          1,
+          0.1,
+          11.9
+        ]
+      },
+      "repeat4": {
+        "cost": 0.08739773492834699,
+        "oracle": 0.08734035307306359,
+        "loss": 1.0006569913363574,
+        "vsWorking": 0.2343441866231222,
+        "nominalVsWorking": 0.20442566650904054,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.19341783445867217,
+        "saturation": 0.21370370370370326,
+        "pid": [
+          1,
+          0.1,
+          11.9
+        ]
+      },
+      "continuous120": {
+        "cost": 0.08739773492834699,
+        "oracle": 0.08734035307306359,
+        "loss": 1.0006569913363574,
+        "vsWorking": 0.2343441866231222,
+        "nominalVsWorking": 0.20442566650904054,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.19341783445867217,
+        "saturation": 0.21370370370370326,
+        "pid": [
+          1,
+          0.1,
+          11.9
+        ]
+      }
+    }
+  },
+  {
+    "id": "p010",
+    "condition": "coupled_disturbance",
+    "arms": {
+      "single30": {
+        "cost": 6.819901962535793,
+        "oracle": 3.106537979159817,
+        "loss": 2.1953383503717148,
+        "vsWorking": 1.1181835308382593,
+        "nominalVsWorking": 1.1457625970888077,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.1195988161540644,
+        "saturation": 0.22481481481481513,
+        "pid": [
+          0.215,
+          1.2,
+          0.6
+        ]
+      },
+      "repeat2": {
+        "cost": 6.099089974454529,
+        "oracle": 3.106537979159817,
+        "loss": 1.9633077127562002,
+        "vsWorking": 1.0,
+        "nominalVsWorking": 1.0,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.0,
+        "saturation": 0.2666666666666668,
+        "pid": [
+          0.4000000059604645,
+          2.5,
+          0.20000000298023224
+        ]
+      },
+      "continuous60": {
+        "cost": 9.433993507016188,
+        "oracle": 3.106537979159817,
+        "loss": 3.036818983158761,
+        "vsWorking": 1.5467870693053543,
+        "nominalVsWorking": 1.5828903870957625,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.5740096883773378,
+        "saturation": 0.01814814814814814,
+        "pid": [
+          0.126,
+          1.5,
+          0.2
+        ]
+      },
+      "repeat4": {
+        "cost": 6.099089974454529,
+        "oracle": 3.106537979159817,
+        "loss": 1.9633077127562002,
+        "vsWorking": 1.0,
+        "nominalVsWorking": 1.0,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.0,
+        "saturation": 0.2666666666666668,
+        "pid": [
+          0.4000000059604645,
+          2.5,
+          0.20000000298023224
+        ]
+      },
+      "continuous120": {
+        "cost": 7.451708820433786,
+        "oracle": 3.106537979159817,
+        "loss": 2.398718081164148,
+        "vsWorking": 1.2217738796516489,
+        "nominalVsWorking": 1.2403728964420233,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.229324085976192,
+        "saturation": 0.19111111111111134,
+        "pid": [
+          0.14,
+          0.8,
+          0.6
+        ]
+      }
+    }
+  },
+  {
+    "id": "p011",
+    "condition": "coupled_disturbance",
+    "arms": {
+      "single30": {
+        "cost": 5.887656699146176,
+        "oracle": 3.063782346015329,
+        "loss": 1.921695484277302,
+        "vsWorking": 0.9641411414630008,
+        "nominalVsWorking": 0.9760662304033421,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.9569744060726862,
+        "saturation": 0.28481481481481485,
+        "pid": [
+          0.403,
+          2.3,
+          0.3
+        ]
+      },
+      "repeat2": {
+        "cost": 10.351602751217978,
+        "oracle": 3.063782346015329,
+        "loss": 3.378700436955317,
+        "vsWorking": 1.6951406310728327,
+        "nominalVsWorking": 1.7128431995466058,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.7240386933189438,
+        "saturation": 0.0,
+        "pid": [
+          0.058,
+          0.7,
+          1
+        ]
+      },
+      "continuous60": {
+        "cost": 14.755191241156021,
+        "oracle": 3.063782346015329,
+        "loss": 4.816005046946699,
+        "vsWorking": 2.4162561869166206,
+        "nominalVsWorking": 2.6171132892794295,
+        "nominalFailures": 0,
+        "matchedVsWorking": 2.473824133672193,
+        "saturation": 0.0,
+        "pid": [
+          0.102,
+          156,
+          0
+        ]
+      },
+      "repeat4": {
+        "cost": 6.106633609900897,
+        "oracle": 3.063782346015329,
+        "loss": 1.9931682215752098,
+        "vsWorking": 1.0,
+        "nominalVsWorking": 1.0,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.0,
+        "saturation": 0.25370370370370376,
+        "pid": [
+          0.4000000059604645,
+          2.5,
+          0.20000000298023224
+        ]
+      },
+      "continuous120": {
+        "cost": 6.106633609900897,
+        "oracle": 3.063782346015329,
+        "loss": 1.9931682215752098,
+        "vsWorking": 1.0,
+        "nominalVsWorking": 1.0,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.0,
+        "saturation": 0.25370370370370376,
+        "pid": [
+          0.4000000059604645,
+          2.5,
+          0.20000000298023224
+        ]
+      }
+    }
+  },
+  {
+    "id": "p012",
+    "condition": "baseline",
+    "arms": {
+      "single30": {
+        "cost": 0.08910025558698002,
+        "oracle": 0.08910025558698002,
+        "loss": 1.0,
+        "vsWorking": 0.2676366385179012,
+        "nominalVsWorking": 0.2024032649805791,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.24229137538577006,
+        "saturation": 0.213333333333333,
+        "pid": [
+          1,
+          0.1,
+          10.4
+        ]
+      },
+      "repeat2": {
+        "cost": 0.08910025558698002,
+        "oracle": 0.08910025558698002,
+        "loss": 1.0,
+        "vsWorking": 0.2676366385179012,
+        "nominalVsWorking": 0.2024032649805791,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.24229137538577006,
+        "saturation": 0.213333333333333,
+        "pid": [
+          1,
+          0.1,
+          10.4
+        ]
+      },
+      "continuous60": {
+        "cost": 0.08910025558698002,
+        "oracle": 0.08910025558698002,
+        "loss": 1.0,
+        "vsWorking": 0.2676366385179012,
+        "nominalVsWorking": 0.2024032649805791,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.24229137538577006,
+        "saturation": 0.213333333333333,
+        "pid": [
+          1,
+          0.1,
+          10.4
+        ]
+      },
+      "repeat4": {
+        "cost": 0.08910025558698002,
+        "oracle": 0.08910025558698002,
+        "loss": 1.0,
+        "vsWorking": 0.2676366385179012,
+        "nominalVsWorking": 0.2024032649805791,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.24229137538577006,
+        "saturation": 0.213333333333333,
+        "pid": [
+          1,
+          0.1,
+          10.4
+        ]
+      },
+      "continuous120": {
+        "cost": 0.08910025558698002,
+        "oracle": 0.08910025558698002,
+        "loss": 1.0,
+        "vsWorking": 0.2676366385179012,
+        "nominalVsWorking": 0.2024032649805791,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.24229137538577006,
+        "saturation": 0.213333333333333,
+        "pid": [
+          1,
+          0.1,
+          10.4
+        ]
+      }
+    }
+  },
+  {
+    "id": "p013",
+    "condition": "baseline",
+    "arms": {
+      "single30": {
+        "cost": 0.0874426353511976,
+        "oracle": 0.0874426353511976,
+        "loss": 1.0,
+        "vsWorking": 0.23474152238378493,
+        "nominalVsWorking": 0.20358166079480325,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.19578119401435415,
+        "saturation": 0.22370370370370335,
+        "pid": [
+          1,
+          0.1,
+          10.4
+        ]
+      },
+      "repeat2": {
+        "cost": 0.0874426353511976,
+        "oracle": 0.0874426353511976,
+        "loss": 1.0,
+        "vsWorking": 0.23474152238378493,
+        "nominalVsWorking": 0.20358166079480325,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.19578119401435415,
+        "saturation": 0.22370370370370335,
+        "pid": [
+          1,
+          0.1,
+          10.4
+        ]
+      },
+      "continuous60": {
+        "cost": 0.0874426353511976,
+        "oracle": 0.0874426353511976,
+        "loss": 1.0,
+        "vsWorking": 0.23474152238378493,
+        "nominalVsWorking": 0.20358166079480325,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.19578119401435415,
+        "saturation": 0.22370370370370335,
+        "pid": [
+          1,
+          0.1,
+          10.4
+        ]
+      },
+      "repeat4": {
+        "cost": 0.0874426353511976,
+        "oracle": 0.0874426353511976,
+        "loss": 1.0,
+        "vsWorking": 0.23474152238378493,
+        "nominalVsWorking": 0.20358166079480325,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.19578119401435415,
+        "saturation": 0.22370370370370335,
+        "pid": [
+          1,
+          0.1,
+          10.4
+        ]
+      },
+      "continuous120": {
+        "cost": 0.0874426353511976,
+        "oracle": 0.0874426353511976,
+        "loss": 1.0,
+        "vsWorking": 0.23474152238378493,
+        "nominalVsWorking": 0.20358166079480325,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.19578119401435415,
+        "saturation": 0.22370370370370335,
+        "pid": [
+          1,
+          0.1,
+          10.4
+        ]
+      }
+    }
+  },
+  {
+    "id": "p014",
+    "condition": "nonzero_initial",
+    "arms": {
+      "single30": {
+        "cost": 0.08969816616514599,
+        "oracle": 0.08969816616514599,
+        "loss": 1.0,
+        "vsWorking": 0.34981990670175567,
+        "nominalVsWorking": 0.2632671008447102,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.40884899406218755,
+        "saturation": 0.20925925925925892,
+        "pid": [
+          1,
+          0.1,
+          10.4
+        ]
+      },
+      "repeat2": {
+        "cost": 0.08969816616514599,
+        "oracle": 0.08969816616514599,
+        "loss": 1.0,
+        "vsWorking": 0.34981990670175567,
+        "nominalVsWorking": 0.2632671008447102,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.40884899406218755,
+        "saturation": 0.20925925925925892,
+        "pid": [
+          1,
+          0.1,
+          10.4
+        ]
+      },
+      "continuous60": {
+        "cost": 0.08969816616514599,
+        "oracle": 0.08969816616514599,
+        "loss": 1.0,
+        "vsWorking": 0.34981990670175567,
+        "nominalVsWorking": 0.2632671008447102,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.40884899406218755,
+        "saturation": 0.20925925925925892,
+        "pid": [
+          1,
+          0.1,
+          10.4
+        ]
+      },
+      "repeat4": {
+        "cost": 0.08969816616514599,
+        "oracle": 0.08969816616514599,
+        "loss": 1.0,
+        "vsWorking": 0.34981990670175567,
+        "nominalVsWorking": 0.2632671008447102,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.40884899406218755,
+        "saturation": 0.20925925925925892,
+        "pid": [
+          1,
+          0.1,
+          10.4
+        ]
+      },
+      "continuous120": {
+        "cost": 0.08969816616514599,
+        "oracle": 0.08969816616514599,
+        "loss": 1.0,
+        "vsWorking": 0.34981990670175567,
+        "nominalVsWorking": 0.2632671008447102,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.40884899406218755,
+        "saturation": 0.20925925925925892,
+        "pid": [
+          1,
+          0.1,
+          10.4
+        ]
+      }
+    }
+  },
+  {
+    "id": "p015",
+    "condition": "nonzero_initial",
+    "arms": {
+      "single30": {
+        "cost": 0.08697986783704159,
+        "oracle": 0.08697986783704159,
+        "loss": 1.0,
+        "vsWorking": 0.29553084266857066,
+        "nominalVsWorking": 0.2616802276337234,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.3098618358615676,
+        "saturation": 0.22629629629629594,
+        "pid": [
+          1,
+          0.1,
+          10.4
+        ]
+      },
+      "repeat2": {
+        "cost": 0.08697986783704159,
+        "oracle": 0.08697986783704159,
+        "loss": 1.0,
+        "vsWorking": 0.29553084266857066,
+        "nominalVsWorking": 0.2616802276337234,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.3098618358615676,
+        "saturation": 0.22629629629629594,
+        "pid": [
+          1,
+          0.1,
+          10.4
+        ]
+      },
+      "continuous60": {
+        "cost": 0.08697986783704159,
+        "oracle": 0.08697986783704159,
+        "loss": 1.0,
+        "vsWorking": 0.29553084266857066,
+        "nominalVsWorking": 0.2616802276337234,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.3098618358615676,
+        "saturation": 0.22629629629629594,
+        "pid": [
+          1,
+          0.1,
+          10.4
+        ]
+      },
+      "repeat4": {
+        "cost": 0.08697986783704159,
+        "oracle": 0.08697986783704159,
+        "loss": 1.0,
+        "vsWorking": 0.29553084266857066,
+        "nominalVsWorking": 0.2616802276337234,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.3098618358615676,
+        "saturation": 0.22629629629629594,
+        "pid": [
+          1,
+          0.1,
+          10.4
+        ]
+      },
+      "continuous120": {
+        "cost": 0.08697986783704159,
+        "oracle": 0.08697986783704159,
+        "loss": 1.0,
+        "vsWorking": 0.29553084266857066,
+        "nominalVsWorking": 0.2616802276337234,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.3098618358615676,
+        "saturation": 0.22629629629629594,
+        "pid": [
+          1,
+          0.1,
+          10.4
+        ]
+      }
+    }
+  },
+  {
+    "id": "p016",
+    "condition": "delay_300ms",
+    "arms": {
+      "single30": {
+        "cost": 0.1518707843626318,
+        "oracle": 0.1518707843626318,
+        "loss": 1.0,
+        "vsWorking": 0.4409504968949709,
+        "nominalVsWorking": 0.5432968430989648,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.41989775217232617,
+        "saturation": 0.30333333333333257,
+        "pid": [
+          1,
+          0.1,
+          2.4
+        ]
+      },
+      "repeat2": {
+        "cost": 0.1535080436226232,
+        "oracle": 0.1518707843626318,
+        "loss": 1.0107806071250809,
+        "vsWorking": 0.4457042109636048,
+        "nominalVsWorking": 0.5493989913378144,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.42468307670829,
+        "saturation": 0.3025925925925918,
+        "pid": [
+          0.994,
+          0.1,
+          2.4
+        ]
+      },
+      "continuous60": {
+        "cost": 0.2023861912121354,
+        "oracle": 0.1518707843626318,
+        "loss": 1.3326209649966954,
+        "vsWorking": 0.5876198766879485,
+        "nominalVsWorking": 0.7127720268861053,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.5606800249417385,
+        "saturation": 0.29592592592592515,
+        "pid": [
+          0.77,
+          0.1,
+          2.8
+        ]
+      },
+      "repeat4": {
+        "cost": 0.21909347289229916,
+        "oracle": 0.1518707843626318,
+        "loss": 1.4426308115269582,
+        "vsWorking": 0.6361287731788073,
+        "nominalVsWorking": 0.795190833588907,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.6147094456865888,
+        "saturation": 0.29777777777777703,
+        "pid": [
+          0.815,
+          0.1,
+          2.4
+        ]
+      },
+      "continuous120": {
+        "cost": 0.20196667404958638,
+        "oracle": 0.1518707843626318,
+        "loss": 1.3298586353997972,
+        "vsWorking": 0.5864018260796086,
+        "nominalVsWorking": 0.7112031889362622,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.5595131726531613,
+        "saturation": 0.29592592592592515,
+        "pid": [
+          0.771,
+          0.1,
+          2.8
+        ]
+      }
+    }
+  },
+  {
+    "id": "p017",
+    "condition": "delay_300ms",
+    "arms": {
+      "single30": {
+        "cost": 0.18389489146125534,
+        "oracle": 0.18389489146125534,
+        "loss": 1.0,
+        "vsWorking": 0.4758822300339181,
+        "nominalVsWorking": 0.6429248879914542,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.46130946468402684,
+        "saturation": 0.0029629629629629632,
+        "pid": [
+          0.981,
+          5.5,
+          1.1
+        ]
+      },
+      "repeat2": {
+        "cost": 0.23584989943240975,
+        "oracle": 0.18389489146125534,
+        "loss": 1.2825255642411402,
+        "vsWorking": 0.6103311255865829,
+        "nominalVsWorking": 0.8368601201566961,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.5242153067713001,
+        "saturation": 0.304814814814814,
+        "pid": [
+          0.994,
+          0.3,
+          1.7
+        ]
+      },
+      "continuous60": {
+        "cost": 0.23584989943240975,
+        "oracle": 0.18389489146125534,
+        "loss": 1.2825255642411402,
+        "vsWorking": 0.6103311255865829,
+        "nominalVsWorking": 0.8368601201566961,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.5242153067713001,
+        "saturation": 0.304814814814814,
+        "pid": [
+          0.994,
+          0.3,
+          1.7
+        ]
+      },
+      "repeat4": {
+        "cost": 0.24425098253380406,
+        "oracle": 0.18389489146125534,
+        "loss": 1.3282097212867117,
+        "vsWorking": 0.6320714041186493,
+        "nominalVsWorking": 0.6755624650839263,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.6299008345655486,
+        "saturation": 0.007407407407407408,
+        "pid": [
+          0.999,
+          6.3,
+          1.7
+        ]
+      },
+      "continuous120": {
+        "cost": 0.23623241131558087,
+        "oracle": 0.18389489146125534,
+        "loss": 1.2846056213875439,
+        "vsWorking": 0.6113209878200115,
+        "nominalVsWorking": 0.8381470904285943,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.5250710443025015,
+        "saturation": 0.304814814814814,
+        "pid": [
+          0.993,
+          0.3,
+          1.7
+        ]
+      }
+    }
+  },
+  {
+    "id": "p018",
+    "condition": "weak_actuator",
+    "arms": {
+      "single30": {
+        "cost": 0.7879971908569013,
+        "oracle": 0.7845657144177821,
+        "loss": 1.004373727243059,
+        "vsWorking": 0.8863759540393669,
+        "nominalVsWorking": 0.9989818489368815,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.9074270849133953,
+        "saturation": 0.9966666666666628,
+        "pid": [
+          0.22,
+          1.1,
+          0
+        ]
+      },
+      "repeat2": {
+        "cost": 0.7879971908569013,
+        "oracle": 0.7845657144177821,
+        "loss": 1.004373727243059,
+        "vsWorking": 0.8863759540393669,
+        "nominalVsWorking": 0.9989818489368815,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.9074270849133953,
+        "saturation": 0.9966666666666628,
+        "pid": [
+          0.22,
+          1.1,
+          0
+        ]
+      },
+      "continuous60": {
+        "cost": 0.7879971908569013,
+        "oracle": 0.7845657144177821,
+        "loss": 1.004373727243059,
+        "vsWorking": 0.8863759540393669,
+        "nominalVsWorking": 0.9989818489368815,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.9074270849133953,
+        "saturation": 0.9966666666666628,
+        "pid": [
+          0.22,
+          1.1,
+          0
+        ]
+      },
+      "repeat4": {
+        "cost": 0.7879971908569013,
+        "oracle": 0.7845657144177821,
+        "loss": 1.004373727243059,
+        "vsWorking": 0.8863759540393669,
+        "nominalVsWorking": 0.9989818489368815,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.9074270849133953,
+        "saturation": 0.9966666666666628,
+        "pid": [
+          0.22,
+          1.1,
+          0
+        ]
+      },
+      "continuous120": {
+        "cost": 0.7879971908569013,
+        "oracle": 0.7845657144177821,
+        "loss": 1.004373727243059,
+        "vsWorking": 0.8863759540393669,
+        "nominalVsWorking": 0.9989818489368815,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.9074270849133953,
+        "saturation": 0.9966666666666628,
+        "pid": [
+          0.22,
+          1.1,
+          0
+        ]
+      }
+    }
+  },
+  {
+    "id": "p019",
+    "condition": "weak_actuator",
+    "arms": {
+      "single30": {
+        "cost": 0.8017456389690463,
+        "oracle": 0.7918155052174844,
+        "loss": 1.0125409690592435,
+        "vsWorking": 0.8990441253109448,
+        "nominalVsWorking": 0.9990923321646279,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.9219002225848856,
+        "saturation": 0.9966666666666628,
+        "pid": [
+          0.169,
+          0.9,
+          0
+        ]
+      },
+      "repeat2": {
+        "cost": 0.7918157170987485,
+        "oracle": 0.7918155052174844,
+        "loss": 1.000000267589183,
+        "vsWorking": 0.8879091250211179,
+        "nominalVsWorking": 0.9990924356693845,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.9123184305721465,
+        "saturation": 0.9966666666666628,
+        "pid": [
+          0.22,
+          1.1,
+          0
+        ]
+      },
+      "continuous60": {
+        "cost": 0.8017456389690463,
+        "oracle": 0.7918155052174844,
+        "loss": 1.0125409690592435,
+        "vsWorking": 0.8990441253109448,
+        "nominalVsWorking": 0.9990923321646279,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.9219002225848856,
+        "saturation": 0.9966666666666628,
+        "pid": [
+          0.169,
+          0.9,
+          0
+        ]
+      },
+      "repeat4": {
+        "cost": 0.7918157170987485,
+        "oracle": 0.7918155052174844,
+        "loss": 1.000000267589183,
+        "vsWorking": 0.8879091250211179,
+        "nominalVsWorking": 0.9990924356693845,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.9123184305721465,
+        "saturation": 0.9966666666666628,
+        "pid": [
+          0.22,
+          1.1,
+          0
+        ]
+      },
+      "continuous120": {
+        "cost": 0.7918157170987485,
+        "oracle": 0.7918155052174844,
+        "loss": 1.000000267589183,
+        "vsWorking": 0.8879091250211179,
+        "nominalVsWorking": 0.9990924356693845,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.9123184305721465,
+        "saturation": 0.9966666666666628,
+        "pid": [
+          0.22,
+          1.1,
+          0
+        ]
+      }
+    }
+  },
+  {
+    "id": "p020",
+    "condition": "four_times_slower",
+    "arms": {
+      "single30": {
+        "cost": 0.2179749373406764,
+        "oracle": 0.15195171023129128,
+        "loss": 1.434501375528375,
+        "vsWorking": 0.4910824183909442,
+        "nominalVsWorking": 0.6375188224360933,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.29686084151201003,
+        "saturation": 0.07222222222222219,
+        "pid": [
+          1,
+          5.7,
+          29.3
+        ]
+      },
+      "repeat2": {
+        "cost": 0.153067776550531,
+        "oracle": 0.15195171023129128,
+        "loss": 1.0073448750102312,
+        "vsWorking": 0.34485108610755916,
+        "nominalVsWorking": 0.41949990993105346,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.16279051143431877,
+        "saturation": 0.08592592592592589,
+        "pid": [
+          0.998,
+          0.1,
+          29.8
+        ]
+      },
+      "continuous60": {
+        "cost": 0.15227189490886686,
+        "oracle": 0.15195171023129128,
+        "loss": 1.0021071475739773,
+        "vsWorking": 0.3430580199591766,
+        "nominalVsWorking": 0.4168458939233527,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.16470388062948854,
+        "saturation": 0.08592592592592589,
+        "pid": [
+          1,
+          0.1,
+          28.5
+        ]
+      },
+      "repeat4": {
+        "cost": 0.26421520703314116,
+        "oracle": 0.15195171023129128,
+        "loss": 1.7388103538352382,
+        "vsWorking": 0.5952585394838693,
+        "nominalVsWorking": 0.7908610619060221,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.44103760769758515,
+        "saturation": 0.07407407407407403,
+        "pid": [
+          1,
+          4.4,
+          28.6
+        ]
+      },
+      "continuous120": {
+        "cost": 0.15195171023129128,
+        "oracle": 0.15195171023129128,
+        "loss": 1.0,
+        "vsWorking": 0.3423366660837547,
+        "nominalVsWorking": 0.4158861804677172,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.16560166074561647,
+        "saturation": 0.08592592592592589,
+        "pid": [
+          1,
+          0.1,
+          28
+        ]
+      }
+    }
+  },
+  {
+    "id": "p021",
+    "condition": "four_times_slower",
+    "arms": {
+      "single30": {
+        "cost": 0.17100917169727464,
+        "oracle": 0.16737122491470482,
+        "loss": 1.021735795889788,
+        "vsWorking": 0.40635148194549614,
+        "nominalVsWorking": 0.5892823842610859,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.08261136227886483,
+        "saturation": 0.08148148148148145,
+        "pid": [
+          1,
+          0.1,
+          98.8
+        ]
+      },
+      "repeat2": {
+        "cost": 0.17565689752037553,
+        "oracle": 0.16737122491470482,
+        "loss": 1.0495047617049658,
+        "vsWorking": 0.41739539413540294,
+        "nominalVsWorking": 0.5845384249197749,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.09560832295882003,
+        "saturation": 0.08148148148148145,
+        "pid": [
+          0.892,
+          0.1,
+          98.8
+        ]
+      },
+      "continuous60": {
+        "cost": 0.17100917169727464,
+        "oracle": 0.16737122491470482,
+        "loss": 1.021735795889788,
+        "vsWorking": 0.40635148194549614,
+        "nominalVsWorking": 0.5892823842610859,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.08261136227886483,
+        "saturation": 0.08148148148148145,
+        "pid": [
+          1,
+          0.1,
+          98.8
+        ]
+      },
+      "repeat4": {
+        "cost": 0.16737122491470482,
+        "oracle": 0.16737122491470482,
+        "loss": 1.0,
+        "vsWorking": 0.39770700368936496,
+        "nominalVsWorking": 0.5489810761927397,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.09810185631853428,
+        "saturation": 0.0818518518518518,
+        "pid": [
+          1,
+          0.1,
+          75.1
+        ]
+      },
+      "continuous120": {
+        "cost": 0.17100917169727464,
+        "oracle": 0.16737122491470482,
+        "loss": 1.021735795889788,
+        "vsWorking": 0.40635148194549614,
+        "nominalVsWorking": 0.5892823842610859,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.08261136227886483,
+        "saturation": 0.08148148148148145,
+        "pid": [
+          1,
+          0.1,
+          98.8
+        ]
+      }
+    }
+  },
+  {
+    "id": "p022",
+    "condition": "coupled_disturbance",
+    "arms": {
+      "single30": {
+        "cost": 6.581591069105821,
+        "oracle": 3.280697892153158,
+        "loss": 2.006155789244663,
+        "vsWorking": 1.0,
+        "nominalVsWorking": 1.0,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.0,
+        "saturation": 0.22296296296296317,
+        "pid": [
+          0.4000000059604645,
+          2.5,
+          0.20000000298023224
+        ]
+      },
+      "repeat2": {
+        "cost": 6.581591069105821,
+        "oracle": 3.280697892153158,
+        "loss": 2.006155789244663,
+        "vsWorking": 1.0,
+        "nominalVsWorking": 1.0,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.0,
+        "saturation": 0.22296296296296317,
+        "pid": [
+          0.4000000059604645,
+          2.5,
+          0.20000000298023224
+        ]
+      },
+      "continuous60": {
+        "cost": 6.581591069105821,
+        "oracle": 3.280697892153158,
+        "loss": 2.006155789244663,
+        "vsWorking": 1.0,
+        "nominalVsWorking": 1.0,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.0,
+        "saturation": 0.22296296296296317,
+        "pid": [
+          0.4000000059604645,
+          2.5,
+          0.20000000298023224
+        ]
+      },
+      "repeat4": {
+        "cost": 6.581591069105821,
+        "oracle": 3.280697892153158,
+        "loss": 2.006155789244663,
+        "vsWorking": 1.0,
+        "nominalVsWorking": 1.0,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.0,
+        "saturation": 0.22296296296296317,
+        "pid": [
+          0.4000000059604645,
+          2.5,
+          0.20000000298023224
+        ]
+      },
+      "continuous120": {
+        "cost": 6.581591069105821,
+        "oracle": 3.280697892153158,
+        "loss": 2.006155789244663,
+        "vsWorking": 1.0,
+        "nominalVsWorking": 1.0,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.0,
+        "saturation": 0.22296296296296317,
+        "pid": [
+          0.4000000059604645,
+          2.5,
+          0.20000000298023224
+        ]
+      }
+    }
+  },
+  {
+    "id": "p023",
+    "condition": "coupled_disturbance",
+    "arms": {
+      "single30": {
+        "cost": 6.708184868273381,
+        "oracle": 3.4480602399618707,
+        "loss": 1.9454952644178751,
+        "vsWorking": 1.0,
+        "nominalVsWorking": 1.0,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.0,
+        "saturation": 0.23444444444444468,
+        "pid": [
+          0.4000000059604645,
+          2.5,
+          0.20000000298023224
+        ]
+      },
+      "repeat2": {
+        "cost": 13.370500607970714,
+        "oracle": 3.4480602399618707,
+        "loss": 3.877687649714196,
+        "vsWorking": 1.9931622145965313,
+        "nominalVsWorking": 2.120807053173165,
+        "nominalFailures": 0,
+        "matchedVsWorking": 2.0161111728161463,
+        "saturation": 0.0,
+        "pid": [
+          0.063,
+          250,
+          0.9
+        ]
+      },
+      "continuous60": {
+        "cost": 9.298124097178952,
+        "oracle": 3.4480602399618707,
+        "loss": 2.696624609227179,
+        "vsWorking": 1.3860864421245735,
+        "nominalVsWorking": 1.411299346917386,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.396472635313532,
+        "saturation": 0.0,
+        "pid": [
+          0.102,
+          1.2,
+          1
+        ]
+      },
+      "repeat4": {
+        "cost": 9.277016576908556,
+        "oracle": 3.4480602399618707,
+        "loss": 2.690503045564872,
+        "vsWorking": 1.3829399098382877,
+        "nominalVsWorking": 1.3843271289929835,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.3927666214291872,
+        "saturation": 0.03888888888888886,
+        "pid": [
+          0.058,
+          0.5,
+          1.6
+        ]
+      },
+      "continuous120": {
+        "cost": 6.708184868273381,
+        "oracle": 3.4480602399618707,
+        "loss": 1.9454952644178751,
+        "vsWorking": 1.0,
+        "nominalVsWorking": 1.0,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.0,
+        "saturation": 0.23444444444444468,
+        "pid": [
+          0.4000000059604645,
+          2.5,
+          0.20000000298023224
+        ]
+      }
+    }
+  },
+  {
+    "id": "p024",
+    "condition": "baseline",
+    "arms": {
+      "single30": {
+        "cost": 0.09993497937342787,
+        "oracle": 0.09993497937342787,
+        "loss": 1.0,
+        "vsWorking": 0.533955600999626,
+        "nominalVsWorking": 0.6801894808421295,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.535080293975215,
+        "saturation": 0.0,
+        "pid": [
+          0.997,
+          6,
+          0
+        ]
+      },
+      "repeat2": {
+        "cost": 0.11691142611712288,
+        "oracle": 0.09993497937342787,
+        "loss": 1.1698749211750872,
+        "vsWorking": 0.6246612666304338,
+        "nominalVsWorking": 0.6888776580004627,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.606028929155855,
+        "saturation": 0.0,
+        "pid": [
+          0.889,
+          5.5,
+          0
+        ]
+      },
+      "continuous60": {
+        "cost": 0.10025696629725184,
+        "oracle": 0.09993497937342787,
+        "loss": 1.0032219641795372,
+        "vsWorking": 0.5356759868195101,
+        "nominalVsWorking": 0.6769396546981683,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.535080293975215,
+        "saturation": 0.0,
+        "pid": [
+          0.994,
+          6,
+          0
+        ]
+      },
+      "repeat4": {
+        "cost": 0.10780320489169666,
+        "oracle": 0.09993497937342787,
+        "loss": 1.078733448164006,
+        "vsWorking": 0.5759957666328108,
+        "nominalVsWorking": 0.7598144679478003,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.6003869756945993,
+        "saturation": 0.0,
+        "pid": [
+          0.994,
+          5.7,
+          0
+        ]
+      },
+      "continuous120": {
+        "cost": 0.10025696629725184,
+        "oracle": 0.09993497937342787,
+        "loss": 1.0032219641795372,
+        "vsWorking": 0.5356759868195101,
+        "nominalVsWorking": 0.6769396546981683,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.535080293975215,
+        "saturation": 0.0,
+        "pid": [
+          0.994,
+          6,
+          0
+        ]
+      }
+    }
+  },
+  {
+    "id": "p025",
+    "condition": "baseline",
+    "arms": {
+      "single30": {
+        "cost": 0.12377090568606941,
+        "oracle": 0.0920569848250582,
+        "loss": 1.344503145755634,
+        "vsWorking": 0.561660441492126,
+        "nominalVsWorking": 0.4861542104823479,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.44118565658324266,
+        "saturation": 0.0033333333333333335,
+        "pid": [
+          0.997,
+          0.1,
+          0.4
+        ]
+      },
+      "repeat2": {
+        "cost": 0.12112815975959577,
+        "oracle": 0.0920569848250582,
+        "loss": 1.3157954281229545,
+        "vsWorking": 0.5496679151743538,
+        "nominalVsWorking": 0.5674597842724196,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.5510161309119135,
+        "saturation": 0.0,
+        "pid": [
+          1,
+          6.1,
+          0
+        ]
+      },
+      "continuous60": {
+        "cost": 0.12377090568606941,
+        "oracle": 0.0920569848250582,
+        "loss": 1.344503145755634,
+        "vsWorking": 0.561660441492126,
+        "nominalVsWorking": 0.4861542104823479,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.44118565658324266,
+        "saturation": 0.0033333333333333335,
+        "pid": [
+          0.997,
+          0.1,
+          0.4
+        ]
+      },
+      "repeat4": {
+        "cost": 0.1025464822521645,
+        "oracle": 0.0920569848250582,
+        "loss": 1.1139456983849751,
+        "vsWorking": 0.46534605346834534,
+        "nominalVsWorking": 0.5840099001268083,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.46788874622190135,
+        "saturation": 0.0,
+        "pid": [
+          0.994,
+          5.7,
+          0
+        ]
+      },
+      "continuous120": {
+        "cost": 0.0920569848250582,
+        "oracle": 0.0920569848250582,
+        "loss": 1.0,
+        "vsWorking": 0.4177457250770977,
+        "nominalVsWorking": 0.656017245293112,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.386843793622013,
+        "saturation": 0.0,
+        "pid": [
+          0.988,
+          5.4,
+          0
+        ]
+      }
+    }
+  },
+  {
+    "id": "p026",
+    "condition": "nonzero_initial",
+    "arms": {
+      "single30": {
+        "cost": 0.08373744320803446,
+        "oracle": 0.08110054864209895,
+        "loss": 1.0325138930634399,
+        "vsWorking": 0.6114954610445564,
+        "nominalVsWorking": 0.7499943137040771,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.6113635045825471,
+        "saturation": 0.0,
+        "pid": [
+          0.989,
+          4.8,
+          0
+        ]
+      },
+      "repeat2": {
+        "cost": 0.08110054864209895,
+        "oracle": 0.08110054864209895,
+        "loss": 1.0,
+        "vsWorking": 0.5922394508709868,
+        "nominalVsWorking": 0.7295533666721767,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.6099804040659744,
+        "saturation": 0.0,
+        "pid": [
+          1,
+          4.9,
+          0
+        ]
+      },
+      "continuous60": {
+        "cost": 0.08110054864209895,
+        "oracle": 0.08110054864209895,
+        "loss": 1.0,
+        "vsWorking": 0.5922394508709868,
+        "nominalVsWorking": 0.7295533666721767,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.6099804040659744,
+        "saturation": 0.0,
+        "pid": [
+          1,
+          4.9,
+          0
+        ]
+      },
+      "repeat4": {
+        "cost": 0.08649407263526934,
+        "oracle": 0.08110054864209895,
+        "loss": 1.0665041616052722,
+        "vsWorking": 0.6316258390207287,
+        "nominalVsWorking": 0.8347643219977335,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.6856961240953601,
+        "saturation": 0.0,
+        "pid": [
+          0.999,
+          4.6,
+          0
+        ]
+      },
+      "continuous120": {
+        "cost": 0.08123837730817209,
+        "oracle": 0.08110054864209895,
+        "loss": 1.0016994788368372,
+        "vsWorking": 0.5932459492840823,
+        "nominalVsWorking": 0.7284352681945561,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.613010937912559,
+        "saturation": 0.0,
+        "pid": [
+          0.999,
+          4.9,
+          0
+        ]
+      }
+    }
+  },
+  {
+    "id": "p027",
+    "condition": "nonzero_initial",
+    "arms": {
+      "single30": {
+        "cost": 0.07475145730349754,
+        "oracle": 0.07345405512317378,
+        "loss": 1.017662771349358,
+        "vsWorking": 0.4589228581141942,
+        "nominalVsWorking": 0.7182131907617397,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.4259228129375894,
+        "saturation": 0.0,
+        "pid": [
+          0.988,
+          4.4,
+          0
+        ]
+      },
+      "repeat2": {
+        "cost": 0.09979421704925567,
+        "oracle": 0.07345405512317378,
+        "loss": 1.3585937070718908,
+        "vsWorking": 0.6126682871956508,
+        "nominalVsWorking": 0.6187733048142623,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.6043996661150289,
+        "saturation": 0.0,
+        "pid": [
+          0.991,
+          4.8,
+          0
+        ]
+      },
+      "continuous60": {
+        "cost": 0.07396782708409923,
+        "oracle": 0.07345405512317378,
+        "loss": 1.0069944669503121,
+        "vsWorking": 0.4541119041480285,
+        "nominalVsWorking": 0.7254881615117755,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.4127522058872858,
+        "saturation": 0.0,
+        "pid": [
+          0.994,
+          4.4,
+          0
+        ]
+      },
+      "repeat4": {
+        "cost": 0.08584748539242837,
+        "oracle": 0.07345405512317378,
+        "loss": 1.1687235680654018,
+        "vsWorking": 0.5270448868742844,
+        "nominalVsWorking": 0.661105712254549,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.5114451451487719,
+        "saturation": 0.0,
+        "pid": [
+          0.999,
+          4.6,
+          0
+        ]
+      },
+      "continuous120": {
+        "cost": 0.07345405512317378,
+        "oracle": 0.07345405512317378,
+        "loss": 1.0,
+        "vsWorking": 0.4509576954512061,
+        "nominalVsWorking": 0.731567626782059,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.40415846343574974,
+        "saturation": 0.0,
+        "pid": [
+          0.999,
+          4.4,
+          0
+        ]
+      }
+    }
+  },
+  {
+    "id": "p028",
+    "condition": "delay_300ms",
+    "arms": {
+      "single30": {
+        "cost": 0.10258551418648659,
+        "oracle": 0.10258551418648659,
+        "loss": 1.0,
+        "vsWorking": 0.5023943935589326,
+        "nominalVsWorking": 0.5930947487544288,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.4964260074761355,
+        "saturation": 0.0,
+        "pid": [
+          1,
+          6.4,
+          0
+        ]
+      },
+      "repeat2": {
+        "cost": 0.10392510325620506,
+        "oracle": 0.10258551418648659,
+        "loss": 1.0130582673425341,
+        "vsWorking": 0.5089547938614154,
+        "nominalVsWorking": 0.5767928060919437,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.5179370583441627,
+        "saturation": 0.0,
+        "pid": [
+          0.988,
+          6.4,
+          0.2
+        ]
+      },
+      "continuous60": {
+        "cost": 0.10258551418648659,
+        "oracle": 0.10258551418648659,
+        "loss": 1.0,
+        "vsWorking": 0.5023943935589326,
+        "nominalVsWorking": 0.5930947487544288,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.4964260074761355,
+        "saturation": 0.0,
+        "pid": [
+          1,
+          6.4,
+          0
+        ]
+      },
+      "repeat4": {
+        "cost": 0.13502077072669585,
+        "oracle": 0.10258551418648659,
+        "loss": 1.3161777449518492,
+        "vsWorking": 0.6612403199908476,
+        "nominalVsWorking": 0.835437871955569,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.6807886817993737,
+        "saturation": 0.0,
+        "pid": [
+          0.994,
+          5.4,
+          0
+        ]
+      },
+      "continuous120": {
+        "cost": 0.10258551418648659,
+        "oracle": 0.10258551418648659,
+        "loss": 1.0,
+        "vsWorking": 0.5023943935589326,
+        "nominalVsWorking": 0.5930947487544288,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.4964260074761355,
+        "saturation": 0.0,
+        "pid": [
+          1,
+          6.4,
+          0
+        ]
+      }
+    }
+  },
+  {
+    "id": "p029",
+    "condition": "delay_300ms",
+    "arms": {
+      "single30": {
+        "cost": 0.09214125090103416,
+        "oracle": 0.09214125090103416,
+        "loss": 1.0,
+        "vsWorking": 0.35310864927462227,
+        "nominalVsWorking": 0.5085720157997397,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.3555080293223611,
+        "saturation": 0.0,
+        "pid": [
+          1,
+          5.3,
+          0
+        ]
+      },
+      "repeat2": {
+        "cost": 0.16498446949536827,
+        "oracle": 0.09214125090103416,
+        "loss": 1.790560339500628,
+        "vsWorking": 0.6322623429257758,
+        "nominalVsWorking": 0.6955167740917374,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.6304281524811708,
+        "saturation": 0.0,
+        "pid": [
+          0.994,
+          6.4,
+          0
+        ]
+      },
+      "continuous60": {
+        "cost": 0.09260178469907164,
+        "oracle": 0.09214125090103416,
+        "loss": 1.0049981283467937,
+        "vsWorking": 0.35487353162405977,
+        "nominalVsWorking": 0.530400228982434,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.33600308121942274,
+        "saturation": 0.0,
+        "pid": [
+          0.999,
+          5.2,
+          0.1
+        ]
+      },
+      "repeat4": {
+        "cost": 0.09764533935833468,
+        "oracle": 0.09214125090103416,
+        "loss": 1.0597353346462843,
+        "vsWorking": 0.37420171260553925,
+        "nominalVsWorking": 0.48511332833543297,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.37679971122245987,
+        "saturation": 0.0,
+        "pid": [
+          1,
+          5.4,
+          0
+        ]
+      },
+      "continuous120": {
+        "cost": 0.09242392476386822,
+        "oracle": 0.09214125090103416,
+        "loss": 1.0030678318350341,
+        "vsWorking": 0.35419192723009285,
+        "nominalVsWorking": 0.5335822116934048,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.3344315837608608,
+        "saturation": 0.0,
+        "pid": [
+          1,
+          5.2,
+          0
+        ]
+      }
+    }
+  },
+  {
+    "id": "p030",
+    "condition": "weak_actuator",
+    "arms": {
+      "single30": {
+        "cost": 0.7287150397884814,
+        "oracle": 0.7283634515500554,
+        "loss": 1.0004827098856728,
+        "vsWorking": 0.817603909338518,
+        "nominalVsWorking": 0.99818532501582,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.8659230469061016,
+        "saturation": 0.9966666666666628,
+        "pid": [
+          0.63,
+          1,
+          0.1
+        ]
+      },
+      "repeat2": {
+        "cost": 0.7284934099625039,
+        "oracle": 0.7283634515500554,
+        "loss": 1.0001784252246209,
+        "vsWorking": 0.817355245042804,
+        "nominalVsWorking": 0.9980475468861836,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.8656531822593247,
+        "saturation": 0.9966666666666628,
+        "pid": [
+          0.235,
+          0.9,
+          0.1
+        ]
+      },
+      "continuous60": {
+        "cost": 0.7420416522462894,
+        "oracle": 0.7283634515500554,
+        "loss": 1.0187793616869776,
+        "vsWorking": 0.8325561058060231,
+        "nominalVsWorking": 0.9994393290503625,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.8655476414441386,
+        "saturation": 0.9966666666666628,
+        "pid": [
+          0.22,
+          1.1,
+          0
+        ]
+      },
+      "repeat4": {
+        "cost": 0.728510644252093,
+        "oracle": 0.7283634515500554,
+        "loss": 1.0002020868863262,
+        "vsWorking": 0.81737458157598,
+        "nominalVsWorking": 0.9980579860451355,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.8656741948662174,
+        "saturation": 0.9966666666666628,
+        "pid": [
+          0.265,
+          0.9,
+          0.1
+        ]
+      },
+      "continuous120": {
+        "cost": 0.7420416522462894,
+        "oracle": 0.7283634515500554,
+        "loss": 1.0187793616869776,
+        "vsWorking": 0.8325561058060231,
+        "nominalVsWorking": 0.9994393290503625,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.8655476414441386,
+        "saturation": 0.9966666666666628,
+        "pid": [
+          0.22,
+          1.1,
+          0
+        ]
+      }
+    }
+  },
+  {
+    "id": "p031",
+    "condition": "weak_actuator",
+    "arms": {
+      "single30": {
+        "cost": 0.7259753119208545,
+        "oracle": 0.7256192880616582,
+        "loss": 1.0004906482849254,
+        "vsWorking": 0.7895233939069733,
+        "nominalVsWorking": 0.9924461860937829,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.8402917860510544,
+        "saturation": 0.9966666666666628,
+        "pid": [
+          0.571,
+          1.5,
+          0.1
+        ]
+      },
+      "repeat2": {
+        "cost": 0.7259701103054321,
+        "oracle": 0.7256192880616582,
+        "loss": 1.0004834797662436,
+        "vsWorking": 0.7895177369693411,
+        "nominalVsWorking": 0.9923162093940486,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.8400420985572705,
+        "saturation": 0.9966666666666628,
+        "pid": [
+          0.235,
+          0.9,
+          0.1
+        ]
+      },
+      "continuous60": {
+        "cost": 0.7259701103054321,
+        "oracle": 0.7256192880616582,
+        "loss": 1.0004834797662436,
+        "vsWorking": 0.7895177369693411,
+        "nominalVsWorking": 0.9923162093940486,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.8400420985572705,
+        "saturation": 0.9966666666666628,
+        "pid": [
+          0.235,
+          0.9,
+          0.1
+        ]
+      },
+      "repeat4": {
+        "cost": 0.7257839793958891,
+        "oracle": 0.7256192880616582,
+        "loss": 1.0002269665883206,
+        "vsWorking": 0.7893153131334333,
+        "nominalVsWorking": 0.9923277894176264,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.8400649616918613,
+        "saturation": 0.9966666666666628,
+        "pid": [
+          0.265,
+          0.9,
+          0.1
+        ]
+      },
+      "continuous120": {
+        "cost": 0.7259701103054321,
+        "oracle": 0.7256192880616582,
+        "loss": 1.0004834797662436,
+        "vsWorking": 0.7895177369693411,
+        "nominalVsWorking": 0.9923162093940486,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.8400420985572705,
+        "saturation": 0.9966666666666628,
+        "pid": [
+          0.235,
+          0.9,
+          0.1
+        ]
+      }
+    }
+  },
+  {
+    "id": "p032",
+    "condition": "four_times_slower",
+    "arms": {
+      "single30": {
+        "cost": 0.12390182146493903,
+        "oracle": 0.12390182146493903,
+        "loss": 1.0,
+        "vsWorking": 0.49291566603579695,
+        "nominalVsWorking": 0.6772676676790963,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.46015935527494195,
+        "saturation": 0.006666666666666667,
+        "pid": [
+          0.999,
+          5.8,
+          1.9
+        ]
+      },
+      "repeat2": {
+        "cost": 0.12813920444239557,
+        "oracle": 0.12390182146493903,
+        "loss": 1.0341995212609172,
+        "vsWorking": 0.5097731458362273,
+        "nominalVsWorking": 0.7585560859860047,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.4973257490248119,
+        "saturation": 0.006666666666666667,
+        "pid": [
+          1,
+          5.5,
+          1.8
+        ]
+      },
+      "continuous60": {
+        "cost": 0.12390182146493903,
+        "oracle": 0.12390182146493903,
+        "loss": 1.0,
+        "vsWorking": 0.49291566603579695,
+        "nominalVsWorking": 0.6772676676790963,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.46015935527494195,
+        "saturation": 0.006666666666666667,
+        "pid": [
+          0.999,
+          5.8,
+          1.9
+        ]
+      },
+      "repeat4": {
+        "cost": 0.13790313665060794,
+        "oracle": 0.12390182146493903,
+        "loss": 1.1130033039072869,
+        "vsWorking": 0.5486167648455028,
+        "nominalVsWorking": 0.8153648215381722,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.5352963293634608,
+        "saturation": 0.007037037037037036,
+        "pid": [
+          0.999,
+          5.3,
+          1.9
+        ]
+      },
+      "continuous120": {
+        "cost": 0.12390182146493903,
+        "oracle": 0.12390182146493903,
+        "loss": 1.0,
+        "vsWorking": 0.49291566603579695,
+        "nominalVsWorking": 0.6772676676790963,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.46015935527494195,
+        "saturation": 0.006666666666666667,
+        "pid": [
+          0.999,
+          5.8,
+          1.9
+        ]
+      }
+    }
+  },
+  {
+    "id": "p033",
+    "condition": "four_times_slower",
+    "arms": {
+      "single30": {
+        "cost": 0.11776193277483027,
+        "oracle": 0.11776193277483027,
+        "loss": 1.0,
+        "vsWorking": 0.5069775208201427,
+        "nominalVsWorking": 0.6339635854070333,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.47255203177512417,
+        "saturation": 0.0044444444444444444,
+        "pid": [
+          1,
+          5.8,
+          1.8
+        ]
+      },
+      "repeat2": {
+        "cost": 0.12255927136712952,
+        "oracle": 0.11776193277483027,
+        "loss": 1.0407376006767155,
+        "vsWorking": 0.5276305686153848,
+        "nominalVsWorking": 0.7075091068927456,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.5090602273581727,
+        "saturation": 0.005555555555555556,
+        "pid": [
+          0.988,
+          5.4,
+          2
+        ]
+      },
+      "continuous60": {
+        "cost": 0.1254765940701398,
+        "oracle": 0.11776193277483027,
+        "loss": 1.0655106545343525,
+        "vsWorking": 0.5401899500432735,
+        "nominalVsWorking": 0.6924754176716477,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.49939100143346393,
+        "saturation": 0.0,
+        "pid": [
+          0.994,
+          5.8,
+          0
+        ]
+      },
+      "repeat4": {
+        "cost": 0.12265795734362236,
+        "oracle": 0.11776193277483027,
+        "loss": 1.0415756132175045,
+        "vsWorking": 0.5280554221357302,
+        "nominalVsWorking": 0.724136892446785,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.513619469196769,
+        "saturation": 0.004074074074074074,
+        "pid": [
+          1,
+          5.4,
+          1.7
+        ]
+      },
+      "continuous120": {
+        "cost": 0.1254765940701398,
+        "oracle": 0.11776193277483027,
+        "loss": 1.0655106545343525,
+        "vsWorking": 0.5401899500432735,
+        "nominalVsWorking": 0.6924754176716477,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.49939100143346393,
+        "saturation": 0.0,
+        "pid": [
+          0.994,
+          5.8,
+          0
+        ]
+      }
+    }
+  },
+  {
+    "id": "p034",
+    "condition": "coupled_disturbance",
+    "arms": {
+      "single30": {
+        "cost": 6.006255673096881,
+        "oracle": 1.086962323423519,
+        "loss": 5.525725725413787,
+        "vsWorking": 1.198005213120284,
+        "nominalVsWorking": 1.2555205361755393,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.1834162663577465,
+        "saturation": 0.03703703703703701,
+        "pid": [
+          0.201,
+          1,
+          0.9
+        ]
+      },
+      "repeat2": {
+        "cost": 5.013547192714787,
+        "oracle": 1.086962323423519,
+        "loss": 4.612438798176568,
+        "vsWorking": 1.0,
+        "nominalVsWorking": 1.0,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.0,
+        "saturation": 0.042962962962962925,
+        "pid": [
+          0.4000000059604645,
+          2.5,
+          0.20000000298023224
+        ]
+      },
+      "continuous60": {
+        "cost": 7.8553400075997395,
+        "oracle": 1.086962323423519,
+        "loss": 7.2268742331918165,
+        "vsWorking": 1.5668227914587853,
+        "nominalVsWorking": 1.6074764570153535,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.5948081078372214,
+        "saturation": 0.0,
+        "pid": [
+          0.177,
+          2.4,
+          0.2
+        ]
+      },
+      "repeat4": {
+        "cost": 5.013547192714787,
+        "oracle": 1.086962323423519,
+        "loss": 4.612438798176568,
+        "vsWorking": 1.0,
+        "nominalVsWorking": 1.0,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.0,
+        "saturation": 0.042962962962962925,
+        "pid": [
+          0.4000000059604645,
+          2.5,
+          0.20000000298023224
+        ]
+      },
+      "continuous120": {
+        "cost": 5.013547192714787,
+        "oracle": 1.086962323423519,
+        "loss": 4.612438798176568,
+        "vsWorking": 1.0,
+        "nominalVsWorking": 1.0,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.0,
+        "saturation": 0.042962962962962925,
+        "pid": [
+          0.4000000059604645,
+          2.5,
+          0.20000000298023224
+        ]
+      }
+    }
+  },
+  {
+    "id": "p035",
+    "condition": "coupled_disturbance",
+    "arms": {
+      "single30": {
+        "cost": 5.619152011558449,
+        "oracle": 1.0993788625291492,
+        "loss": 5.111206157476455,
+        "vsWorking": 1.0940795682188462,
+        "nominalVsWorking": 1.1438169732477401,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.085707540419803,
+        "saturation": 0.05740740740740735,
+        "pid": [
+          0.293,
+          1.5,
+          0
+        ]
+      },
+      "repeat2": {
+        "cost": 13.05037195260625,
+        "oracle": 1.0993788625291492,
+        "loss": 11.870677522927387,
+        "vsWorking": 2.5409786532973326,
+        "nominalVsWorking": 2.6795594575119632,
+        "nominalFailures": 0,
+        "matchedVsWorking": 2.628391166531221,
+        "saturation": 0.0,
+        "pid": [
+          0.007,
+          0.3,
+          2.4
+        ]
+      },
+      "continuous60": {
+        "cost": 5.135962844737508,
+        "oracle": 1.0993788625291492,
+        "loss": 4.671695099651174,
+        "vsWorking": 1.0,
+        "nominalVsWorking": 1.0,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.0,
+        "saturation": 0.0481481481481481,
+        "pid": [
+          0.4000000059604645,
+          2.5,
+          0.20000000298023224
+        ]
+      },
+      "repeat4": {
+        "cost": 5.135962844737508,
+        "oracle": 1.0993788625291492,
+        "loss": 4.671695099651174,
+        "vsWorking": 1.0,
+        "nominalVsWorking": 1.0,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.0,
+        "saturation": 0.0481481481481481,
+        "pid": [
+          0.4000000059604645,
+          2.5,
+          0.20000000298023224
+        ]
+      },
+      "continuous120": {
+        "cost": 5.135962844737508,
+        "oracle": 1.0993788625291492,
+        "loss": 4.671695099651174,
+        "vsWorking": 1.0,
+        "nominalVsWorking": 1.0,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.0,
+        "saturation": 0.0481481481481481,
+        "pid": [
+          0.4000000059604645,
+          2.5,
+          0.20000000298023224
+        ]
+      }
+    }
+  },
+  {
+    "id": "p036",
+    "condition": "baseline",
+    "arms": {
+      "single30": {
+        "cost": 0.10462194226199892,
+        "oracle": 0.10462194226199892,
+        "loss": 1.0,
+        "vsWorking": 0.23756361536223305,
+        "nominalVsWorking": 0.12981707062495795,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.20568692644879438,
+        "saturation": 0.01740740740740741,
+        "pid": [
+          1,
+          0.1,
+          11.3
+        ]
+      },
+      "repeat2": {
+        "cost": 0.10476270391914817,
+        "oracle": 0.10462194226199892,
+        "loss": 1.0013454315041939,
+        "vsWorking": 0.2378832409345916,
+        "nominalVsWorking": 0.13008078013067817,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.20595771663142504,
+        "saturation": 0.01740740740740741,
+        "pid": [
+          1,
+          0.1,
+          11.2
+        ]
+      },
+      "continuous60": {
+        "cost": 0.10462194226199892,
+        "oracle": 0.10462194226199892,
+        "loss": 1.0,
+        "vsWorking": 0.23756361536223305,
+        "nominalVsWorking": 0.12981707062495795,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.20568692644879438,
+        "saturation": 0.01740740740740741,
+        "pid": [
+          1,
+          0.1,
+          11.3
+        ]
+      },
+      "repeat4": {
+        "cost": 0.10462194226199892,
+        "oracle": 0.10462194226199892,
+        "loss": 1.0,
+        "vsWorking": 0.23756361536223305,
+        "nominalVsWorking": 0.12981707062495795,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.20568692644879438,
+        "saturation": 0.01740740740740741,
+        "pid": [
+          1,
+          0.1,
+          11.3
+        ]
+      },
+      "continuous120": {
+        "cost": 0.10462194226199892,
+        "oracle": 0.10462194226199892,
+        "loss": 1.0,
+        "vsWorking": 0.23756361536223305,
+        "nominalVsWorking": 0.12981707062495795,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.20568692644879438,
+        "saturation": 0.01740740740740741,
+        "pid": [
+          1,
+          0.1,
+          11.3
+        ]
+      }
+    }
+  },
+  {
+    "id": "p037",
+    "condition": "baseline",
+    "arms": {
+      "single30": {
+        "cost": 0.06963492800977363,
+        "oracle": 0.06963492800977363,
+        "loss": 1.0,
+        "vsWorking": 0.12080970935729672,
+        "nominalVsWorking": 0.09441413943396433,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.10156920959891358,
+        "saturation": 0.015925925925925923,
+        "pid": [
+          1,
+          0.1,
+          11.3
+        ]
+      },
+      "repeat2": {
+        "cost": 0.06970086475933343,
+        "oracle": 0.06963492800977363,
+        "loss": 1.0009468919038813,
+        "vsWorking": 0.12092410309299739,
+        "nominalVsWorking": 0.09452809336090669,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.10168525069847201,
+        "saturation": 0.015925925925925923,
+        "pid": [
+          1,
+          0.1,
+          11.2
+        ]
+      },
+      "continuous60": {
+        "cost": 0.06963492800977363,
+        "oracle": 0.06963492800977363,
+        "loss": 1.0,
+        "vsWorking": 0.12080970935729672,
+        "nominalVsWorking": 0.09441413943396433,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.10156920959891358,
+        "saturation": 0.015925925925925923,
+        "pid": [
+          1,
+          0.1,
+          11.3
+        ]
+      },
+      "repeat4": {
+        "cost": 0.06963492800977363,
+        "oracle": 0.06963492800977363,
+        "loss": 1.0,
+        "vsWorking": 0.12080970935729672,
+        "nominalVsWorking": 0.09441413943396433,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.10156920959891358,
+        "saturation": 0.015925925925925923,
+        "pid": [
+          1,
+          0.1,
+          11.3
+        ]
+      },
+      "continuous120": {
+        "cost": 0.06963492800977363,
+        "oracle": 0.06963492800977363,
+        "loss": 1.0,
+        "vsWorking": 0.12080970935729672,
+        "nominalVsWorking": 0.09441413943396433,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.10156920959891358,
+        "saturation": 0.015925925925925923,
+        "pid": [
+          1,
+          0.1,
+          11.3
+        ]
+      }
+    }
+  },
+  {
+    "id": "p038",
+    "condition": "nonzero_initial",
+    "arms": {
+      "single30": {
+        "cost": 0.10462194226319685,
+        "oracle": 0.10462194226319685,
+        "loss": 1.0,
+        "vsWorking": 0.23756361536351897,
+        "nominalVsWorking": 0.12981707210787866,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.20568692644995493,
+        "saturation": 0.01740740740740741,
+        "pid": [
+          1,
+          0.1,
+          11.3
+        ]
+      },
+      "repeat2": {
+        "cost": 0.10476270155290647,
+        "oracle": 0.10462194226319685,
+        "loss": 1.0013454088756593,
+        "vsWorking": 0.23788323556016278,
+        "nominalVsWorking": 0.1300807801329607,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.20595771663260284,
+        "saturation": 0.01740740740740741,
+        "pid": [
+          1,
+          0.1,
+          11.2
+        ]
+      },
+      "continuous60": {
+        "cost": 0.10462194226319685,
+        "oracle": 0.10462194226319685,
+        "loss": 1.0,
+        "vsWorking": 0.23756361536351897,
+        "nominalVsWorking": 0.12981707210787866,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.20568692644995493,
+        "saturation": 0.01740740740740741,
+        "pid": [
+          1,
+          0.1,
+          11.3
+        ]
+      },
+      "repeat4": {
+        "cost": 0.10462194226319685,
+        "oracle": 0.10462194226319685,
+        "loss": 1.0,
+        "vsWorking": 0.23756361536351897,
+        "nominalVsWorking": 0.12981707210787866,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.20568692644995493,
+        "saturation": 0.01740740740740741,
+        "pid": [
+          1,
+          0.1,
+          11.3
+        ]
+      },
+      "continuous120": {
+        "cost": 0.10462194226319685,
+        "oracle": 0.10462194226319685,
+        "loss": 1.0,
+        "vsWorking": 0.23756361536351897,
+        "nominalVsWorking": 0.12981707210787866,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.20568692644995493,
+        "saturation": 0.01740740740740741,
+        "pid": [
+          1,
+          0.1,
+          11.3
+        ]
+      }
+    }
+  },
+  {
+    "id": "p039",
+    "condition": "nonzero_initial",
+    "arms": {
+      "single30": {
+        "cost": 0.06963492800963242,
+        "oracle": 0.06963492800963242,
+        "loss": 1.0,
+        "vsWorking": 0.12080970935699908,
+        "nominalVsWorking": 0.09441413943357026,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.10156920959866994,
+        "saturation": 0.015925925925925923,
+        "pid": [
+          1,
+          0.1,
+          11.3
+        ]
+      },
+      "repeat2": {
+        "cost": 0.06970086475919138,
+        "oracle": 0.06963492800963242,
+        "loss": 1.0009468919038709,
+        "vsWorking": 0.12092410309269824,
+        "nominalVsWorking": 0.09452809336051184,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.10168525069822701,
+        "saturation": 0.015925925925925923,
+        "pid": [
+          1,
+          0.1,
+          11.2
+        ]
+      },
+      "continuous60": {
+        "cost": 0.06963492800963242,
+        "oracle": 0.06963492800963242,
+        "loss": 1.0,
+        "vsWorking": 0.12080970935699908,
+        "nominalVsWorking": 0.09441413943357026,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.10156920959866994,
+        "saturation": 0.015925925925925923,
+        "pid": [
+          1,
+          0.1,
+          11.3
+        ]
+      },
+      "repeat4": {
+        "cost": 0.06963492800963242,
+        "oracle": 0.06963492800963242,
+        "loss": 1.0,
+        "vsWorking": 0.12080970935699908,
+        "nominalVsWorking": 0.09441413943357026,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.10156920959866994,
+        "saturation": 0.015925925925925923,
+        "pid": [
+          1,
+          0.1,
+          11.3
+        ]
+      },
+      "continuous120": {
+        "cost": 0.06963492800963242,
+        "oracle": 0.06963492800963242,
+        "loss": 1.0,
+        "vsWorking": 0.12080970935699908,
+        "nominalVsWorking": 0.09441413943357026,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.10156920959866994,
+        "saturation": 0.015925925925925923,
+        "pid": [
+          1,
+          0.1,
+          11.3
+        ]
+      }
+    }
+  },
+  {
+    "id": "p040",
+    "condition": "delay_300ms",
+    "arms": {
+      "single30": {
+        "cost": 0.32011558707029847,
+        "oracle": 0.2517802101295284,
+        "loss": 1.2714088486367332,
+        "vsWorking": 0.6395956972751455,
+        "nominalVsWorking": 0.5740667831851091,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.6825010866976523,
+        "saturation": 0.0,
+        "pid": [
+          1,
+          12.5,
+          0.2
+        ]
+      },
+      "repeat2": {
+        "cost": 1.0926490221659746,
+        "oracle": 0.2517802101295284,
+        "loss": 4.33969382106664,
+        "vsWorking": 2.1831289741470226,
+        "nominalVsWorking": 2.6676445951685706,
+        "nominalFailures": 0,
+        "matchedVsWorking": 2.20940331344212,
+        "saturation": 0.0033333333333333335,
+        "pid": [
+          1,
+          249.9,
+          0.6
+        ]
+      },
+      "continuous60": {
+        "cost": 0.3064044534120367,
+        "oracle": 0.2517802101295284,
+        "loss": 1.2169520918836585,
+        "vsWorking": 0.6122006485902378,
+        "nominalVsWorking": 0.5480986743420911,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.6540954987388755,
+        "saturation": 0.0,
+        "pid": [
+          1,
+          12.2,
+          0.2
+        ]
+      },
+      "repeat4": {
+        "cost": 0.2517802101295284,
+        "oracle": 0.2517802101295284,
+        "loss": 1.0,
+        "vsWorking": 0.5030605992407173,
+        "nominalVsWorking": 0.5691915742087307,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.5206985288395763,
+        "saturation": 0.0,
+        "pid": [
+          0.997,
+          6.7,
+          0.5
+        ]
+      },
+      "continuous120": {
+        "cost": 0.3098613009117487,
+        "oracle": 0.2517802101295284,
+        "loss": 1.2306817154229097,
+        "vsWorking": 0.619107481235243,
+        "nominalVsWorking": 0.5567831772726711,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.661265836002706,
+        "saturation": 0.0,
+        "pid": [
+          1,
+          12.3,
+          0.2
+        ]
+      }
+    }
+  },
+  {
+    "id": "p041",
+    "condition": "delay_300ms",
+    "arms": {
+      "single30": {
+        "cost": 0.2985656838480427,
+        "oracle": 0.22310052797524943,
+        "loss": 1.3382562854408184,
+        "vsWorking": 0.4478427514445136,
+        "nominalVsWorking": 0.5960755561157799,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.36839468218167815,
+        "saturation": 0.2618518518518515,
+        "pid": [
+          0.994,
+          0.4,
+          0.8
+        ]
+      },
+      "repeat2": {
+        "cost": 2.438075111899628,
+        "oracle": 0.22310052797524943,
+        "loss": 10.928145863330748,
+        "vsWorking": 3.657065514927822,
+        "nominalVsWorking": 5.99424671216001,
+        "nominalFailures": 0,
+        "matchedVsWorking": 3.4046892417688426,
+        "saturation": 0.0033333333333333335,
+        "pid": [
+          0.998,
+          59.5,
+          0.7
+        ]
+      },
+      "continuous60": {
+        "cost": 0.2985656838480427,
+        "oracle": 0.22310052797524943,
+        "loss": 1.3382562854408184,
+        "vsWorking": 0.4478427514445136,
+        "nominalVsWorking": 0.5960755561157799,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.36839468218167815,
+        "saturation": 0.2618518518518515,
+        "pid": [
+          0.994,
+          0.4,
+          0.8
+        ]
+      },
+      "repeat4": {
+        "cost": 0.35857590601113665,
+        "oracle": 0.22310052797524943,
+        "loss": 1.6072391637321304,
+        "vsWorking": 0.5378569240779459,
+        "nominalVsWorking": 0.5326827999314818,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.5443780125869561,
+        "saturation": 0.0033333333333333335,
+        "pid": [
+          0.999,
+          5.9,
+          0.5
+        ]
+      },
+      "continuous120": {
+        "cost": 0.2985656838480427,
+        "oracle": 0.22310052797524943,
+        "loss": 1.3382562854408184,
+        "vsWorking": 0.4478427514445136,
+        "nominalVsWorking": 0.5960755561157799,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.36839468218167815,
+        "saturation": 0.2618518518518515,
+        "pid": [
+          0.994,
+          0.4,
+          0.8
+        ]
+      }
+    }
+  },
+  {
+    "id": "p042",
+    "condition": "weak_actuator",
+    "arms": {
+      "single30": {
+        "cost": 0.7886710165163395,
+        "oracle": 0.6967970094592913,
+        "loss": 1.1318518963339719,
+        "vsWorking": 0.9767312705381801,
+        "nominalVsWorking": 1.0118995847493182,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.90209068391762,
+        "saturation": 0.9966666666666628,
+        "pid": [
+          0.22,
+          1.1,
+          0
+        ]
+      },
+      "repeat2": {
+        "cost": 0.7676174808596945,
+        "oracle": 0.6967970094592913,
+        "loss": 1.1016371632469537,
+        "vsWorking": 0.9506574752539715,
+        "nominalVsWorking": 0.9838355235191777,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.8957073157951687,
+        "saturation": 0.9966666666666628,
+        "pid": [
+          0.28,
+          1.2,
+          0
+        ]
+      },
+      "continuous60": {
+        "cost": 0.7886710165163395,
+        "oracle": 0.6967970094592913,
+        "loss": 1.1318518963339719,
+        "vsWorking": 0.9767312705381801,
+        "nominalVsWorking": 1.0118995847493182,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.90209068391762,
+        "saturation": 0.9966666666666628,
+        "pid": [
+          0.22,
+          1.1,
+          0
+        ]
+      },
+      "repeat4": {
+        "cost": 0.7886710165163395,
+        "oracle": 0.6967970094592913,
+        "loss": 1.1318518963339719,
+        "vsWorking": 0.9767312705381801,
+        "nominalVsWorking": 1.0118995847493182,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.90209068391762,
+        "saturation": 0.9966666666666628,
+        "pid": [
+          0.22,
+          1.1,
+          0
+        ]
+      },
+      "continuous120": {
+        "cost": 0.7886710165163395,
+        "oracle": 0.6967970094592913,
+        "loss": 1.1318518963339719,
+        "vsWorking": 0.9767312705381801,
+        "nominalVsWorking": 1.0118995847493182,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.90209068391762,
+        "saturation": 0.9966666666666628,
+        "pid": [
+          0.22,
+          1.1,
+          0
+        ]
+      }
+    }
+  },
+  {
+    "id": "p043",
+    "condition": "weak_actuator",
+    "arms": {
+      "single30": {
+        "cost": 0.8865015695241878,
+        "oracle": 0.8755829416323233,
+        "loss": 1.0124701240427425,
+        "vsWorking": 0.9043346245924696,
+        "nominalVsWorking": 0.9993326102726509,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.9322550399528234,
+        "saturation": 0.9966666666666628,
+        "pid": [
+          0.169,
+          0.9,
+          0
+        ]
+      },
+      "repeat2": {
+        "cost": 0.8755834759229922,
+        "oracle": 0.8755829416323233,
+        "loss": 1.000000610211373,
+        "vsWorking": 0.8931969002865757,
+        "nominalVsWorking": 0.9993329517712004,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.9235249907424758,
+        "saturation": 0.9966666666666628,
+        "pid": [
+          0.28,
+          1.2,
+          0
+        ]
+      },
+      "continuous60": {
+        "cost": 0.8865015695241878,
+        "oracle": 0.8755829416323233,
+        "loss": 1.0124701240427425,
+        "vsWorking": 0.9043346245924696,
+        "nominalVsWorking": 0.9993326102726509,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.9322550399528234,
+        "saturation": 0.9966666666666628,
+        "pid": [
+          0.169,
+          0.9,
+          0
+        ]
+      },
+      "repeat4": {
+        "cost": 0.8755832980904078,
+        "oracle": 0.8755829416323233,
+        "loss": 1.000000407109444,
+        "vsWorking": 0.8931967188766731,
+        "nominalVsWorking": 0.9993327674231495,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.9235248111136659,
+        "saturation": 0.9966666666666628,
+        "pid": [
+          0.22,
+          1.1,
+          0
+        ]
+      },
+      "continuous120": {
+        "cost": 0.8865015695241878,
+        "oracle": 0.8755829416323233,
+        "loss": 1.0124701240427425,
+        "vsWorking": 0.9043346245924696,
+        "nominalVsWorking": 0.9993326102726509,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.9322550399528234,
+        "saturation": 0.9966666666666628,
+        "pid": [
+          0.169,
+          0.9,
+          0
+        ]
+      }
+    }
+  },
+  {
+    "id": "p044",
+    "condition": "four_times_slower",
+    "arms": {
+      "single30": {
+        "cost": 0.13252712608337086,
+        "oracle": 0.13252712608337086,
+        "loss": 1.0,
+        "vsWorking": 0.37696007740763965,
+        "nominalVsWorking": 0.5965430015077517,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.12018891891463154,
+        "saturation": 0.06703703703703702,
+        "pid": [
+          1,
+          0.1,
+          97.5
+        ]
+      },
+      "repeat2": {
+        "cost": 0.1964866221036493,
+        "oracle": 0.13252712608337086,
+        "loss": 1.4826143742077564,
+        "vsWorking": 0.558886429267035,
+        "nominalVsWorking": 0.7689285394920969,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.445120254679549,
+        "saturation": 0.05259259259259259,
+        "pid": [
+          1,
+          5.1,
+          18.4
+        ]
+      },
+      "continuous60": {
+        "cost": 0.13252712608337086,
+        "oracle": 0.13252712608337086,
+        "loss": 1.0,
+        "vsWorking": 0.37696007740763965,
+        "nominalVsWorking": 0.5965430015077517,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.12018891891463154,
+        "saturation": 0.06703703703703702,
+        "pid": [
+          1,
+          0.1,
+          97.5
+        ]
+      },
+      "repeat4": {
+        "cost": 0.2510967203145511,
+        "oracle": 0.13252712608337086,
+        "loss": 1.89468169827051,
+        "vsWorking": 0.7142193596428896,
+        "nominalVsWorking": 1.004478591959792,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.601689285636228,
+        "saturation": 0.053703703703703684,
+        "pid": [
+          0.997,
+          4.4,
+          18
+        ]
+      },
+      "continuous120": {
+        "cost": 0.13252712608337086,
+        "oracle": 0.13252712608337086,
+        "loss": 1.0,
+        "vsWorking": 0.37696007740763965,
+        "nominalVsWorking": 0.5965430015077517,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.12018891891463154,
+        "saturation": 0.06703703703703702,
+        "pid": [
+          1,
+          0.1,
+          97.5
+        ]
+      }
+    }
+  },
+  {
+    "id": "p045",
+    "condition": "four_times_slower",
+    "arms": {
+      "single30": {
+        "cost": 0.17745052646413853,
+        "oracle": 0.1750948812801346,
+        "loss": 1.013453535401958,
+        "vsWorking": 0.5437378704317671,
+        "nominalVsWorking": 0.7098788766316555,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.33992719127167237,
+        "saturation": 0.05999999999999999,
+        "pid": [
+          0.992,
+          5.4,
+          21.6
+        ]
+      },
+      "repeat2": {
+        "cost": 0.19064982089107826,
+        "oracle": 0.1750948812801346,
+        "loss": 1.088837203561978,
+        "vsWorking": 0.5841826996803099,
+        "nominalVsWorking": 0.7522709873934954,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.4231939923790987,
+        "saturation": 0.059629629629629616,
+        "pid": [
+          1,
+          5,
+          20
+        ]
+      },
+      "continuous60": {
+        "cost": 0.1750948812801346,
+        "oracle": 0.1750948812801346,
+        "loss": 1.0,
+        "vsWorking": 0.5365197825434677,
+        "nominalVsWorking": 0.6979982375926949,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.3441306551780695,
+        "saturation": 0.05925925925925925,
+        "pid": [
+          0.994,
+          5.5,
+          19.5
+        ]
+      },
+      "repeat4": {
+        "cost": 0.2160995169099907,
+        "oracle": 0.1750948812801346,
+        "loss": 1.2341852333435879,
+        "vsWorking": 0.6621647930118607,
+        "nominalVsWorking": 0.8777747850611571,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.5296433891688114,
+        "saturation": 0.06037037037037036,
+        "pid": [
+          0.994,
+          4.4,
+          20.3
+        ]
+      },
+      "continuous120": {
+        "cost": 0.1763344542895619,
+        "oracle": 0.1750948812801346,
+        "loss": 1.0070794360198578,
+        "vsWorking": 0.5403180400173723,
+        "nominalVsWorking": 0.6945408615213629,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.3540249655659858,
+        "saturation": 0.058888888888888866,
+        "pid": [
+          0.988,
+          5.5,
+          18.6
+        ]
+      }
+    }
+  },
+  {
+    "id": "p046",
+    "condition": "coupled_disturbance",
+    "arms": {
+      "single30": {
+        "cost": 5.190286618425406,
+        "oracle": 1.5745572826573873,
+        "loss": 3.296346646509892,
+        "vsWorking": 1.0,
+        "nominalVsWorking": 1.0,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.0,
+        "saturation": 0.10407407407407411,
+        "pid": [
+          0.4000000059604645,
+          2.5,
+          0.20000000298023224
+        ]
+      },
+      "repeat2": {
+        "cost": 8.312595011487954,
+        "oracle": 1.5745572826573873,
+        "loss": 5.279322069158862,
+        "vsWorking": 1.601567624797139,
+        "nominalVsWorking": 1.6051201103668133,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.623511069574367,
+        "saturation": 0.0,
+        "pid": [
+          0.081,
+          0.8,
+          0.9
+        ]
+      },
+      "continuous60": {
+        "cost": 5.190286618425406,
+        "oracle": 1.5745572826573873,
+        "loss": 3.296346646509892,
+        "vsWorking": 1.0,
+        "nominalVsWorking": 1.0,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.0,
+        "saturation": 0.10407407407407411,
+        "pid": [
+          0.4000000059604645,
+          2.5,
+          0.20000000298023224
+        ]
+      },
+      "repeat4": {
+        "cost": 5.190286618425406,
+        "oracle": 1.5745572826573873,
+        "loss": 3.296346646509892,
+        "vsWorking": 1.0,
+        "nominalVsWorking": 1.0,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.0,
+        "saturation": 0.10407407407407411,
+        "pid": [
+          0.4000000059604645,
+          2.5,
+          0.20000000298023224
+        ]
+      },
+      "continuous120": {
+        "cost": 5.190286618425406,
+        "oracle": 1.5745572826573873,
+        "loss": 3.296346646509892,
+        "vsWorking": 1.0,
+        "nominalVsWorking": 1.0,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.0,
+        "saturation": 0.10407407407407411,
+        "pid": [
+          0.4000000059604645,
+          2.5,
+          0.20000000298023224
+        ]
+      }
+    }
+  },
+  {
+    "id": "p047",
+    "condition": "coupled_disturbance",
+    "arms": {
+      "single30": {
+        "cost": 5.98938214175801,
+        "oracle": 2.52446181529105,
+        "loss": 2.3725382200195737,
+        "vsWorking": 1.0,
+        "nominalVsWorking": 1.0,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.0,
+        "saturation": 0.22185185185185208,
+        "pid": [
+          0.4000000059604645,
+          2.5,
+          0.20000000298023224
+        ]
+      },
+      "repeat2": {
+        "cost": 10.596538776034683,
+        "oracle": 2.52446181529105,
+        "loss": 4.197543694996626,
+        "vsWorking": 1.7692206850779395,
+        "nominalVsWorking": 1.8416056082303949,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.796835663721004,
+        "saturation": 0.0,
+        "pid": [
+          0.078,
+          0.9,
+          0.9
+        ]
+      },
+      "continuous60": {
+        "cost": 10.171521729391138,
+        "oracle": 2.52446181529105,
+        "loss": 4.029184227616628,
+        "vsWorking": 1.6982589336678362,
+        "nominalVsWorking": 1.7541172191994192,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.7234850524937873,
+        "saturation": 0.018148148148148142,
+        "pid": [
+          0.078,
+          0.8,
+          1.2
+        ]
+      },
+      "repeat4": {
+        "cost": 5.98938214175801,
+        "oracle": 2.52446181529105,
+        "loss": 2.3725382200195737,
+        "vsWorking": 1.0,
+        "nominalVsWorking": 1.0,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.0,
+        "saturation": 0.22185185185185208,
+        "pid": [
+          0.4000000059604645,
+          2.5,
+          0.20000000298023224
+        ]
+      },
+      "continuous120": {
+        "cost": 5.98938214175801,
+        "oracle": 2.52446181529105,
+        "loss": 2.3725382200195737,
+        "vsWorking": 1.0,
+        "nominalVsWorking": 1.0,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.0,
+        "saturation": 0.22185185185185208,
+        "pid": [
+          0.4000000059604645,
+          2.5,
+          0.20000000298023224
+        ]
+      }
+    }
+  },
+  {
+    "id": "p048",
+    "condition": "baseline",
+    "arms": {
+      "single30": {
+        "cost": 0.14303826638729036,
+        "oracle": 0.13199582374617091,
+        "loss": 1.0836575152737722,
+        "vsWorking": 0.39313584211817093,
+        "nominalVsWorking": 0.5661743435030508,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.36330079859921194,
+        "saturation": 0.0,
+        "pid": [
+          0.994,
+          5.2,
+          0
+        ]
+      },
+      "repeat2": {
+        "cost": 0.13345607818162938,
+        "oracle": 0.13199582374617091,
+        "loss": 1.0110628836126403,
+        "vsWorking": 0.36679952160259977,
+        "nominalVsWorking": 0.4868787611484377,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.3026532418547337,
+        "saturation": 0.032962962962962965,
+        "pid": [
+          0.994,
+          5.3,
+          11.6
+        ]
+      },
+      "continuous60": {
+        "cost": 0.13199582374617091,
+        "oracle": 0.13199582374617091,
+        "loss": 1.0,
+        "vsWorking": 0.3627860616265372,
+        "nominalVsWorking": 0.5039975538799951,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.2827573718888077,
+        "saturation": 0.032962962962962965,
+        "pid": [
+          0.999,
+          5.2,
+          11.4
+        ]
+      },
+      "repeat4": {
+        "cost": 0.2147632450705985,
+        "oracle": 0.13199582374617091,
+        "loss": 1.6270457577778372,
+        "vsWorking": 0.5902695225503863,
+        "nominalVsWorking": 0.7091541598937061,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.5225736716755405,
+        "saturation": 0.03222222222222223,
+        "pid": [
+          0.999,
+          6.6,
+          11.6
+        ]
+      },
+      "continuous120": {
+        "cost": 0.13199582374617091,
+        "oracle": 0.13199582374617091,
+        "loss": 1.0,
+        "vsWorking": 0.3627860616265372,
+        "nominalVsWorking": 0.5039975538799951,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.2827573718888077,
+        "saturation": 0.032962962962962965,
+        "pid": [
+          0.999,
+          5.2,
+          11.4
+        ]
+      }
+    }
+  },
+  {
+    "id": "p049",
+    "condition": "baseline",
+    "arms": {
+      "single30": {
+        "cost": 0.11890263542421563,
+        "oracle": 0.1139341916635007,
+        "loss": 1.0436080134345358,
+        "vsWorking": 0.4217725055708573,
+        "nominalVsWorking": 0.4563019171372111,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.30126044043794087,
+        "saturation": 0.05185185185185184,
+        "pid": [
+          1,
+          6.6,
+          19.3
+        ]
+      },
+      "repeat2": {
+        "cost": 0.1139341916635007,
+        "oracle": 0.1139341916635007,
+        "loss": 1.0,
+        "vsWorking": 0.40414839685141474,
+        "nominalVsWorking": 0.2637787500713143,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.3115131078570564,
+        "saturation": 0.0537037037037037,
+        "pid": [
+          1,
+          0.1,
+          19.3
+        ]
+      },
+      "continuous60": {
+        "cost": 0.11888179415095973,
+        "oracle": 0.1139341916635007,
+        "loss": 1.0434250896523805,
+        "vsWorking": 0.42169857721755327,
+        "nominalVsWorking": 0.4559378741529879,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.30031269228375224,
+        "saturation": 0.052592592592592594,
+        "pid": [
+          0.999,
+          6.6,
+          19.4
+        ]
+      },
+      "repeat4": {
+        "cost": 0.11782445979233527,
+        "oracle": 0.1139341916635007,
+        "loss": 1.0341448697009612,
+        "vsWorking": 0.41794799120175863,
+        "nominalVsWorking": 0.45154392923382575,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.29905332577325766,
+        "saturation": 0.052592592592592594,
+        "pid": [
+          1,
+          6.7,
+          19.4
+        ]
+      },
+      "continuous120": {
+        "cost": 0.14528684980507275,
+        "oracle": 0.1139341916635007,
+        "loss": 1.2751821703722677,
+        "vsWorking": 0.5153628298494596,
+        "nominalVsWorking": 0.5268470929620707,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.3745277055028694,
+        "saturation": 0.044444444444444446,
+        "pid": [
+          0.648,
+          4.4,
+          27.2
+        ]
+      }
+    }
+  },
+  {
+    "id": "p050",
+    "condition": "nonzero_initial",
+    "arms": {
+      "single30": {
+        "cost": 0.11453875173983936,
+        "oracle": 0.11453875173983936,
+        "loss": 1.0,
+        "vsWorking": 0.31480588906526996,
+        "nominalVsWorking": 0.3082625904809132,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.24087896863736938,
+        "saturation": 0.042222222222222223,
+        "pid": [
+          0.999,
+          0.1,
+          13.4
+        ]
+      },
+      "repeat2": {
+        "cost": 0.11453875173983936,
+        "oracle": 0.11453875173983936,
+        "loss": 1.0,
+        "vsWorking": 0.31480588906526996,
+        "nominalVsWorking": 0.3082625904809132,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.24087896863736938,
+        "saturation": 0.042222222222222223,
+        "pid": [
+          0.999,
+          0.1,
+          13.4
+        ]
+      },
+      "continuous60": {
+        "cost": 0.1152493856208175,
+        "oracle": 0.11453875173983936,
+        "loss": 1.0062043096348061,
+        "vsWorking": 0.3167590422758913,
+        "nominalVsWorking": 0.3093892847722183,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.24338015546660685,
+        "saturation": 0.04148148148148148,
+        "pid": [
+          1,
+          0.1,
+          13
+        ]
+      },
+      "repeat4": {
+        "cost": 0.24815881413638222,
+        "oracle": 0.11453875173983936,
+        "loss": 2.1665926192389833,
+        "vsWorking": 0.68205611574178,
+        "nominalVsWorking": 0.9057341921043899,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.5731362129026429,
+        "saturation": 0.04259259259259259,
+        "pid": [
+          0.527,
+          3.5,
+          31.8
+        ]
+      },
+      "continuous120": {
+        "cost": 0.14303826638729036,
+        "oracle": 0.11453875173983936,
+        "loss": 1.2488198466854619,
+        "vsWorking": 0.39313584211817093,
+        "nominalVsWorking": 0.5661743435030506,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.3633007985992118,
+        "saturation": 0.0,
+        "pid": [
+          0.994,
+          5.2,
+          0
+        ]
+      }
+    }
+  },
+  {
+    "id": "p051",
+    "condition": "nonzero_initial",
+    "arms": {
+      "single30": {
+        "cost": 0.11635396749942942,
+        "oracle": 0.11635396749942942,
+        "loss": 1.0,
+        "vsWorking": 0.4127318476184983,
+        "nominalVsWorking": 0.266875670907871,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.3203812969656322,
+        "saturation": 0.04925925925925925,
+        "pid": [
+          1,
+          0.1,
+          18.6
+        ]
+      },
+      "repeat2": {
+        "cost": 0.11635396749942942,
+        "oracle": 0.11635396749942942,
+        "loss": 1.0,
+        "vsWorking": 0.4127318476184983,
+        "nominalVsWorking": 0.266875670907871,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.3203812969656322,
+        "saturation": 0.04925925925925925,
+        "pid": [
+          1,
+          0.1,
+          18.6
+        ]
+      },
+      "continuous60": {
+        "cost": 0.14298915086134908,
+        "oracle": 0.11635396749942942,
+        "loss": 1.228915127986936,
+        "vsWorking": 0.5072124113403713,
+        "nominalVsWorking": 0.3200523228147796,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.40230181107632906,
+        "saturation": 0.04555555555555556,
+        "pid": [
+          0.857,
+          0.1,
+          19.7
+        ]
+      },
+      "repeat4": {
+        "cost": 0.1374511509948681,
+        "oracle": 0.11635396749942942,
+        "loss": 1.1813189867852347,
+        "vsWorking": 0.4875679680426823,
+        "nominalVsWorking": 0.49581885553287425,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.35800724953824414,
+        "saturation": 0.0437037037037037,
+        "pid": [
+          0.797,
+          5.4,
+          21.3
+        ]
+      },
+      "continuous120": {
+        "cost": 0.1484886844253358,
+        "oracle": 0.11635396749942942,
+        "loss": 1.2761806719316553,
+        "vsWorking": 0.5267204066213687,
+        "nominalVsWorking": 0.5330758387128225,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.38967116255943074,
+        "saturation": 0.04333333333333333,
+        "pid": [
+          0.631,
+          4.3,
+          26.8
+        ]
+      }
+    }
+  },
+  {
+    "id": "p052",
+    "condition": "delay_300ms",
+    "arms": {
+      "single30": {
+        "cost": 0.31115137108049745,
+        "oracle": 0.14205772413378465,
+        "loss": 2.1903164574667318,
+        "vsWorking": 0.7092332910278217,
+        "nominalVsWorking": 0.9661357255365274,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.5958200539328166,
+        "saturation": 0.08444444444444439,
+        "pid": [
+          0.999,
+          0.3,
+          4.3
+        ]
+      },
+      "repeat2": {
+        "cost": 0.19303562838349386,
+        "oracle": 0.14205772413378465,
+        "loss": 1.3588534489099666,
+        "vsWorking": 0.4400022199118958,
+        "nominalVsWorking": 0.450459693369449,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.4124986134550318,
+        "saturation": 0.04481481481481481,
+        "pid": [
+          1,
+          5.6,
+          4.2
+        ]
+      },
+      "continuous60": {
+        "cost": 0.31115137108049745,
+        "oracle": 0.14205772413378465,
+        "loss": 2.1903164574667318,
+        "vsWorking": 0.7092332910278217,
+        "nominalVsWorking": 0.9661357255365274,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.5958200539328166,
+        "saturation": 0.08444444444444439,
+        "pid": [
+          0.999,
+          0.3,
+          4.3
+        ]
+      },
+      "repeat4": {
+        "cost": 1.1467348317678967,
+        "oracle": 0.14205772413378465,
+        "loss": 8.072315945931562,
+        "vsWorking": 2.6138484167584553,
+        "nominalVsWorking": 4.026473176077052,
+        "nominalFailures": 0,
+        "matchedVsWorking": 2.4256529955961565,
+        "saturation": 0.014074074074074076,
+        "pid": [
+          1,
+          22,
+          2.1
+        ]
+      },
+      "continuous120": {
+        "cost": 0.31115137108049745,
+        "oracle": 0.14205772413378465,
+        "loss": 2.1903164574667318,
+        "vsWorking": 0.7092332910278217,
+        "nominalVsWorking": 0.9661357255365274,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.5958200539328166,
+        "saturation": 0.08444444444444439,
+        "pid": [
+          0.999,
+          0.3,
+          4.3
+        ]
+      }
+    }
+  },
+  {
+    "id": "p053",
+    "condition": "delay_300ms",
+    "arms": {
+      "single30": {
+        "cost": 0.18846990058579477,
+        "oracle": 0.18188802272718954,
+        "loss": 1.0361864281106472,
+        "vsWorking": 0.5571640743713167,
+        "nominalVsWorking": 0.446507036406855,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.570676098492102,
+        "saturation": 0.015185185185185184,
+        "pid": [
+          1,
+          8.4,
+          2.7
+        ]
+      },
+      "repeat2": {
+        "cost": 0.18188802272718954,
+        "oracle": 0.18188802272718954,
+        "loss": 1.0,
+        "vsWorking": 0.5377064003697034,
+        "nominalVsWorking": 0.6056369863303053,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.5309454334802488,
+        "saturation": 0.016666666666666666,
+        "pid": [
+          1,
+          5.9,
+          2.9
+        ]
+      },
+      "continuous60": {
+        "cost": 0.28082727978677213,
+        "oracle": 0.18188802272718954,
+        "loss": 1.5439569663582509,
+        "vsWorking": 0.8301955427062223,
+        "nominalVsWorking": 0.7314663180253063,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.8439320626625173,
+        "saturation": 0.015185185185185184,
+        "pid": [
+          1,
+          10.6,
+          2.8
+        ]
+      },
+      "repeat4": {
+        "cost": 0.36629642762104286,
+        "oracle": 0.18188802272718954,
+        "loss": 2.013856779181354,
+        "vsWorking": 1.0828636795937305,
+        "nominalVsWorking": 1.0225852791142132,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.0960427396006656,
+        "saturation": 0.012222222222222223,
+        "pid": [
+          0.999,
+          12.9,
+          2.2
+        ]
+      },
+      "continuous120": {
+        "cost": 0.35465947913932516,
+        "oracle": 0.18188802272718954,
+        "loss": 1.9498781383272956,
+        "vsWorking": 1.0484619549195486,
+        "nominalVsWorking": 0.9875219699969494,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.0572189237419731,
+        "saturation": 0.015185185185185184,
+        "pid": [
+          1,
+          12.8,
+          2.9
+        ]
+      }
+    }
+  },
+  {
+    "id": "p054",
+    "condition": "weak_actuator",
+    "arms": {
+      "single30": {
+        "cost": 0.7827511700499845,
+        "oracle": 0.7461951549509251,
+        "loss": 1.0489898853624473,
+        "vsWorking": 0.879135573590426,
+        "nominalVsWorking": 1.0192719630070526,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.8653394396609785,
+        "saturation": 0.999999999999996,
+        "pid": [
+          0.22,
+          1.1,
+          0
+        ]
+      },
+      "repeat2": {
+        "cost": 0.7827511700499845,
+        "oracle": 0.7461951549509251,
+        "loss": 1.0489898853624473,
+        "vsWorking": 0.879135573590426,
+        "nominalVsWorking": 1.0192719630070526,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.8653394396609785,
+        "saturation": 0.999999999999996,
+        "pid": [
+          0.22,
+          1.1,
+          0
+        ]
+      },
+      "continuous60": {
+        "cost": 0.7827511700499845,
+        "oracle": 0.7461951549509251,
+        "loss": 1.0489898853624473,
+        "vsWorking": 0.879135573590426,
+        "nominalVsWorking": 1.0192719630070526,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.8653394396609785,
+        "saturation": 0.999999999999996,
+        "pid": [
+          0.22,
+          1.1,
+          0
+        ]
+      },
+      "repeat4": {
+        "cost": 0.746441179214242,
+        "oracle": 0.7461951549509251,
+        "loss": 1.0003297049862687,
+        "vsWorking": 0.8383545363440619,
+        "nominalVsWorking": 0.9966817134961813,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.8656647530960474,
+        "saturation": 0.9966666666666628,
+        "pid": [
+          0.138,
+          0.3,
+          0.1
+        ]
+      },
+      "continuous120": {
+        "cost": 0.7827511700499845,
+        "oracle": 0.7461951549509251,
+        "loss": 1.0489898853624473,
+        "vsWorking": 0.879135573590426,
+        "nominalVsWorking": 1.0192719630070526,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.8653394396609785,
+        "saturation": 0.999999999999996,
+        "pid": [
+          0.22,
+          1.1,
+          0
+        ]
+      }
+    }
+  },
+  {
+    "id": "p055",
+    "condition": "weak_actuator",
+    "arms": {
+      "single30": {
+        "cost": 0.7769596487768313,
+        "oracle": 0.6721144444044955,
+        "loss": 1.1559930830905298,
+        "vsWorking": 0.9401096794056424,
+        "nominalVsWorking": 1.0114592726291523,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.8600294239388606,
+        "saturation": 0.9966666666666628,
+        "pid": [
+          0.28,
+          1.2,
+          0
+        ]
+      },
+      "repeat2": {
+        "cost": 0.7901005106230463,
+        "oracle": 0.6721144444044955,
+        "loss": 1.1755446073221776,
+        "vsWorking": 0.9560099278121171,
+        "nominalVsWorking": 1.0420016888401593,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.9124139462808006,
+        "saturation": 0.9966666666666628,
+        "pid": [
+          0.22,
+          1.1,
+          0
+        ]
+      },
+      "continuous60": {
+        "cost": 0.7427044655414788,
+        "oracle": 0.6721144444044955,
+        "loss": 1.1050267878107087,
+        "vsWorking": 0.8986614145181839,
+        "nominalVsWorking": 0.9635802677752658,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.8348677028874802,
+        "saturation": 0.9966666666666628,
+        "pid": [
+          0.697,
+          2.8,
+          0
+        ]
+      },
+      "repeat4": {
+        "cost": 0.729331663590108,
+        "oracle": 0.6721144444044955,
+        "loss": 1.0851301733833558,
+        "vsWorking": 0.8824805220161727,
+        "nominalVsWorking": 0.9102535663415623,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.835265039420986,
+        "saturation": 0.9966666666666628,
+        "pid": [
+          0.138,
+          0.3,
+          0.1
+        ]
+      },
+      "continuous120": {
+        "cost": 0.7427044655414788,
+        "oracle": 0.6721144444044955,
+        "loss": 1.1050267878107087,
+        "vsWorking": 0.8986614145181839,
+        "nominalVsWorking": 0.9635802677752658,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.8348677028874802,
+        "saturation": 0.9966666666666628,
+        "pid": [
+          0.697,
+          2.8,
+          0
+        ]
+      }
+    }
+  },
+  {
+    "id": "p056",
+    "condition": "four_times_slower",
+    "arms": {
+      "single30": {
+        "cost": 0.26065422900887586,
+        "oracle": 0.26060782637174496,
+        "loss": 1.0001780554244166,
+        "vsWorking": 0.4741321184470041,
+        "nominalVsWorking": 0.49814325670334264,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.4484791472362529,
+        "saturation": 0.0348148148148148,
+        "pid": [
+          0.994,
+          6.8,
+          3.2
+        ]
+      },
+      "repeat2": {
+        "cost": 0.3116989967537238,
+        "oracle": 0.26060782637174496,
+        "loss": 1.1960461859234406,
+        "vsWorking": 0.5669829575012054,
+        "nominalVsWorking": 0.6236428728572166,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.553781796473231,
+        "saturation": 0.04333333333333331,
+        "pid": [
+          0.999,
+          5.5,
+          3.1
+        ]
+      },
+      "continuous60": {
+        "cost": 0.3152812868237545,
+        "oracle": 0.26060782637174496,
+        "loss": 1.2097920895668743,
+        "vsWorking": 0.5734991716683558,
+        "nominalVsWorking": 0.6408346225013661,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.5745717825647267,
+        "saturation": 0.0,
+        "pid": [
+          1,
+          6.8,
+          0.1
+        ]
+      },
+      "repeat4": {
+        "cost": 0.5101343574433699,
+        "oracle": 0.26060782637174496,
+        "loss": 1.95747903869812,
+        "vsWorking": 0.9279384589574026,
+        "nominalVsWorking": 0.990730547439736,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.8586131284140645,
+        "saturation": 0.11851851851851863,
+        "pid": [
+          1,
+          3.9,
+          3.1
+        ]
+      },
+      "continuous120": {
+        "cost": 0.26060782637174496,
+        "oracle": 0.26060782637174496,
+        "loss": 1.0,
+        "vsWorking": 0.4740477116805071,
+        "nominalVsWorking": 0.5005908248266027,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.4465980298693986,
+        "saturation": 0.03444444444444443,
+        "pid": [
+          0.999,
+          6.8,
+          3.1
+        ]
+      }
+    }
+  },
+  {
+    "id": "p057",
+    "condition": "four_times_slower",
+    "arms": {
+      "single30": {
+        "cost": 0.2455300606474956,
+        "oracle": 0.23718585038743528,
+        "loss": 1.035180050776344,
+        "vsWorking": 0.44676472310932464,
+        "nominalVsWorking": 0.5281091393190162,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.39164702913637095,
+        "saturation": 0.05370370370370367,
+        "pid": [
+          0.999,
+          4.9,
+          3.7
+        ]
+      },
+      "repeat2": {
+        "cost": 0.23718585038743528,
+        "oracle": 0.23718585038743528,
+        "loss": 1.0,
+        "vsWorking": 0.43158165845088375,
+        "nominalVsWorking": 0.5022035402794779,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.3964091318008752,
+        "saturation": 0.05074074074074071,
+        "pid": [
+          0.999,
+          5.2,
+          3.7
+        ]
+      },
+      "continuous60": {
+        "cost": 0.24077328527880607,
+        "oracle": 0.23718585038743528,
+        "loss": 1.0151249953802506,
+        "vsWorking": 0.4381093290411543,
+        "nominalVsWorking": 0.5157863676899487,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.37593714711152154,
+        "saturation": 0.054444444444444406,
+        "pid": [
+          0.999,
+          5,
+          3.9
+        ]
+      },
+      "repeat4": {
+        "cost": 0.3053099849100153,
+        "oracle": 0.23718585038743528,
+        "loss": 1.2872183750055137,
+        "vsWorking": 0.5555398410733312,
+        "nominalVsWorking": 0.6681112507240914,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.5006330996345132,
+        "saturation": 0.07333333333333326,
+        "pid": [
+          0.999,
+          4,
+          3.8
+        ]
+      },
+      "continuous120": {
+        "cost": 0.24077328527880607,
+        "oracle": 0.23718585038743528,
+        "loss": 1.0151249953802506,
+        "vsWorking": 0.4381093290411543,
+        "nominalVsWorking": 0.5157863676899487,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.37593714711152154,
+        "saturation": 0.054444444444444406,
+        "pid": [
+          0.999,
+          5,
+          3.9
+        ]
+      }
+    }
+  },
+  {
+    "id": "p058",
+    "condition": "coupled_disturbance",
+    "arms": {
+      "single30": {
+        "cost": 7.903328689057072,
+        "oracle": 4.5776252704248686,
+        "loss": 1.726512814432172,
+        "vsWorking": 1.0,
+        "nominalVsWorking": 1.0,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.0,
+        "saturation": 0.06703703703703695,
+        "pid": [
+          0.4000000059604645,
+          2.5,
+          0.20000000298023224
+        ]
+      },
+      "repeat2": {
+        "cost": 7.903328689057072,
+        "oracle": 4.5776252704248686,
+        "loss": 1.726512814432172,
+        "vsWorking": 1.0,
+        "nominalVsWorking": 1.0,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.0,
+        "saturation": 0.06703703703703695,
+        "pid": [
+          0.4000000059604645,
+          2.5,
+          0.20000000298023224
+        ]
+      },
+      "continuous60": {
+        "cost": 10.280673306976757,
+        "oracle": 4.5776252704248686,
+        "loss": 2.2458529695294533,
+        "vsWorking": 1.3008029542300765,
+        "nominalVsWorking": 1.349966330622255,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.3043326787712195,
+        "saturation": 0.0,
+        "pid": [
+          0.114,
+          250,
+          1
+        ]
+      },
+      "repeat4": {
+        "cost": 7.903328689057072,
+        "oracle": 4.5776252704248686,
+        "loss": 1.726512814432172,
+        "vsWorking": 1.0,
+        "nominalVsWorking": 1.0,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.0,
+        "saturation": 0.06703703703703695,
+        "pid": [
+          0.4000000059604645,
+          2.5,
+          0.20000000298023224
+        ]
+      },
+      "continuous120": {
+        "cost": 7.903328689057072,
+        "oracle": 4.5776252704248686,
+        "loss": 1.726512814432172,
+        "vsWorking": 1.0,
+        "nominalVsWorking": 1.0,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.0,
+        "saturation": 0.06703703703703695,
+        "pid": [
+          0.4000000059604645,
+          2.5,
+          0.20000000298023224
+        ]
+      }
+    }
+  },
+  {
+    "id": "p059",
+    "condition": "coupled_disturbance",
+    "arms": {
+      "single30": {
+        "cost": 8.492488796993861,
+        "oracle": 4.626040479382802,
+        "loss": 1.8358007965652117,
+        "vsWorking": 1.0721751491333507,
+        "nominalVsWorking": 1.1018744237536513,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.0707064701628146,
+        "saturation": 0.0,
+        "pid": [
+          0.374,
+          70,
+          0
+        ]
+      },
+      "repeat2": {
+        "cost": 7.920803614837016,
+        "oracle": 4.626040479382802,
+        "loss": 1.712220991177707,
+        "vsWorking": 1.0,
+        "nominalVsWorking": 1.0,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.0,
+        "saturation": 0.05592592592592587,
+        "pid": [
+          0.4000000059604645,
+          2.5,
+          0.20000000298023224
+        ]
+      },
+      "continuous60": {
+        "cost": 7.920803614837016,
+        "oracle": 4.626040479382802,
+        "loss": 1.712220991177707,
+        "vsWorking": 1.0,
+        "nominalVsWorking": 1.0,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.0,
+        "saturation": 0.05592592592592587,
+        "pid": [
+          0.4000000059604645,
+          2.5,
+          0.20000000298023224
+        ]
+      },
+      "repeat4": {
+        "cost": 7.920803614837016,
+        "oracle": 4.626040479382802,
+        "loss": 1.712220991177707,
+        "vsWorking": 1.0,
+        "nominalVsWorking": 1.0,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.0,
+        "saturation": 0.05592592592592587,
+        "pid": [
+          0.4000000059604645,
+          2.5,
+          0.20000000298023224
+        ]
+      },
+      "continuous120": {
+        "cost": 7.920803614837016,
+        "oracle": 4.626040479382802,
+        "loss": 1.712220991177707,
+        "vsWorking": 1.0,
+        "nominalVsWorking": 1.0,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.0,
+        "saturation": 0.05592592592592587,
+        "pid": [
+          0.4000000059604645,
+          2.5,
+          0.20000000298023224
+        ]
+      }
+    }
+  },
+  {
+    "id": "p060",
+    "condition": "baseline",
+    "arms": {
+      "single30": {
+        "cost": 0.194170678839638,
+        "oracle": 0.194170678839638,
+        "loss": 1.0,
+        "vsWorking": 0.28531046619232275,
+        "nominalVsWorking": 0.3083807201538834,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.2924399939516596,
+        "saturation": 0.0,
+        "pid": [
+          1,
+          10.2,
+          0.3
+        ]
+      },
+      "repeat2": {
+        "cost": 0.3860789704328292,
+        "oracle": 0.194170678839638,
+        "loss": 1.9883484609521538,
+        "vsWorking": 0.5672966263470465,
+        "nominalVsWorking": 0.5495419283658157,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.6280497941645441,
+        "saturation": 0.0,
+        "pid": [
+          0.722,
+          10.5,
+          0.4
+        ]
+      },
+      "continuous60": {
+        "cost": 0.25394593099290264,
+        "oracle": 0.194170678839638,
+        "loss": 1.3078490146425863,
+        "vsWorking": 0.3731430120768462,
+        "nominalVsWorking": 0.35552634569562386,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.37265712275860896,
+        "saturation": 0.0,
+        "pid": [
+          0.797,
+          8.4,
+          0.2
+        ]
+      },
+      "repeat4": {
+        "cost": 0.46488248816477806,
+        "oracle": 0.194170678839638,
+        "loss": 2.3941951016647365,
+        "vsWorking": 0.6830889206113415,
+        "nominalVsWorking": 0.7414387902752475,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.6822522911224431,
+        "saturation": 0.0,
+        "pid": [
+          1,
+          5.6,
+          0.3
+        ]
+      },
+      "continuous120": {
+        "cost": 0.25394593099290264,
+        "oracle": 0.194170678839638,
+        "loss": 1.3078490146425863,
+        "vsWorking": 0.3731430120768462,
+        "nominalVsWorking": 0.35552634569562386,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.37265712275860896,
+        "saturation": 0.0,
+        "pid": [
+          0.797,
+          8.4,
+          0.2
+        ]
+      }
+    }
+  },
+  {
+    "id": "p061",
+    "condition": "baseline",
+    "arms": {
+      "single30": {
+        "cost": 0.1469860577170317,
+        "oracle": 0.13558550585796106,
+        "loss": 1.084083853852445,
+        "vsWorking": 0.1723457778176332,
+        "nominalVsWorking": 0.18563407651693078,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.1713054496984228,
+        "saturation": 0.006296296296296296,
+        "pid": [
+          0.973,
+          3.9,
+          0.4
+        ]
+      },
+      "repeat2": {
+        "cost": 2.3068412818928286,
+        "oracle": 0.13558550585796106,
+        "loss": 17.013922449125705,
+        "vsWorking": 2.7048439913602604,
+        "nominalVsWorking": 3.819047193742846,
+        "nominalFailures": 0,
+        "matchedVsWorking": 2.6087310501998116,
+        "saturation": 0.0,
+        "pid": [
+          0.542,
+          7.9,
+          0.5
+        ]
+      },
+      "continuous60": {
+        "cost": 0.13558550585796106,
+        "oracle": 0.13558550585796106,
+        "loss": 1.0,
+        "vsWorking": 0.15897827202681614,
+        "nominalVsWorking": 0.18440226000720425,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.1662272969989483,
+        "saturation": 0.008148148148148147,
+        "pid": [
+          1,
+          4,
+          0.4
+        ]
+      },
+      "repeat4": {
+        "cost": 0.3710976228151317,
+        "oracle": 0.13558550585796106,
+        "loss": 2.7370006879930986,
+        "vsWorking": 0.43512363991334974,
+        "nominalVsWorking": 0.34544092167994167,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.43663142174281816,
+        "saturation": 0.0044444444444444444,
+        "pid": [
+          1,
+          5.1,
+          0.2
+        ]
+      },
+      "continuous120": {
+        "cost": 0.15325625542628737,
+        "oracle": 0.13558550585796106,
+        "loss": 1.130329193054294,
+        "vsWorking": 0.17969778193323713,
+        "nominalVsWorking": 0.20590333065197713,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.17885022388531366,
+        "saturation": 0.013703703703703697,
+        "pid": [
+          0.979,
+          3.8,
+          0.4
+        ]
+      }
+    }
+  },
+  {
+    "id": "p062",
+    "condition": "nonzero_initial",
+    "arms": {
+      "single30": {
+        "cost": 0.2604945897005715,
+        "oracle": 0.25924611930140073,
+        "loss": 1.0048157727588558,
+        "vsWorking": 0.38276548175451747,
+        "nominalVsWorking": 0.38621125189269123,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.38640636653899,
+        "saturation": 0.0,
+        "pid": [
+          0.685,
+          7.1,
+          0.3
+        ]
+      },
+      "repeat2": {
+        "cost": 0.4490793164183004,
+        "oracle": 0.25924611930140073,
+        "loss": 1.732250872755394,
+        "vsWorking": 0.6598680651771827,
+        "nominalVsWorking": 0.6399067262045176,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.7318626504047323,
+        "saturation": 0.0,
+        "pid": [
+          0.54,
+          7.8,
+          0.4
+        ]
+      },
+      "continuous60": {
+        "cost": 0.25924611930140073,
+        "oracle": 0.25924611930140073,
+        "loss": 1.0,
+        "vsWorking": 0.38093100459956336,
+        "nominalVsWorking": 0.3626846039167892,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.37966197571475563,
+        "saturation": 0.0,
+        "pid": [
+          0.767,
+          8.1,
+          0.2
+        ]
+      },
+      "repeat4": {
+        "cost": 0.634131545351583,
+        "oracle": 0.25924611930140073,
+        "loss": 2.4460599335503987,
+        "vsWorking": 0.9317800677980945,
+        "nominalVsWorking": 0.9455484709288347,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.9124940357385845,
+        "saturation": 0.0,
+        "pid": [
+          0.702,
+          3.8,
+          0.3
+        ]
+      },
+      "continuous120": {
+        "cost": 0.25924611930140073,
+        "oracle": 0.25924611930140073,
+        "loss": 1.0,
+        "vsWorking": 0.38093100459956336,
+        "nominalVsWorking": 0.3626846039167892,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.37966197571475563,
+        "saturation": 0.0,
+        "pid": [
+          0.767,
+          8.1,
+          0.2
+        ]
+      }
+    }
+  },
+  {
+    "id": "p063",
+    "condition": "nonzero_initial",
+    "arms": {
+      "single30": {
+        "cost": 0.13383970740853995,
+        "oracle": 0.13252733775678685,
+        "loss": 1.009902633479,
+        "vsWorking": 0.15693126834744225,
+        "nominalVsWorking": 0.18376051893247608,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.163132448882142,
+        "saturation": 0.01,
+        "pid": [
+          1,
+          4,
+          0.5
+        ]
+      },
+      "repeat2": {
+        "cost": 2.3068412819211477,
+        "oracle": 0.13252733775678685,
+        "loss": 17.406531519969448,
+        "vsWorking": 2.7048439903046746,
+        "nominalVsWorking": 3.8190471936605874,
+        "nominalFailures": 0,
+        "matchedVsWorking": 2.6087310501601,
+        "saturation": 0.0,
+        "pid": [
+          0.542,
+          7.9,
+          0.5
+        ]
+      },
+      "continuous60": {
+        "cost": 0.13252733775678685,
+        "oracle": 0.13252733775678685,
+        "loss": 1.0,
+        "vsWorking": 0.15539247363563338,
+        "nominalVsWorking": 0.18324444047466412,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.15993381724307504,
+        "saturation": 0.009259259259259259,
+        "pid": [
+          1,
+          4,
+          0.8
+        ]
+      },
+      "repeat4": {
+        "cost": 0.37109762484352987,
+        "oracle": 0.13252733775678685,
+        "loss": 2.8001590549156385,
+        "vsWorking": 0.43512364211655846,
+        "nominalVsWorking": 0.3454409185945679,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.4366314217358548,
+        "saturation": 0.0044444444444444444,
+        "pid": [
+          1,
+          5.1,
+          0.2
+        ]
+      },
+      "continuous120": {
+        "cost": 0.13268252524680468,
+        "oracle": 0.13252733775678685,
+        "loss": 1.0011709847390327,
+        "vsWorking": 0.15557443585082126,
+        "nominalVsWorking": 0.18328727503676592,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.1605168031921465,
+        "saturation": 0.007777777777777777,
+        "pid": [
+          1,
+          4,
+          0.7
+        ]
+      }
+    }
+  },
+  {
+    "id": "p064",
+    "condition": "delay_300ms",
+    "arms": {
+      "single30": {
+        "cost": 0.5530487232573459,
+        "oracle": 0.4897610498613562,
+        "loss": 1.1292215324471095,
+        "vsWorking": 0.6758206841742607,
+        "nominalVsWorking": 0.7596091306807835,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.6998611051267105,
+        "saturation": 0.0,
+        "pid": [
+          0.429,
+          3,
+          0.4
+        ]
+      },
+      "repeat2": {
+        "cost": 1.9977717178239578,
+        "oracle": 0.4897610498613562,
+        "loss": 4.079074312645925,
+        "vsWorking": 2.441259499184355,
+        "nominalVsWorking": 3.733443561535258,
+        "nominalFailures": 0,
+        "matchedVsWorking": 2.6252666755845615,
+        "saturation": 0.0,
+        "pid": [
+          0.469,
+          250,
+          0.6
+        ]
+      },
+      "continuous60": {
+        "cost": 0.49309396624324325,
+        "oracle": 0.4897610498613562,
+        "loss": 1.0068051887401632,
+        "vsWorking": 0.6025564974926142,
+        "nominalVsWorking": 0.6686619801612554,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.6823873313875435,
+        "saturation": 0.0,
+        "pid": [
+          0.351,
+          4.1,
+          0.9
+        ]
+      },
+      "repeat4": {
+        "cost": 0.6197722504583492,
+        "oracle": 0.4897610498613562,
+        "loss": 1.265458432502538,
+        "vsWorking": 0.7573562485959854,
+        "nominalVsWorking": 0.9787772390181299,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.7986074480818844,
+        "saturation": 0.0,
+        "pid": [
+          0.231,
+          1.4,
+          1.5
+        ]
+      },
+      "continuous120": {
+        "cost": 0.4897610498613562,
+        "oracle": 0.4897610498613562,
+        "loss": 1.0,
+        "vsWorking": 0.5984837029362214,
+        "nominalVsWorking": 0.6367136112210116,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.6800221585115774,
+        "saturation": 0.0,
+        "pid": [
+          0.255,
+          2.8,
+          1.2
+        ]
+      }
+    }
+  },
+  {
+    "id": "p065",
+    "condition": "delay_300ms",
+    "arms": {
+      "single30": {
+        "cost": 0.6548244952912824,
+        "oracle": 0.3435191119478743,
+        "loss": 1.9062243482704555,
+        "vsWorking": 0.6931677666452134,
+        "nominalVsWorking": 0.5327202023093502,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.663027727105102,
+        "saturation": 0.12629629629629646,
+        "pid": [
+          0.23,
+          0.8,
+          0
+        ]
+      },
+      "repeat2": {
+        "cost": 0.6850797257337705,
+        "oracle": 0.3435191119478743,
+        "loss": 1.994298721399014,
+        "vsWorking": 0.725194593170429,
+        "nominalVsWorking": 0.8003402108669052,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.7262542883413815,
+        "saturation": 0.0014814814814814816,
+        "pid": [
+          0.422,
+          2.3,
+          0
+        ]
+      },
+      "continuous60": {
+        "cost": 0.3435191119478743,
+        "oracle": 0.3435191119478743,
+        "loss": 1.0,
+        "vsWorking": 0.363633885630584,
+        "nominalVsWorking": 0.36558998649030044,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.3686783993278116,
+        "saturation": 0.10185185185185187,
+        "pid": [
+          0.296,
+          1.1,
+          1.3
+        ]
+      },
+      "repeat4": {
+        "cost": 0.521288803062163,
+        "oracle": 0.3435191119478743,
+        "loss": 1.517495780966223,
+        "vsWorking": 0.5518128872607654,
+        "nominalVsWorking": 0.4993110315573287,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.5802394781688242,
+        "saturation": 0.004074074074074074,
+        "pid": [
+          0.231,
+          1.2,
+          2
+        ]
+      },
+      "continuous120": {
+        "cost": 0.35967139114448915,
+        "oracle": 0.3435191119478743,
+        "loss": 1.0470200307197632,
+        "vsWorking": 0.380731962103681,
+        "nominalVsWorking": 0.3573650448782226,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.3866470633426686,
+        "saturation": 0.10000000000000003,
+        "pid": [
+          0.237,
+          0.9,
+          2
+        ]
+      }
+    }
+  },
+  {
+    "id": "p066",
+    "condition": "weak_actuator",
+    "arms": {
+      "single30": {
+        "cost": 0.7541542865348824,
+        "oracle": 0.6397270467832411,
+        "loss": 1.1788688477797198,
+        "vsWorking": 0.9391661138795802,
+        "nominalVsWorking": 0.9389417946504323,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.8646320614197287,
+        "saturation": 0.999999999999996,
+        "pid": [
+          0.491,
+          1.8,
+          0
+        ]
+      },
+      "repeat2": {
+        "cost": 0.7030024277016509,
+        "oracle": 0.6397270467832411,
+        "loss": 1.0989099667375004,
+        "vsWorking": 0.8754654980561881,
+        "nominalVsWorking": 0.8748231276174311,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.851838776555672,
+        "saturation": 0.999999999999996,
+        "pid": [
+          0.452,
+          1.1,
+          0
+        ]
+      },
+      "continuous60": {
+        "cost": 0.7500616304382318,
+        "oracle": 0.6397270467832411,
+        "loss": 1.172471344161216,
+        "vsWorking": 0.9340694327489889,
+        "nominalVsWorking": 0.9385875988268423,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.851838776555672,
+        "saturation": 0.999999999999996,
+        "pid": [
+          0.4,
+          1.4,
+          0
+        ]
+      },
+      "repeat4": {
+        "cost": 0.8084560354334556,
+        "oracle": 0.6397270467832411,
+        "loss": 1.263751531998904,
+        "vsWorking": 1.0067893620669774,
+        "nominalVsWorking": 1.0136735611589784,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.0486298105272411,
+        "saturation": 0.999999999999996,
+        "pid": [
+          0.22,
+          1.1,
+          0
+        ]
+      },
+      "continuous120": {
+        "cost": 0.7500616304382318,
+        "oracle": 0.6397270467832411,
+        "loss": 1.172471344161216,
+        "vsWorking": 0.9340694327489889,
+        "nominalVsWorking": 0.9385875988268423,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.851838776555672,
+        "saturation": 0.999999999999996,
+        "pid": [
+          0.4,
+          1.4,
+          0
+        ]
+      }
+    }
+  },
+  {
+    "id": "p067",
+    "condition": "weak_actuator",
+    "arms": {
+      "single30": {
+        "cost": 0.8750787597271668,
+        "oracle": 0.8633517193338267,
+        "loss": 1.013583155197037,
+        "vsWorking": 0.9003015527413875,
+        "nominalVsWorking": 0.9992033852820235,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.9273751088131823,
+        "saturation": 0.9962962962962923,
+        "pid": [
+          0.169,
+          0.9,
+          0
+        ]
+      },
+      "repeat2": {
+        "cost": 0.8633532969660409,
+        "oracle": 0.8633517193338267,
+        "loss": 1.0000018273343052,
+        "vsWorking": 0.8882381216352043,
+        "nominalVsWorking": 0.9992047219895577,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.9174405666754902,
+        "saturation": 0.9962962962962923,
+        "pid": [
+          0.452,
+          1.1,
+          0
+        ]
+      },
+      "continuous60": {
+        "cost": 0.8633522566709851,
+        "oracle": 0.8633517193338267,
+        "loss": 1.0000006223849984,
+        "vsWorking": 0.8882370513552511,
+        "nominalVsWorking": 0.99920362614423,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.9174394667956083,
+        "saturation": 0.9962962962962923,
+        "pid": [
+          0.22,
+          1.1,
+          0
+        ]
+      },
+      "repeat4": {
+        "cost": 0.8633522566709851,
+        "oracle": 0.8633517193338267,
+        "loss": 1.0000006223849984,
+        "vsWorking": 0.8882370513552511,
+        "nominalVsWorking": 0.99920362614423,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.9174394667956083,
+        "saturation": 0.9962962962962923,
+        "pid": [
+          0.22,
+          1.1,
+          0
+        ]
+      },
+      "continuous120": {
+        "cost": 0.8633522566709851,
+        "oracle": 0.8633517193338267,
+        "loss": 1.0000006223849984,
+        "vsWorking": 0.8882370513552511,
+        "nominalVsWorking": 0.99920362614423,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.9174394667956083,
+        "saturation": 0.9962962962962923,
+        "pid": [
+          0.22,
+          1.1,
+          0
+        ]
+      }
+    }
+  },
+  {
+    "id": "p068",
+    "condition": "four_times_slower",
+    "arms": {
+      "single30": {
+        "cost": 0.30337547532851783,
+        "oracle": 0.21587237558877603,
+        "loss": 1.4053464437081564,
+        "vsWorking": 0.45776232597101807,
+        "nominalVsWorking": 0.5694532834576411,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.4505515367878006,
+        "saturation": 0.03703703703703702,
+        "pid": [
+          0.994,
+          5.3,
+          3.3
+        ]
+      },
+      "repeat2": {
+        "cost": 0.2675289383187347,
+        "oracle": 0.21587237558877603,
+        "loss": 1.239292140039082,
+        "vsWorking": 0.40367359601736774,
+        "nominalVsWorking": 0.49784711478787574,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.40226659379013885,
+        "saturation": 0.033703703703703694,
+        "pid": [
+          0.993,
+          5.8,
+          3.3
+        ]
+      },
+      "continuous60": {
+        "cost": 0.22523636097369526,
+        "oracle": 0.21587237558877603,
+        "loss": 1.0433774138973533,
+        "vsWorking": 0.33985845553572525,
+        "nominalVsWorking": 0.4235113143086233,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.3390328692733036,
+        "saturation": 0.030370370370370364,
+        "pid": [
+          0.999,
+          6.6,
+          3.3
+        ]
+      },
+      "repeat4": {
+        "cost": 1.004146869252092,
+        "oracle": 0.21587237558877603,
+        "loss": 4.651576499834012,
+        "vsWorking": 1.5151541369242134,
+        "nominalVsWorking": 1.465201352451798,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.3421719559803977,
+        "saturation": 0.025555555555555547,
+        "pid": [
+          0.488,
+          1.9,
+          4
+        ]
+      },
+      "continuous120": {
+        "cost": 0.21587237558877603,
+        "oracle": 0.21587237558877603,
+        "loss": 1.0,
+        "vsWorking": 0.32572916665527923,
+        "nominalVsWorking": 0.3959700610059924,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.311708621588515,
+        "saturation": 0.031111111111111103,
+        "pid": [
+          0.997,
+          6.9,
+          3.5
+        ]
+      }
+    }
+  },
+  {
+    "id": "p069",
+    "condition": "four_times_slower",
+    "arms": {
+      "single30": {
+        "cost": 0.45492333617038194,
+        "oracle": 0.19102185392019969,
+        "loss": 2.381525081211014,
+        "vsWorking": 0.9769719420367691,
+        "nominalVsWorking": 1.2391745544385335,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.8906439160588007,
+        "saturation": 0.01962962962962963,
+        "pid": [
+          0.561,
+          2.4,
+          2.9
+        ]
+      },
+      "repeat2": {
+        "cost": 0.37153499014802316,
+        "oracle": 0.19102185392019969,
+        "loss": 1.9449868301625515,
+        "vsWorking": 0.7978910554801256,
+        "nominalVsWorking": 0.9480669703139223,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.7823911067248843,
+        "saturation": 0.012592592592592593,
+        "pid": [
+          0.997,
+          7.5,
+          1.7
+        ]
+      },
+      "continuous60": {
+        "cost": 0.25633951784447995,
+        "oracle": 0.19102185392019969,
+        "loss": 1.3419381740037297,
+        "vsWorking": 0.5505026817870141,
+        "nominalVsWorking": 0.6426094874787758,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.5528845345103336,
+        "saturation": 0.012592592592592593,
+        "pid": [
+          0.711,
+          4.2,
+          2.4
+        ]
+      },
+      "repeat4": {
+        "cost": 0.6916061522942911,
+        "oracle": 0.19102185392019969,
+        "loss": 3.620560360508348,
+        "vsWorking": 1.485260816513641,
+        "nominalVsWorking": 1.7039322790801976,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.3003256628351578,
+        "saturation": 0.022962962962962956,
+        "pid": [
+          0.496,
+          1.9,
+          3.4
+        ]
+      },
+      "continuous120": {
+        "cost": 0.19102185392019969,
+        "oracle": 0.19102185392019969,
+        "loss": 1.0,
+        "vsWorking": 0.4102295414583564,
+        "nominalVsWorking": 0.6523551643308175,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.39506544675845734,
+        "saturation": 0.022592592592592584,
+        "pid": [
+          0.999,
+          5.5,
+          1.8
+        ]
+      }
+    }
+  },
+  {
+    "id": "p070",
+    "condition": "coupled_disturbance",
+    "arms": {
+      "single30": {
+        "cost": 6.860837730116893,
+        "oracle": 2.356566544429782,
+        "loss": 2.9113702502201178,
+        "vsWorking": 1.2786015097377288,
+        "nominalVsWorking": 1.3204902639256173,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.2834062243344817,
+        "saturation": 0.07222222222222215,
+        "pid": [
+          0.152,
+          0.8,
+          1.1
+        ]
+      },
+      "repeat2": {
+        "cost": 5.365892092153256,
+        "oracle": 2.356566544429782,
+        "loss": 2.276995786448984,
+        "vsWorking": 1.0,
+        "nominalVsWorking": 1.0,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.0,
+        "saturation": 0.0988888888888889,
+        "pid": [
+          0.4000000059604645,
+          2.5,
+          0.20000000298023224
+        ]
+      },
+      "continuous60": {
+        "cost": 7.108323397967947,
+        "oracle": 2.356566544429782,
+        "loss": 3.0163898468175643,
+        "vsWorking": 1.3247235083915894,
+        "nominalVsWorking": 1.3408891906660068,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.3187515903553535,
+        "saturation": 0.019629629629629622,
+        "pid": [
+          0.144,
+          1.2,
+          0.8
+        ]
+      },
+      "repeat4": {
+        "cost": 5.365892092153256,
+        "oracle": 2.356566544429782,
+        "loss": 2.276995786448984,
+        "vsWorking": 1.0,
+        "nominalVsWorking": 1.0,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.0,
+        "saturation": 0.0988888888888889,
+        "pid": [
+          0.4000000059604645,
+          2.5,
+          0.20000000298023224
+        ]
+      },
+      "continuous120": {
+        "cost": 5.365892092153256,
+        "oracle": 2.356566544429782,
+        "loss": 2.276995786448984,
+        "vsWorking": 1.0,
+        "nominalVsWorking": 1.0,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.0,
+        "saturation": 0.0988888888888889,
+        "pid": [
+          0.4000000059604645,
+          2.5,
+          0.20000000298023224
+        ]
+      }
+    }
+  },
+  {
+    "id": "p071",
+    "condition": "coupled_disturbance",
+    "arms": {
+      "single30": {
+        "cost": 5.464133327955736,
+        "oracle": 3.381141014686894,
+        "loss": 1.6160619460178696,
+        "vsWorking": 0.8437852805813306,
+        "nominalVsWorking": 0.9055139428443026,
+        "nominalFailures": 0,
+        "matchedVsWorking": 0.8258079402728974,
+        "saturation": 0.47888888888888925,
+        "pid": [
+          0.301,
+          0.7,
+          0.9
+        ]
+      },
+      "repeat2": {
+        "cost": 6.475739093470782,
+        "oracle": 3.381141014686894,
+        "loss": 1.9152525923472787,
+        "vsWorking": 1.0,
+        "nominalVsWorking": 1.0,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.0,
+        "saturation": 0.25481481481481494,
+        "pid": [
+          0.4000000059604645,
+          2.5,
+          0.20000000298023224
+        ]
+      },
+      "continuous60": {
+        "cost": 10.467381549970483,
+        "oracle": 3.381141014686894,
+        "loss": 3.095813367293053,
+        "vsWorking": 1.6163995180911948,
+        "nominalVsWorking": 1.6881525940172788,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.6427742971772028,
+        "saturation": 0.052962962962962906,
+        "pid": [
+          0.094,
+          0.9,
+          0.9
+        ]
+      },
+      "repeat4": {
+        "cost": 6.475739093470782,
+        "oracle": 3.381141014686894,
+        "loss": 1.9152525923472787,
+        "vsWorking": 1.0,
+        "nominalVsWorking": 1.0,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.0,
+        "saturation": 0.25481481481481494,
+        "pid": [
+          0.4000000059604645,
+          2.5,
+          0.20000000298023224
+        ]
+      },
+      "continuous120": {
+        "cost": 8.54798125927602,
+        "oracle": 3.381141014686894,
+        "loss": 2.5281350946753087,
+        "vsWorking": 1.320000873397539,
+        "nominalVsWorking": 1.3314449305500686,
+        "nominalFailures": 0,
+        "matchedVsWorking": 1.3300627058112162,
+        "saturation": 0.1596296296296297,
+        "pid": [
+          0.081,
+          0.4,
+          1.7
+        ]
+      }
+    }
+  }
+]

@@ -1,0 +1,2702 @@
+[
+  {
+    "id": "p000",
+    "plant": {
+      "id": "old_new_pid_best",
+      "type": "nonlinear",
+      "p1": 0.8,
+      "p2": 0.6,
+      "n": 2,
+      "nominalOrder": 2,
+      "provenance": "ExcitationStudy.cs recurrence"
+    },
+    "condition": "baseline",
+    "seed": 826,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p001",
+    "plant": {
+      "id": "old_new_pid_best",
+      "type": "nonlinear",
+      "p1": 0.8,
+      "p2": 0.6,
+      "n": 2,
+      "nominalOrder": 2,
+      "provenance": "ExcitationStudy.cs recurrence"
+    },
+    "condition": "baseline",
+    "seed": 827,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p002",
+    "plant": {
+      "id": "old_new_pid_best",
+      "type": "nonlinear",
+      "p1": 0.8,
+      "p2": 0.6,
+      "n": 2,
+      "nominalOrder": 2,
+      "provenance": "ExcitationStudy.cs recurrence"
+    },
+    "condition": "nonzero_initial",
+    "seed": 826,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0.5,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p003",
+    "plant": {
+      "id": "old_new_pid_best",
+      "type": "nonlinear",
+      "p1": 0.8,
+      "p2": 0.6,
+      "n": 2,
+      "nominalOrder": 2,
+      "provenance": "ExcitationStudy.cs recurrence"
+    },
+    "condition": "nonzero_initial",
+    "seed": 827,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0.5,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p004",
+    "plant": {
+      "id": "old_new_pid_best",
+      "type": "nonlinear",
+      "p1": 0.8,
+      "p2": 0.6,
+      "n": 2,
+      "nominalOrder": 2,
+      "provenance": "ExcitationStudy.cs recurrence"
+    },
+    "condition": "delay_300ms",
+    "seed": 826,
+    "delay": 6,
+    "gain": 1,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p005",
+    "plant": {
+      "id": "old_new_pid_best",
+      "type": "nonlinear",
+      "p1": 0.8,
+      "p2": 0.6,
+      "n": 2,
+      "nominalOrder": 2,
+      "provenance": "ExcitationStudy.cs recurrence"
+    },
+    "condition": "delay_300ms",
+    "seed": 827,
+    "delay": 6,
+    "gain": 1,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p006",
+    "plant": {
+      "id": "old_new_pid_best",
+      "type": "nonlinear",
+      "p1": 0.8,
+      "p2": 0.6,
+      "n": 2,
+      "nominalOrder": 2,
+      "provenance": "ExcitationStudy.cs recurrence"
+    },
+    "condition": "weak_actuator",
+    "seed": 826,
+    "delay": 1,
+    "gain": 0.2,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p007",
+    "plant": {
+      "id": "old_new_pid_best",
+      "type": "nonlinear",
+      "p1": 0.8,
+      "p2": 0.6,
+      "n": 2,
+      "nominalOrder": 2,
+      "provenance": "ExcitationStudy.cs recurrence"
+    },
+    "condition": "weak_actuator",
+    "seed": 827,
+    "delay": 1,
+    "gain": 0.2,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p008",
+    "plant": {
+      "id": "old_new_pid_best",
+      "type": "nonlinear",
+      "p1": 0.9457416090031758,
+      "p2": 0.8801117367933934,
+      "n": 2,
+      "nominalOrder": 2,
+      "provenance": "ExcitationStudy.cs recurrence"
+    },
+    "condition": "four_times_slower",
+    "seed": 826,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p009",
+    "plant": {
+      "id": "old_new_pid_best",
+      "type": "nonlinear",
+      "p1": 0.9457416090031758,
+      "p2": 0.8801117367933934,
+      "n": 2,
+      "nominalOrder": 2,
+      "provenance": "ExcitationStudy.cs recurrence"
+    },
+    "condition": "four_times_slower",
+    "seed": 827,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p010",
+    "plant": {
+      "id": "old_new_pid_best",
+      "type": "nonlinear",
+      "p1": 0.8,
+      "p2": 0.6,
+      "n": 2,
+      "nominalOrder": 2,
+      "provenance": "ExcitationStudy.cs recurrence"
+    },
+    "condition": "coupled_disturbance",
+    "seed": 826,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0,
+    "coupled": true,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p011",
+    "plant": {
+      "id": "old_new_pid_best",
+      "type": "nonlinear",
+      "p1": 0.8,
+      "p2": 0.6,
+      "n": 2,
+      "nominalOrder": 2,
+      "provenance": "ExcitationStudy.cs recurrence"
+    },
+    "condition": "coupled_disturbance",
+    "seed": 827,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0,
+    "coupled": true,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p012",
+    "plant": {
+      "id": "old_new_pid_worst",
+      "type": "nonlinear",
+      "p1": 0.95,
+      "p2": 0.85,
+      "n": 2,
+      "nominalOrder": 2,
+      "provenance": "ExcitationStudy.cs recurrence"
+    },
+    "condition": "baseline",
+    "seed": 826,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p013",
+    "plant": {
+      "id": "old_new_pid_worst",
+      "type": "nonlinear",
+      "p1": 0.95,
+      "p2": 0.85,
+      "n": 2,
+      "nominalOrder": 2,
+      "provenance": "ExcitationStudy.cs recurrence"
+    },
+    "condition": "baseline",
+    "seed": 827,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p014",
+    "plant": {
+      "id": "old_new_pid_worst",
+      "type": "nonlinear",
+      "p1": 0.95,
+      "p2": 0.85,
+      "n": 2,
+      "nominalOrder": 2,
+      "provenance": "ExcitationStudy.cs recurrence"
+    },
+    "condition": "nonzero_initial",
+    "seed": 826,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0.5,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p015",
+    "plant": {
+      "id": "old_new_pid_worst",
+      "type": "nonlinear",
+      "p1": 0.95,
+      "p2": 0.85,
+      "n": 2,
+      "nominalOrder": 2,
+      "provenance": "ExcitationStudy.cs recurrence"
+    },
+    "condition": "nonzero_initial",
+    "seed": 827,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0.5,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p016",
+    "plant": {
+      "id": "old_new_pid_worst",
+      "type": "nonlinear",
+      "p1": 0.95,
+      "p2": 0.85,
+      "n": 2,
+      "nominalOrder": 2,
+      "provenance": "ExcitationStudy.cs recurrence"
+    },
+    "condition": "delay_300ms",
+    "seed": 826,
+    "delay": 6,
+    "gain": 1,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p017",
+    "plant": {
+      "id": "old_new_pid_worst",
+      "type": "nonlinear",
+      "p1": 0.95,
+      "p2": 0.85,
+      "n": 2,
+      "nominalOrder": 2,
+      "provenance": "ExcitationStudy.cs recurrence"
+    },
+    "condition": "delay_300ms",
+    "seed": 827,
+    "delay": 6,
+    "gain": 1,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p018",
+    "plant": {
+      "id": "old_new_pid_worst",
+      "type": "nonlinear",
+      "p1": 0.95,
+      "p2": 0.85,
+      "n": 2,
+      "nominalOrder": 2,
+      "provenance": "ExcitationStudy.cs recurrence"
+    },
+    "condition": "weak_actuator",
+    "seed": 826,
+    "delay": 1,
+    "gain": 0.2,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p019",
+    "plant": {
+      "id": "old_new_pid_worst",
+      "type": "nonlinear",
+      "p1": 0.95,
+      "p2": 0.85,
+      "n": 2,
+      "nominalOrder": 2,
+      "provenance": "ExcitationStudy.cs recurrence"
+    },
+    "condition": "weak_actuator",
+    "seed": 827,
+    "delay": 1,
+    "gain": 0.2,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p020",
+    "plant": {
+      "id": "old_new_pid_worst",
+      "type": "nonlinear",
+      "p1": 0.9872585449014338,
+      "p2": 0.9601845894041878,
+      "n": 2,
+      "nominalOrder": 2,
+      "provenance": "ExcitationStudy.cs recurrence"
+    },
+    "condition": "four_times_slower",
+    "seed": 826,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p021",
+    "plant": {
+      "id": "old_new_pid_worst",
+      "type": "nonlinear",
+      "p1": 0.9872585449014338,
+      "p2": 0.9601845894041878,
+      "n": 2,
+      "nominalOrder": 2,
+      "provenance": "ExcitationStudy.cs recurrence"
+    },
+    "condition": "four_times_slower",
+    "seed": 827,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p022",
+    "plant": {
+      "id": "old_new_pid_worst",
+      "type": "nonlinear",
+      "p1": 0.95,
+      "p2": 0.85,
+      "n": 2,
+      "nominalOrder": 2,
+      "provenance": "ExcitationStudy.cs recurrence"
+    },
+    "condition": "coupled_disturbance",
+    "seed": 826,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0,
+    "coupled": true,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p023",
+    "plant": {
+      "id": "old_new_pid_worst",
+      "type": "nonlinear",
+      "p1": 0.95,
+      "p2": 0.85,
+      "n": 2,
+      "nominalOrder": 2,
+      "provenance": "ExcitationStudy.cs recurrence"
+    },
+    "condition": "coupled_disturbance",
+    "seed": 827,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0,
+    "coupled": true,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p024",
+    "plant": {
+      "id": "old_first",
+      "type": "linear",
+      "A": [
+        [
+          0.9394130628134758
+        ]
+      ],
+      "B": [
+        0.04846954974921938
+      ],
+      "C": [
+        1.7499999999999998
+      ],
+      "n": 1,
+      "nominalOrder": 1,
+      "provenance": "fritlab/core.py transfer function"
+    },
+    "condition": "baseline",
+    "seed": 826,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p025",
+    "plant": {
+      "id": "old_first",
+      "type": "linear",
+      "A": [
+        [
+          0.9394130628134758
+        ]
+      ],
+      "B": [
+        0.04846954974921938
+      ],
+      "C": [
+        1.7499999999999998
+      ],
+      "n": 1,
+      "nominalOrder": 1,
+      "provenance": "fritlab/core.py transfer function"
+    },
+    "condition": "baseline",
+    "seed": 827,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p026",
+    "plant": {
+      "id": "old_first",
+      "type": "linear",
+      "A": [
+        [
+          0.9394130628134758
+        ]
+      ],
+      "B": [
+        0.04846954974921938
+      ],
+      "C": [
+        1.7499999999999998
+      ],
+      "n": 1,
+      "nominalOrder": 1,
+      "provenance": "fritlab/core.py transfer function"
+    },
+    "condition": "nonzero_initial",
+    "seed": 826,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0.5,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p027",
+    "plant": {
+      "id": "old_first",
+      "type": "linear",
+      "A": [
+        [
+          0.9394130628134758
+        ]
+      ],
+      "B": [
+        0.04846954974921938
+      ],
+      "C": [
+        1.7499999999999998
+      ],
+      "n": 1,
+      "nominalOrder": 1,
+      "provenance": "fritlab/core.py transfer function"
+    },
+    "condition": "nonzero_initial",
+    "seed": 827,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0.5,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p028",
+    "plant": {
+      "id": "old_first",
+      "type": "linear",
+      "A": [
+        [
+          0.9394130628134758
+        ]
+      ],
+      "B": [
+        0.04846954974921938
+      ],
+      "C": [
+        1.7499999999999998
+      ],
+      "n": 1,
+      "nominalOrder": 1,
+      "provenance": "fritlab/core.py transfer function"
+    },
+    "condition": "delay_300ms",
+    "seed": 826,
+    "delay": 6,
+    "gain": 1,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p029",
+    "plant": {
+      "id": "old_first",
+      "type": "linear",
+      "A": [
+        [
+          0.9394130628134758
+        ]
+      ],
+      "B": [
+        0.04846954974921938
+      ],
+      "C": [
+        1.7499999999999998
+      ],
+      "n": 1,
+      "nominalOrder": 1,
+      "provenance": "fritlab/core.py transfer function"
+    },
+    "condition": "delay_300ms",
+    "seed": 827,
+    "delay": 6,
+    "gain": 1,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p030",
+    "plant": {
+      "id": "old_first",
+      "type": "linear",
+      "A": [
+        [
+          0.9394130628134758
+        ]
+      ],
+      "B": [
+        0.04846954974921938
+      ],
+      "C": [
+        1.7499999999999998
+      ],
+      "n": 1,
+      "nominalOrder": 1,
+      "provenance": "fritlab/core.py transfer function"
+    },
+    "condition": "weak_actuator",
+    "seed": 826,
+    "delay": 1,
+    "gain": 0.2,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p031",
+    "plant": {
+      "id": "old_first",
+      "type": "linear",
+      "A": [
+        [
+          0.9394130628134758
+        ]
+      ],
+      "B": [
+        0.04846954974921938
+      ],
+      "C": [
+        1.7499999999999998
+      ],
+      "n": 1,
+      "nominalOrder": 1,
+      "provenance": "fritlab/core.py transfer function"
+    },
+    "condition": "weak_actuator",
+    "seed": 827,
+    "delay": 1,
+    "gain": 0.2,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p032",
+    "plant": {
+      "id": "old_first",
+      "type": "linear",
+      "A": [
+        [
+          0.9844964370054085
+        ]
+      ],
+      "B": [
+        0.012402850395673244
+      ],
+      "C": [
+        1.7499999999999998
+      ],
+      "n": 1,
+      "nominalOrder": 1,
+      "provenance": "fritlab/core.py transfer function"
+    },
+    "condition": "four_times_slower",
+    "seed": 826,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p033",
+    "plant": {
+      "id": "old_first",
+      "type": "linear",
+      "A": [
+        [
+          0.9844964370054085
+        ]
+      ],
+      "B": [
+        0.012402850395673244
+      ],
+      "C": [
+        1.7499999999999998
+      ],
+      "n": 1,
+      "nominalOrder": 1,
+      "provenance": "fritlab/core.py transfer function"
+    },
+    "condition": "four_times_slower",
+    "seed": 827,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p034",
+    "plant": {
+      "id": "old_first",
+      "type": "linear",
+      "A": [
+        [
+          0.9394130628134758
+        ]
+      ],
+      "B": [
+        0.04846954974921938
+      ],
+      "C": [
+        1.7499999999999998
+      ],
+      "n": 1,
+      "nominalOrder": 1,
+      "provenance": "fritlab/core.py transfer function"
+    },
+    "condition": "coupled_disturbance",
+    "seed": 826,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0,
+    "coupled": true,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p035",
+    "plant": {
+      "id": "old_first",
+      "type": "linear",
+      "A": [
+        [
+          0.9394130628134758
+        ]
+      ],
+      "B": [
+        0.04846954974921938
+      ],
+      "C": [
+        1.7499999999999998
+      ],
+      "n": 1,
+      "nominalOrder": 1,
+      "provenance": "fritlab/core.py transfer function"
+    },
+    "condition": "coupled_disturbance",
+    "seed": 827,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0,
+    "coupled": true,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p036",
+    "plant": {
+      "id": "old_oscillator",
+      "type": "linear",
+      "A": [
+        [
+          0.9183584932371658,
+          -0.15540264809752596
+        ],
+        [
+          0.04796378027701417,
+          0.9960598172859287
+        ]
+      ],
+      "B": [
+        0.04796378027701418,
+        0.0012161057759479156
+      ],
+      "C": [
+        0.0,
+        3.24
+      ],
+      "n": 2,
+      "nominalOrder": 2,
+      "provenance": "fritlab/core.py transfer function"
+    },
+    "condition": "baseline",
+    "seed": 826,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p037",
+    "plant": {
+      "id": "old_oscillator",
+      "type": "linear",
+      "A": [
+        [
+          0.9183584932371658,
+          -0.15540264809752596
+        ],
+        [
+          0.04796378027701417,
+          0.9960598172859287
+        ]
+      ],
+      "B": [
+        0.04796378027701418,
+        0.0012161057759479156
+      ],
+      "C": [
+        0.0,
+        3.24
+      ],
+      "n": 2,
+      "nominalOrder": 2,
+      "provenance": "fritlab/core.py transfer function"
+    },
+    "condition": "baseline",
+    "seed": 827,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p038",
+    "plant": {
+      "id": "old_oscillator",
+      "type": "linear",
+      "A": [
+        [
+          0.9183584932371658,
+          -0.15540264809752596
+        ],
+        [
+          0.04796378027701417,
+          0.9960598172859287
+        ]
+      ],
+      "B": [
+        0.04796378027701418,
+        0.0012161057759479156
+      ],
+      "C": [
+        0.0,
+        3.24
+      ],
+      "n": 2,
+      "nominalOrder": 2,
+      "provenance": "fritlab/core.py transfer function"
+    },
+    "condition": "nonzero_initial",
+    "seed": 826,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0.5,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p039",
+    "plant": {
+      "id": "old_oscillator",
+      "type": "linear",
+      "A": [
+        [
+          0.9183584932371658,
+          -0.15540264809752596
+        ],
+        [
+          0.04796378027701417,
+          0.9960598172859287
+        ]
+      ],
+      "B": [
+        0.04796378027701418,
+        0.0012161057759479156
+      ],
+      "C": [
+        0.0,
+        3.24
+      ],
+      "n": 2,
+      "nominalOrder": 2,
+      "provenance": "fritlab/core.py transfer function"
+    },
+    "condition": "nonzero_initial",
+    "seed": 827,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0.5,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p040",
+    "plant": {
+      "id": "old_oscillator",
+      "type": "linear",
+      "A": [
+        [
+          0.9183584932371658,
+          -0.15540264809752596
+        ],
+        [
+          0.04796378027701417,
+          0.9960598172859287
+        ]
+      ],
+      "B": [
+        0.04796378027701418,
+        0.0012161057759479156
+      ],
+      "C": [
+        0.0,
+        3.24
+      ],
+      "n": 2,
+      "nominalOrder": 2,
+      "provenance": "fritlab/core.py transfer function"
+    },
+    "condition": "delay_300ms",
+    "seed": 826,
+    "delay": 6,
+    "gain": 1,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p041",
+    "plant": {
+      "id": "old_oscillator",
+      "type": "linear",
+      "A": [
+        [
+          0.9183584932371658,
+          -0.15540264809752596
+        ],
+        [
+          0.04796378027701417,
+          0.9960598172859287
+        ]
+      ],
+      "B": [
+        0.04796378027701418,
+        0.0012161057759479156
+      ],
+      "C": [
+        0.0,
+        3.24
+      ],
+      "n": 2,
+      "nominalOrder": 2,
+      "provenance": "fritlab/core.py transfer function"
+    },
+    "condition": "delay_300ms",
+    "seed": 827,
+    "delay": 6,
+    "gain": 1,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p042",
+    "plant": {
+      "id": "old_oscillator",
+      "type": "linear",
+      "A": [
+        [
+          0.9183584932371658,
+          -0.15540264809752596
+        ],
+        [
+          0.04796378027701417,
+          0.9960598172859287
+        ]
+      ],
+      "B": [
+        0.04796378027701418,
+        0.0012161057759479156
+      ],
+      "C": [
+        0.0,
+        3.24
+      ],
+      "n": 2,
+      "nominalOrder": 2,
+      "provenance": "fritlab/core.py transfer function"
+    },
+    "condition": "weak_actuator",
+    "seed": 826,
+    "delay": 1,
+    "gain": 0.2,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p043",
+    "plant": {
+      "id": "old_oscillator",
+      "type": "linear",
+      "A": [
+        [
+          0.9183584932371658,
+          -0.15540264809752596
+        ],
+        [
+          0.04796378027701417,
+          0.9960598172859287
+        ]
+      ],
+      "B": [
+        0.04796378027701418,
+        0.0012161057759479156
+      ],
+      "C": [
+        0.0,
+        3.24
+      ],
+      "n": 2,
+      "nominalOrder": 2,
+      "provenance": "fritlab/core.py transfer function"
+    },
+    "condition": "weak_actuator",
+    "seed": 827,
+    "delay": 1,
+    "gain": 0.2,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p044",
+    "plant": {
+      "id": "old_oscillator",
+      "type": "linear",
+      "A": [
+        [
+          0.9797039311945124,
+          -0.040089308753733205
+        ],
+        [
+          0.012373243442510225,
+          0.999748585571379
+        ]
+      ],
+      "B": [
+        0.012373243442510248,
+        7.759704587067096e-05
+      ],
+      "C": [
+        0.0,
+        3.24
+      ],
+      "n": 2,
+      "nominalOrder": 2,
+      "provenance": "fritlab/core.py transfer function"
+    },
+    "condition": "four_times_slower",
+    "seed": 826,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p045",
+    "plant": {
+      "id": "old_oscillator",
+      "type": "linear",
+      "A": [
+        [
+          0.9797039311945124,
+          -0.040089308753733205
+        ],
+        [
+          0.012373243442510225,
+          0.999748585571379
+        ]
+      ],
+      "B": [
+        0.012373243442510248,
+        7.759704587067096e-05
+      ],
+      "C": [
+        0.0,
+        3.24
+      ],
+      "n": 2,
+      "nominalOrder": 2,
+      "provenance": "fritlab/core.py transfer function"
+    },
+    "condition": "four_times_slower",
+    "seed": 827,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p046",
+    "plant": {
+      "id": "old_oscillator",
+      "type": "linear",
+      "A": [
+        [
+          0.9183584932371658,
+          -0.15540264809752596
+        ],
+        [
+          0.04796378027701417,
+          0.9960598172859287
+        ]
+      ],
+      "B": [
+        0.04796378027701418,
+        0.0012161057759479156
+      ],
+      "C": [
+        0.0,
+        3.24
+      ],
+      "n": 2,
+      "nominalOrder": 2,
+      "provenance": "fritlab/core.py transfer function"
+    },
+    "condition": "coupled_disturbance",
+    "seed": 826,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0,
+    "coupled": true,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p047",
+    "plant": {
+      "id": "old_oscillator",
+      "type": "linear",
+      "A": [
+        [
+          0.9183584932371658,
+          -0.15540264809752596
+        ],
+        [
+          0.04796378027701417,
+          0.9960598172859287
+        ]
+      ],
+      "B": [
+        0.04796378027701418,
+        0.0012161057759479156
+      ],
+      "C": [
+        0.0,
+        3.24
+      ],
+      "n": 2,
+      "nominalOrder": 2,
+      "provenance": "fritlab/core.py transfer function"
+    },
+    "condition": "coupled_disturbance",
+    "seed": 827,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0,
+    "coupled": true,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p048",
+    "plant": {
+      "id": "third_cascade",
+      "type": "linear",
+      "A": [
+        [
+          0.7188685511904869,
+          -0.44997688202657377,
+          -0.20211229790637608
+        ],
+        [
+          0.04269622293272195,
+          0.988183188150733,
+          -0.005329826632546404
+        ],
+        [
+          0.0011259258761254286,
+          0.04979821692059005,
+          0.9999088067423352
+        ]
+      ],
+      "B": [
+        0.04269622293272194,
+        0.001125925876125427,
+        1.9264575681703646e-05
+      ],
+      "C": [
+        0.0,
+        0.0,
+        5.680473372781064
+      ],
+      "n": 3,
+      "nominalOrder": 3,
+      "provenance": "new minimal third-order no pole-zero cancellation"
+    },
+    "condition": "baseline",
+    "seed": 826,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p049",
+    "plant": {
+      "id": "third_cascade",
+      "type": "linear",
+      "A": [
+        [
+          0.7188685511904869,
+          -0.44997688202657377,
+          -0.20211229790637608
+        ],
+        [
+          0.04269622293272195,
+          0.988183188150733,
+          -0.005329826632546404
+        ],
+        [
+          0.0011259258761254286,
+          0.04979821692059005,
+          0.9999088067423352
+        ]
+      ],
+      "B": [
+        0.04269622293272194,
+        0.001125925876125427,
+        1.9264575681703646e-05
+      ],
+      "C": [
+        0.0,
+        0.0,
+        5.680473372781064
+      ],
+      "n": 3,
+      "nominalOrder": 3,
+      "provenance": "new minimal third-order no pole-zero cancellation"
+    },
+    "condition": "baseline",
+    "seed": 827,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p050",
+    "plant": {
+      "id": "third_cascade",
+      "type": "linear",
+      "A": [
+        [
+          0.7188685511904869,
+          -0.44997688202657377,
+          -0.20211229790637608
+        ],
+        [
+          0.04269622293272195,
+          0.988183188150733,
+          -0.005329826632546404
+        ],
+        [
+          0.0011259258761254286,
+          0.04979821692059005,
+          0.9999088067423352
+        ]
+      ],
+      "B": [
+        0.04269622293272194,
+        0.001125925876125427,
+        1.9264575681703646e-05
+      ],
+      "C": [
+        0.0,
+        0.0,
+        5.680473372781064
+      ],
+      "n": 3,
+      "nominalOrder": 3,
+      "provenance": "new minimal third-order no pole-zero cancellation"
+    },
+    "condition": "nonzero_initial",
+    "seed": 826,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0.5,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p051",
+    "plant": {
+      "id": "third_cascade",
+      "type": "linear",
+      "A": [
+        [
+          0.7188685511904869,
+          -0.44997688202657377,
+          -0.20211229790637608
+        ],
+        [
+          0.04269622293272195,
+          0.988183188150733,
+          -0.005329826632546404
+        ],
+        [
+          0.0011259258761254286,
+          0.04979821692059005,
+          0.9999088067423352
+        ]
+      ],
+      "B": [
+        0.04269622293272194,
+        0.001125925876125427,
+        1.9264575681703646e-05
+      ],
+      "C": [
+        0.0,
+        0.0,
+        5.680473372781064
+      ],
+      "n": 3,
+      "nominalOrder": 3,
+      "provenance": "new minimal third-order no pole-zero cancellation"
+    },
+    "condition": "nonzero_initial",
+    "seed": 827,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0.5,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p052",
+    "plant": {
+      "id": "third_cascade",
+      "type": "linear",
+      "A": [
+        [
+          0.7188685511904869,
+          -0.44997688202657377,
+          -0.20211229790637608
+        ],
+        [
+          0.04269622293272195,
+          0.988183188150733,
+          -0.005329826632546404
+        ],
+        [
+          0.0011259258761254286,
+          0.04979821692059005,
+          0.9999088067423352
+        ]
+      ],
+      "B": [
+        0.04269622293272194,
+        0.001125925876125427,
+        1.9264575681703646e-05
+      ],
+      "C": [
+        0.0,
+        0.0,
+        5.680473372781064
+      ],
+      "n": 3,
+      "nominalOrder": 3,
+      "provenance": "new minimal third-order no pole-zero cancellation"
+    },
+    "condition": "delay_300ms",
+    "seed": 826,
+    "delay": 6,
+    "gain": 1,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p053",
+    "plant": {
+      "id": "third_cascade",
+      "type": "linear",
+      "A": [
+        [
+          0.7188685511904869,
+          -0.44997688202657377,
+          -0.20211229790637608
+        ],
+        [
+          0.04269622293272195,
+          0.988183188150733,
+          -0.005329826632546404
+        ],
+        [
+          0.0011259258761254286,
+          0.04979821692059005,
+          0.9999088067423352
+        ]
+      ],
+      "B": [
+        0.04269622293272194,
+        0.001125925876125427,
+        1.9264575681703646e-05
+      ],
+      "C": [
+        0.0,
+        0.0,
+        5.680473372781064
+      ],
+      "n": 3,
+      "nominalOrder": 3,
+      "provenance": "new minimal third-order no pole-zero cancellation"
+    },
+    "condition": "delay_300ms",
+    "seed": 827,
+    "delay": 6,
+    "gain": 1,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p054",
+    "plant": {
+      "id": "third_cascade",
+      "type": "linear",
+      "A": [
+        [
+          0.7188685511904869,
+          -0.44997688202657377,
+          -0.20211229790637608
+        ],
+        [
+          0.04269622293272195,
+          0.988183188150733,
+          -0.005329826632546404
+        ],
+        [
+          0.0011259258761254286,
+          0.04979821692059005,
+          0.9999088067423352
+        ]
+      ],
+      "B": [
+        0.04269622293272194,
+        0.001125925876125427,
+        1.9264575681703646e-05
+      ],
+      "C": [
+        0.0,
+        0.0,
+        5.680473372781064
+      ],
+      "n": 3,
+      "nominalOrder": 3,
+      "provenance": "new minimal third-order no pole-zero cancellation"
+    },
+    "condition": "weak_actuator",
+    "seed": 826,
+    "delay": 1,
+    "gain": 0.2,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p055",
+    "plant": {
+      "id": "third_cascade",
+      "type": "linear",
+      "A": [
+        [
+          0.7188685511904869,
+          -0.44997688202657377,
+          -0.20211229790637608
+        ],
+        [
+          0.04269622293272195,
+          0.988183188150733,
+          -0.005329826632546404
+        ],
+        [
+          0.0011259258761254286,
+          0.04979821692059005,
+          0.9999088067423352
+        ]
+      ],
+      "B": [
+        0.04269622293272194,
+        0.001125925876125427,
+        1.9264575681703646e-05
+      ],
+      "C": [
+        0.0,
+        0.0,
+        5.680473372781064
+      ],
+      "n": 3,
+      "nominalOrder": 3,
+      "provenance": "new minimal third-order no pole-zero cancellation"
+    },
+    "condition": "weak_actuator",
+    "seed": 827,
+    "delay": 1,
+    "gain": 0.2,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p056",
+    "plant": {
+      "id": "third_cascade",
+      "type": "linear",
+      "A": [
+        [
+          0.9234086381011093,
+          -0.12550403057906984,
+          -0.056883539922609146
+        ],
+        [
+          0.012016647808651262,
+          0.9992059550479859,
+          -0.0003602427493300593
+        ],
+        [
+          7.610128079591147e-05,
+          0.01249667127213292,
+          0.9999984890965118
+        ]
+      ],
+      "B": [
+        0.01201664780865118,
+        7.610128079597482e-05,
+        3.191783618870146e-07
+      ],
+      "C": [
+        0.0,
+        0.0,
+        5.680473372781064
+      ],
+      "n": 3,
+      "nominalOrder": 3,
+      "provenance": "new minimal third-order no pole-zero cancellation"
+    },
+    "condition": "four_times_slower",
+    "seed": 826,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p057",
+    "plant": {
+      "id": "third_cascade",
+      "type": "linear",
+      "A": [
+        [
+          0.9234086381011093,
+          -0.12550403057906984,
+          -0.056883539922609146
+        ],
+        [
+          0.012016647808651262,
+          0.9992059550479859,
+          -0.0003602427493300593
+        ],
+        [
+          7.610128079591147e-05,
+          0.01249667127213292,
+          0.9999984890965118
+        ]
+      ],
+      "B": [
+        0.01201664780865118,
+        7.610128079597482e-05,
+        3.191783618870146e-07
+      ],
+      "C": [
+        0.0,
+        0.0,
+        5.680473372781064
+      ],
+      "n": 3,
+      "nominalOrder": 3,
+      "provenance": "new minimal third-order no pole-zero cancellation"
+    },
+    "condition": "four_times_slower",
+    "seed": 827,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p058",
+    "plant": {
+      "id": "third_cascade",
+      "type": "linear",
+      "A": [
+        [
+          0.7188685511904869,
+          -0.44997688202657377,
+          -0.20211229790637608
+        ],
+        [
+          0.04269622293272195,
+          0.988183188150733,
+          -0.005329826632546404
+        ],
+        [
+          0.0011259258761254286,
+          0.04979821692059005,
+          0.9999088067423352
+        ]
+      ],
+      "B": [
+        0.04269622293272194,
+        0.001125925876125427,
+        1.9264575681703646e-05
+      ],
+      "C": [
+        0.0,
+        0.0,
+        5.680473372781064
+      ],
+      "n": 3,
+      "nominalOrder": 3,
+      "provenance": "new minimal third-order no pole-zero cancellation"
+    },
+    "condition": "coupled_disturbance",
+    "seed": 826,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0,
+    "coupled": true,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p059",
+    "plant": {
+      "id": "third_cascade",
+      "type": "linear",
+      "A": [
+        [
+          0.7188685511904869,
+          -0.44997688202657377,
+          -0.20211229790637608
+        ],
+        [
+          0.04269622293272195,
+          0.988183188150733,
+          -0.005329826632546404
+        ],
+        [
+          0.0011259258761254286,
+          0.04979821692059005,
+          0.9999088067423352
+        ]
+      ],
+      "B": [
+        0.04269622293272194,
+        0.001125925876125427,
+        1.9264575681703646e-05
+      ],
+      "C": [
+        0.0,
+        0.0,
+        5.680473372781064
+      ],
+      "n": 3,
+      "nominalOrder": 3,
+      "provenance": "new minimal third-order no pole-zero cancellation"
+    },
+    "condition": "coupled_disturbance",
+    "seed": 827,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0,
+    "coupled": true,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p060",
+    "plant": {
+      "id": "third_resonance",
+      "type": "linear",
+      "A": [
+        [
+          0.8575762387996008,
+          -0.2331450540877518,
+          -0.3340849201220707
+        ],
+        [
+          0.04640068335028758,
+          0.9940973604791136,
+          -0.008565746672359867
+        ],
+        [
+          0.0011896870378277592,
+          0.049901006990474145,
+          0.9998554457422
+        ]
+      ],
+      "B": [
+        0.04640068335028759,
+        0.0011896870378277583,
+        2.0076980250009465e-05
+      ],
+      "C": [
+        0.0,
+        0.0,
+        7.2
+      ],
+      "n": 3,
+      "nominalOrder": 3,
+      "provenance": "new minimal third-order no pole-zero cancellation"
+    },
+    "condition": "baseline",
+    "seed": 826,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p061",
+    "plant": {
+      "id": "third_resonance",
+      "type": "linear",
+      "A": [
+        [
+          0.8575762387996008,
+          -0.2331450540877518,
+          -0.3340849201220707
+        ],
+        [
+          0.04640068335028758,
+          0.9940973604791136,
+          -0.008565746672359867
+        ],
+        [
+          0.0011896870378277592,
+          0.049901006990474145,
+          0.9998554457422
+        ]
+      ],
+      "B": [
+        0.04640068335028759,
+        0.0011896870378277583,
+        2.0076980250009465e-05
+      ],
+      "C": [
+        0.0,
+        0.0,
+        7.2
+      ],
+      "n": 3,
+      "nominalOrder": 3,
+      "provenance": "new minimal third-order no pole-zero cancellation"
+    },
+    "condition": "baseline",
+    "seed": 827,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p062",
+    "plant": {
+      "id": "third_resonance",
+      "type": "linear",
+      "A": [
+        [
+          0.8575762387996008,
+          -0.2331450540877518,
+          -0.3340849201220707
+        ],
+        [
+          0.04640068335028758,
+          0.9940973604791136,
+          -0.008565746672359867
+        ],
+        [
+          0.0011896870378277592,
+          0.049901006990474145,
+          0.9998554457422
+        ]
+      ],
+      "B": [
+        0.04640068335028759,
+        0.0011896870378277583,
+        2.0076980250009465e-05
+      ],
+      "C": [
+        0.0,
+        0.0,
+        7.2
+      ],
+      "n": 3,
+      "nominalOrder": 3,
+      "provenance": "new minimal third-order no pole-zero cancellation"
+    },
+    "condition": "nonzero_initial",
+    "seed": 826,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0.5,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p063",
+    "plant": {
+      "id": "third_resonance",
+      "type": "linear",
+      "A": [
+        [
+          0.8575762387996008,
+          -0.2331450540877518,
+          -0.3340849201220707
+        ],
+        [
+          0.04640068335028758,
+          0.9940973604791136,
+          -0.008565746672359867
+        ],
+        [
+          0.0011896870378277592,
+          0.049901006990474145,
+          0.9998554457422
+        ]
+      ],
+      "B": [
+        0.04640068335028759,
+        0.0011896870378277583,
+        2.0076980250009465e-05
+      ],
+      "C": [
+        0.0,
+        0.0,
+        7.2
+      ],
+      "n": 3,
+      "nominalOrder": 3,
+      "provenance": "new minimal third-order no pole-zero cancellation"
+    },
+    "condition": "nonzero_initial",
+    "seed": 827,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0.5,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p064",
+    "plant": {
+      "id": "third_resonance",
+      "type": "linear",
+      "A": [
+        [
+          0.8575762387996008,
+          -0.2331450540877518,
+          -0.3340849201220707
+        ],
+        [
+          0.04640068335028758,
+          0.9940973604791136,
+          -0.008565746672359867
+        ],
+        [
+          0.0011896870378277592,
+          0.049901006990474145,
+          0.9998554457422
+        ]
+      ],
+      "B": [
+        0.04640068335028759,
+        0.0011896870378277583,
+        2.0076980250009465e-05
+      ],
+      "C": [
+        0.0,
+        0.0,
+        7.2
+      ],
+      "n": 3,
+      "nominalOrder": 3,
+      "provenance": "new minimal third-order no pole-zero cancellation"
+    },
+    "condition": "delay_300ms",
+    "seed": 826,
+    "delay": 6,
+    "gain": 1,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p065",
+    "plant": {
+      "id": "third_resonance",
+      "type": "linear",
+      "A": [
+        [
+          0.8575762387996008,
+          -0.2331450540877518,
+          -0.3340849201220707
+        ],
+        [
+          0.04640068335028758,
+          0.9940973604791136,
+          -0.008565746672359867
+        ],
+        [
+          0.0011896870378277592,
+          0.049901006990474145,
+          0.9998554457422
+        ]
+      ],
+      "B": [
+        0.04640068335028759,
+        0.0011896870378277583,
+        2.0076980250009465e-05
+      ],
+      "C": [
+        0.0,
+        0.0,
+        7.2
+      ],
+      "n": 3,
+      "nominalOrder": 3,
+      "provenance": "new minimal third-order no pole-zero cancellation"
+    },
+    "condition": "delay_300ms",
+    "seed": 827,
+    "delay": 6,
+    "gain": 1,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p066",
+    "plant": {
+      "id": "third_resonance",
+      "type": "linear",
+      "A": [
+        [
+          0.8575762387996008,
+          -0.2331450540877518,
+          -0.3340849201220707
+        ],
+        [
+          0.04640068335028758,
+          0.9940973604791136,
+          -0.008565746672359867
+        ],
+        [
+          0.0011896870378277592,
+          0.049901006990474145,
+          0.9998554457422
+        ]
+      ],
+      "B": [
+        0.04640068335028759,
+        0.0011896870378277583,
+        2.0076980250009465e-05
+      ],
+      "C": [
+        0.0,
+        0.0,
+        7.2
+      ],
+      "n": 3,
+      "nominalOrder": 3,
+      "provenance": "new minimal third-order no pole-zero cancellation"
+    },
+    "condition": "weak_actuator",
+    "seed": 826,
+    "delay": 1,
+    "gain": 0.2,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p067",
+    "plant": {
+      "id": "third_resonance",
+      "type": "linear",
+      "A": [
+        [
+          0.8575762387996008,
+          -0.2331450540877518,
+          -0.3340849201220707
+        ],
+        [
+          0.04640068335028758,
+          0.9940973604791136,
+          -0.008565746672359867
+        ],
+        [
+          0.0011896870378277592,
+          0.049901006990474145,
+          0.9998554457422
+        ]
+      ],
+      "B": [
+        0.04640068335028759,
+        0.0011896870378277583,
+        2.0076980250009465e-05
+      ],
+      "C": [
+        0.0,
+        0.0,
+        7.2
+      ],
+      "n": 3,
+      "nominalOrder": 3,
+      "provenance": "new minimal third-order no pole-zero cancellation"
+    },
+    "condition": "weak_actuator",
+    "seed": 827,
+    "delay": 1,
+    "gain": 0.2,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p068",
+    "plant": {
+      "id": "third_resonance",
+      "type": "linear",
+      "A": [
+        [
+          0.96351905120472,
+          -0.05994909707104365,
+          -0.08835391491526781
+        ],
+        [
+          0.012271377071564893,
+          0.9996241695219462,
+          -0.0005556320446688731
+        ],
+        [
+          7.717111731528337e-05,
+          0.012498431647843478,
+          0.9999976777297529
+        ]
+      ],
+      "B": [
+        0.012271377071564973,
+        7.717111731512109e-05,
+        3.22537534321244e-07
+      ],
+      "C": [
+        0.0,
+        0.0,
+        7.2
+      ],
+      "n": 3,
+      "nominalOrder": 3,
+      "provenance": "new minimal third-order no pole-zero cancellation"
+    },
+    "condition": "four_times_slower",
+    "seed": 826,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p069",
+    "plant": {
+      "id": "third_resonance",
+      "type": "linear",
+      "A": [
+        [
+          0.96351905120472,
+          -0.05994909707104365,
+          -0.08835391491526781
+        ],
+        [
+          0.012271377071564893,
+          0.9996241695219462,
+          -0.0005556320446688731
+        ],
+        [
+          7.717111731528337e-05,
+          0.012498431647843478,
+          0.9999976777297529
+        ]
+      ],
+      "B": [
+        0.012271377071564973,
+        7.717111731512109e-05,
+        3.22537534321244e-07
+      ],
+      "C": [
+        0.0,
+        0.0,
+        7.2
+      ],
+      "n": 3,
+      "nominalOrder": 3,
+      "provenance": "new minimal third-order no pole-zero cancellation"
+    },
+    "condition": "four_times_slower",
+    "seed": 827,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0,
+    "coupled": false,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p070",
+    "plant": {
+      "id": "third_resonance",
+      "type": "linear",
+      "A": [
+        [
+          0.8575762387996008,
+          -0.2331450540877518,
+          -0.3340849201220707
+        ],
+        [
+          0.04640068335028758,
+          0.9940973604791136,
+          -0.008565746672359867
+        ],
+        [
+          0.0011896870378277592,
+          0.049901006990474145,
+          0.9998554457422
+        ]
+      ],
+      "B": [
+        0.04640068335028759,
+        0.0011896870378277583,
+        2.0076980250009465e-05
+      ],
+      "C": [
+        0.0,
+        0.0,
+        7.2
+      ],
+      "n": 3,
+      "nominalOrder": 3,
+      "provenance": "new minimal third-order no pole-zero cancellation"
+    },
+    "condition": "coupled_disturbance",
+    "seed": 826,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0,
+    "coupled": true,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  },
+  {
+    "id": "p071",
+    "plant": {
+      "id": "third_resonance",
+      "type": "linear",
+      "A": [
+        [
+          0.8575762387996008,
+          -0.2331450540877518,
+          -0.3340849201220707
+        ],
+        [
+          0.04640068335028758,
+          0.9940973604791136,
+          -0.008565746672359867
+        ],
+        [
+          0.0011896870378277592,
+          0.049901006990474145,
+          0.9998554457422
+        ]
+      ],
+      "B": [
+        0.04640068335028759,
+        0.0011896870378277583,
+        2.0076980250009465e-05
+      ],
+      "C": [
+        0.0,
+        0.0,
+        7.2
+      ],
+      "n": 3,
+      "nominalOrder": 3,
+      "provenance": "new minimal third-order no pole-zero cancellation"
+    },
+    "condition": "coupled_disturbance",
+    "seed": 827,
+    "delay": 1,
+    "gain": 1,
+    "initial": 0,
+    "coupled": true,
+    "originalPid": [
+      0.4,
+      2.5,
+      0.2
+    ],
+    "baseSP": 0.3,
+    "dt": 0.05
+  }
+]
