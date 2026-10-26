@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework><Nullable>enable</Nullable></PropertyGroup>
+  <ItemGroup><Compile Include="../ProductionNoiseless/Host.cs" Link="Host.cs" />
+    <Compile Include="../../PIDSupporterCore/EmpiricalFrequencyGate.cs" Link="EmpiricalFrequencyGate.cs" />
+    <Compile Include="../../PIDSupporterCore/NumericalSvd.cs" Link="NumericalSvd.cs" />
+    <Compile Include="../../PIDSupporterCore/EOptimalExcitation.cs" Link="EOptimalExcitation.cs" />
+    <Compile Include="../../PIDSupporterCore/AdaptiveExcitation.cs" Link="AdaptiveExcitation.cs" />
+    <Compile Include="../../PIDSupporterCore/NativeLinearConstraints.cs" Link="NativeLinearConstraints.cs" />
+    <Compile Include="../../PIDSupporterCore/AutoTuneHistory.cs" Link="AutoTuneHistory.cs" />
+    <Compile Include="../../PIDSupporterCore/AutoTuneSpectrum.cs" Link="AutoTuneSpectrum.cs" />
+    <Compile Include="../../PIDSupporterCore/NativeLinearAccumulation.cs" Link="NativeLinearAccumulation.cs" />
+    <Compile Include="../../PIDSupporterCore/AutoTuneContext.cs" Link="AutoTuneContext.cs" />
+    <Compile Include="../../PIDSupporterCore/AutoTuneSession.cs" Link="AutoTuneSession.cs" />
+    <Compile Include="../../PIDSupporterCore/PidSearch.cs" Link="PidSearch.cs" />
+    <Compile Include="../../PIDSupporterCore/NativeLinear.cs" Link="NativeLinear.cs" />
+    <Compile Include="../../PIDSupporterCore/NativeRen.cs" Link="NativeRen.cs" />
+    <Compile Include="../../PIDSupporterCore/NativeAutoTune.cs" Link="NativeAutoTune.cs" />
+  </ItemGroup>
+</Project>

@@ -1,6 +1,6 @@
-1.1.4 - Documentation and packaging update
-The tuning algorithm and DLLs are unchanged from 1.1.3.
-Include English and Korean theory Markdown documents describing the actual implementation.
-Correct the neighborhood documentation: up to 27 simultaneous PID combinations are used by default.
-Separate historical FRIT/relay notes from current theory.
-Clarify preparation, manual Apply/Restore, and the limits of model predictions and empirical checks.
+1.1.5 - Recording timing fix
+Fix false "A continuous fixed-PID record is required" failures caused by float game timestamps.
+Estimate the sample interval from the complete timestamp span, and check start/end coverage separately.
+Keep checks for missing, duplicate, reversed and non-finite timestamps; clarify timing error messages.
+No change to excitation, IV identification, PID search or empirical robustness policies.
+Update included English and Korean theory documents.

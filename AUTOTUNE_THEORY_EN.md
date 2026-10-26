@@ -1,6 +1,10 @@
 # PIDSupporter: current tuning method and its limits
 
-Reviewed against production source on 26 October 2026. Algorithm: **1.1.3**. Documentation/package update: **1.1.4**. The tuning DLLs and algorithm are unchanged in this documentation release.
+Reviewed against production source on 27 October 2026. Release: **1.1.5**. Recording-time validation is corrected; IV fitting, model selection and PID search policies remain as in 1.1.3.
+
+## Recording-time validation (1.1.5)
+
+The model sample interval is estimated as `(T[last] - T[first]) / (N - 1)`. Multiplying the median interval by sample count could falsely reject a valid 30-second record because the game supplies float timestamps. The span estimate avoids accumulating that median quantization bias. Start/end coverage is checked separately, allowing one sample of collection-boundary rounding. Every interval must still be within 10% of the estimated step; missing, duplicate, reversed or non-finite timestamps are rejected. Severely degraded clock precision may still require a game restart. A perfectly regular lower-rate record cannot be distinguished from systematic decimation from timestamps alone. This change does not bypass PID-setting change cancellation or relax the model/robustness criteria.
 
 [한국어 설명](AUTOTUNE_THEORY_KO.md)
 

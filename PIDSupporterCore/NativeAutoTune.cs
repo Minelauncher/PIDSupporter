@@ -38,14 +38,28 @@ namespace PIDSupporter
         {
             int n = r.U.Length;
             if (n < 300 || n > 6000 || r.Y.Length != n || r.T.Length != n) throw new ArgumentException("Invalid sample count.");
-            double[] intervals = new double[n - 1];
-            for (int i = 1; i < n; i++) intervals[i - 1] = r.T[i] - r.T[i - 1];
-            Array.Sort(intervals); double dt = intervals[intervals.Length / 2];
-            if (!NativeLinear.Finite(dt) || dt <= 0 || (r.Duration != 24 && r.Duration != 30) || Math.Abs(n * dt - r.Duration) > .1) throw new ArgumentException("A continuous fixed-PID record is required.");
+            // Float game timestamps quantize individual intervals asymmetrically.
+            // Their median can be biased enough that n * median rejects a valid 30 s
+            // record. Endpoint differencing averages that quantization instead.
+            double dt = (r.T[n - 1] - r.T[0]) / (n - 1);
+            if (!NativeLinear.Finite(dt) || dt <= 0)
+                throw new ArgumentException("Invalid controller timestamps; collect a new record.");
+            if (r.Duration != 24 && r.Duration != 30)
+                throw new ArgumentException("Unsupported recording duration.");
+            // Collection timestamps are relative to its start. Permit the collector's
+            // one-step endpoint rounding, but not truncated starts/ends. Historical
+            // records may label their first sample at zero rather than at dt.
+            double edgeTolerance = dt * 1.1 + 1e-6;
+            if (r.T[0] < 0 || r.T[0] > edgeTolerance
+                || Math.Abs(r.T[n - 1] - r.Duration) > edgeTolerance)
+                throw new ArgumentException("Incomplete recording: start or end samples are missing. Collect a full uninterrupted record.");
             for (int i = 0; i < n; i++)
             {
                 if (!NativeLinear.Finite(r.U[i]) || !NativeLinear.Finite(r.Y[i]) || !NativeLinear.Finite(r.T[i])) throw new ArgumentException("Non-finite measurements");
-                if (i > 0 && Math.Abs(r.T[i] - r.T[i - 1] - dt) > dt * .1) throw new ArgumentException("Irregular controller sampling.");
+                // A full duration alone is insufficient: missing/duplicate samples
+                // must still fail even when the average interval looks plausible.
+                if (i > 0 && Math.Abs(r.T[i] - r.T[i - 1] - dt) > dt * .1)
+                    throw new ArgumentException($"Irregular controller sampling at sample {i}: missing samples or insufficient clock precision. Collect again; restart the game if it persists.");
                 if (r.U[i] < r.Lower - 1e-5 || r.U[i] > r.Upper + 1e-5) throw new ArgumentException("Input outside recorded limits");
             }
             if (!NativeLinear.Finite(r.Lower) || !NativeLinear.Finite(r.Upper) || r.Lower >= r.Upper

@@ -1,5 +1,5 @@
 [h1]PIDSupporter - Tune Helper[/h1]
-Mod latest version 1.1.4
+Mod latest version 1.1.5
 
 A small in-game helper for tuning PID controllers in From the Depths.
 It suggests settings for you to try. It cannot promise a good tune for every vehicle or operating condition.
@@ -47,7 +47,7 @@ In 72 synthetic cases without measurement noise, both the current tuner and the 
 This compares tuning calculations on identical data, not the complete old FRIT excitation and collection workflow. It is a limited synthetic test, not a promise for every FTD vehicle. Coupled-disturbance cases remain a weakness, and FRIT performed better in several of those cases. The current method should be treated as a tune helper whose suggestions you review and try in normal operation.
 
 [h2]About this version[/h2]
-Version 1.1.4 is a documentation and packaging update. The tuning algorithm and DLLs are unchanged from 1.1.3.
+Version 1.1.5 fixes a timing-validation bug that could report "A continuous fixed-PID record is required" for a valid recording after the game clock had advanced. Sample time now uses the full timestamp span. Missing or duplicate samples and incomplete recordings are still checked. The IV identification, PID search and empirical robustness policies are unchanged.
 
 The current implementation uses linear IV identification instead of the earlier FRIT workflow. It checks candidate settings against observed frequency-response discrepancies and evaluates up to 27 nearby PID combinations. If no searched candidate passes, the current settings are retained. These checks can make suggestions more conservative, but do not guarantee stability or improvement. Collection, output limits, integral handling, manual Apply and Restore remain in place. No separate candidate-testing flight is performed by these checks.
 

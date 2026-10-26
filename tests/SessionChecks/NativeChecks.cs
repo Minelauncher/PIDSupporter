@@ -86,7 +86,7 @@ internal static class NativeChecks
 
     internal static TuneRecord Fixture(int count)
     {
-        var r = new TuneRecord { R = new double[count], Integrals = new double[count], U = new double[count], Y = new double[count], T = new double[count],
+        var r = new TuneRecord { R = new double[count], InjectedSP = new double[count], InstrumentSP = new double[count], BaseSP = new double[count], Integrals = new double[count], U = new double[count], Y = new double[count], T = new double[count],
             Pid = new[] { .05, 2, .1 }, Lower = -1, Upper = 1, Amplitude = 1, Speed = .5 };
         double x = 0, integral = 0, previous = 0, dt = 30.0 / count;
         var rng = new Random(826); var phases = new double[60];
@@ -97,7 +97,8 @@ internal static class NativeChecks
             for (int j = 1; j <= 60; j++) sp += Math.Sin(2 * Math.PI * j * k * dt / 30 + phases[j - 1]) / 20;
             double error = sp - x;
             double action = NativeAutoTune.PidStep(r.Pid, error, previous, ref integral, dt, -1, 1, k == 0);
-            r.R[k] = sp; r.Integrals[k] = integral; r.U[k] = action; r.Y[k] = x; r.T[k] = (k + 1) * dt;
+            r.R[k] = sp; r.InjectedSP[k] = sp; r.InstrumentSP[k] = sp;
+            r.Integrals[k] = integral; r.U[k] = action; r.Y[k] = x; r.T[k] = (k + 1) * dt;
             // Test-only synthetic plant, absent from the production learner.
             double a = Math.Exp(-dt); x = a * x + (1 - a) * 10 * action; previous = error;
         }

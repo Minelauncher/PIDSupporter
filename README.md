@@ -4,7 +4,7 @@ In-game PID tune helper for From the Depths, implemented in C#.
 
 [Steam Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=3735379602) · [User guide](AUTOTUNE.txt) · [Theory (English)](AUTOTUNE_THEORY_EN.md) · [이론 (한국어)](AUTOTUNE_THEORY_KO.md)
 
-Version 1.1.4 updates documentation and packaging only. The 1.1.3 tuning algorithm and DLLs are retained. Both English and Korean theory Markdown files are included in the release.
+Version 1.1.5 fixes false recording-timing failures caused by float clock precision. IV fitting, candidate search and the empirical robustness policy remain unchanged. English and Korean theory Markdown files are included.
 
 The current runtime uses preparation-stage gain adjustment, fixed 30-second square-wave SP excitation, low-order linear instrumental-variable identification, and hierarchical PID search with neighboring parameter evaluation. Apply and Restore remain user-controlled. The previous FRIT implementation is retained in source history; it is not the current tuning path.
 
