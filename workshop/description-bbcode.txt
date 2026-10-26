@@ -23,6 +23,29 @@ The helper uses a small linear model and tests nearby PID settings with output l
 
 The displayed improvement is a model prediction, not a measured improvement in your vehicle. Strong interaction between axes, changing speed or attitude, and weak control authority can give misleading recommendations. A suggestion is not a stability guarantee or a universal optimum.
 
+[h2]How it works[/h2]
+[list]
+[*]Preparation adjusts the working gain, then fixes the excitation policy for a 30-second recording.
+[*]A small linear plant model is fitted using instrumental variables (IV). The injected reference signal helps separate the commanded response from feedback-related correlations. Normalization and SVD support the numerical calculation.
+[*]Candidate PIDs are simulated with the game's output limits and integral handling. Up to 27 nearby parameter combinations are checked, so a single unusually good predicted point is not enough.
+[*]Tracking comes first. Among candidates with similar tracking, the search favors less abrupt output and lower control effort.
+[*]An empirical frequency-response check rejects candidates that are too sensitive to discrepancies observed in the recorded response. This uses the recording; it does not perform an additional candidate-testing flight.
+[/list]
+
+[h2]Known limitations[/h2]
+[list]
+[*]This is a local, single-axis linear approximation. Strong coupling from pitch, roll or yaw can make the fitted response misleading. More data alone does not necessarily fix a mismatched model.
+[*]Weak excitation, limited control authority, or changing speed, attitude and operating conditions can leave important dynamics unidentified. Output saturation is included in prediction, but saturation can still reduce useful identification information.
+[*]IV relies on informative excitation and assumptions about its relationship to disturbances. It does not automatically remove every closed-loop identification error. Normalization and SVD improve numerical handling; they cannot create missing information.
+[*]The frequency check is based on observed frequencies and empirical discrepancies. It is not a certified uncertainty bound or a stability proof across all frequencies and operating conditions.
+[*]Finite search and model predictions do not guarantee an optimal PID, improvement after application, or convergence after repeated collections. Keeping the current PID when no candidate qualifies does not certify that PID as safe either.
+[/list]
+
+[h2]What has been tested[/h2]
+In 72 synthetic cases without measurement noise, both the current tuner and the historical FRIT calculation were given the same current-policy 30-second recordings. With smooth setpoint tasks and nearby PID variations, the current tuner improved on the collection PID in 61 cases and worsened it in 5; historical FRIT improved in 24 and worsened in 48. Changes within 1% were treated as similar. Evaluation of the exact recommended PID also favored the current method overall.
+
+This compares tuning calculations on identical data, not the complete old FRIT excitation and collection workflow. It is a limited synthetic test, not a promise for every FTD vehicle. Coupled-disturbance cases remain a weakness, and FRIT performed better in several of those cases. The current method should be treated as a tune helper whose suggestions you review and try in normal operation.
+
 [h2]About this version[/h2]
 Version 1.1.4 is a documentation and packaging update. The tuning algorithm and DLLs are unchanged from 1.1.3.
 

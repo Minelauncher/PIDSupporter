@@ -1,0 +1,7 @@
+Workshop description update only.
+
+Added a plain-language explanation of the current IV identification, nearby-PID evaluation and empirical frequency-response check. Documented assumptions, axis-coupling and information limitations, and the absence of a universal stability or convergence guarantee.
+
+Added the scope and results of the 72-case noiseless comparison against historical FRIT on identical current-policy recordings. This is not an old-versus-new excitation comparison.
+
+No tuning algorithm, DLL, packaged theory document or version change.
