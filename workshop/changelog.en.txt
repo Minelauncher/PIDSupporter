@@ -1,6 +1,6 @@
-1.1.3 - Tune Helper
-Added candidate checks based on observed frequency-response discrepancies, using existing recordings.
-Evaluate up to 27 nearby PID combinations, including simultaneous parameter changes.
-Separate current-PID prediction from candidate feasibility; retain current settings if no searched candidate passes.
-Keep IV identification, collection, output limits, integral handling, and manual Apply and Restore.
-Updated the guide and theory documentation. Empirical checks are not a full-band or nonlinear stability guarantee.
+1.1.4 - Documentation and packaging update
+The tuning algorithm and DLLs are unchanged from 1.1.3.
+Include English and Korean theory Markdown documents describing the actual implementation.
+Correct the neighborhood documentation: up to 27 simultaneous PID combinations are used by default.
+Separate historical FRIT/relay notes from current theory.
+Clarify preparation, manual Apply/Restore, and the limits of model predictions and empirical checks.

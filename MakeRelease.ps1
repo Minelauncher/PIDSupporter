@@ -13,11 +13,10 @@ New-Item -ItemType Directory -Path $package | Out-Null
 foreach ($project in @("PIDSupporterCore", "PIDSupporterSelector")) {
     Copy-Item -LiteralPath (Join-Path $projectRoot "$project/bin/Release/netstandard2.1/$project.dll") -Destination $package
 }
-foreach ($name in @("0Harmony.dll", "header.header", "header.jpg", "AUTOTUNE.txt", "AUTOTUNE_THEORY_KO.md")) {
+foreach ($name in @("0Harmony.dll", "header.header", "header.jpg", "AUTOTUNE.txt", "AUTOTUNE_THEORY_KO.md", "AUTOTUNE_THEORY_EN.md")) {
     Copy-Item -LiteralPath (Join-Path $projectRoot $name) -Destination $package
 }
 $metadata = Get-Content -LiteralPath (Join-Path $projectRoot "plugin.json") -Raw -Encoding utf8 | ConvertFrom-Json
-$metadata.version = "1.1.3"
 $metadata.workshop_id = 0
 $metadata | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $package "plugin.json") -Encoding utf8
 Write-Output "Local test package: $package"

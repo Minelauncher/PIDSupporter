@@ -1,5 +1,5 @@
 [h1]PIDSupporter - Tune Helper[/h1]
-Mod latest version 1.1.3
+Mod latest version 1.1.4
 
 A small in-game helper for tuning PID controllers in From the Depths.
 It suggests settings for you to try. It cannot promise a good tune for every vehicle or operating condition.
@@ -16,7 +16,7 @@ It suggests settings for you to try. It cannot promise a good tune for every veh
 Enable the mod and restart the game. Open the PID window and select Auto Tune.
 Use a reasonably steady, representative flight or operating condition. Preparation may adjust the working gain before the 30-second collection begins. The setpoint is deliberately moved during collection, so leave room for the vehicle to respond.
 
-When a result is ready, review it before applying. Try it in normal operation and keep a known working tune available. Repeat collection in the same PID window if you want to add more data. Up to five recent recordings are kept; closing the window stops collection and clears that history.
+When a result is ready, review it before applying. Try it in normal operation and keep a known working tune available. Repeat collection in the same PID window if you want to add more data. Up to five recent recordings are kept; closing the window stops collection and clears that history. Preparation is separate from the 30-second recording and may take longer if the gain keeps being adjusted.
 
 [h2]What to expect[/h2]
 The helper uses a small linear model and tests nearby PID settings with output limits and integral handling. All fitting and search run in C#; no Python installation is needed. The guide and diagnostic panels explain the collection and show which response bands are visible.
@@ -24,6 +24,8 @@ The helper uses a small linear model and tests nearby PID settings with output l
 The displayed improvement is a model prediction, not a measured improvement in your vehicle. Strong interaction between axes, changing speed or attitude, and weak control authority can give misleading recommendations. A suggestion is not a stability guarantee or a universal optimum.
 
 [h2]About this version[/h2]
-This version uses linear IV identification instead of the earlier FRIT workflow. Version 1.1.3 checks candidate settings against observed frequency-response discrepancies and evaluates up to 27 nearby PID combinations. If no searched candidate passes, the current settings are retained. These checks can make suggestions more conservative, but do not guarantee stability or improvement. Collection, output limits, integral handling, manual Apply and Restore remain in place. No additional collection is required by the new checks.
+Version 1.1.4 is a documentation and packaging update. The tuning algorithm and DLLs are unchanged from 1.1.3.
 
-AUTOTUNE.txt and AUTOTUNE_THEORY_KO.md are included for details.
+The current implementation uses linear IV identification instead of the earlier FRIT workflow. It checks candidate settings against observed frequency-response discrepancies and evaluates up to 27 nearby PID combinations. If no searched candidate passes, the current settings are retained. These checks can make suggestions more conservative, but do not guarantee stability or improvement. Collection, output limits, integral handling, manual Apply and Restore remain in place. No separate candidate-testing flight is performed by these checks.
+
+AUTOTUNE.txt, AUTOTUNE_THEORY_EN.md (English), and AUTOTUNE_THEORY_KO.md (Korean) are included. The theory files describe the actual implementation and distinguish mathematical assumptions from practical heuristics. Open the Markdown files in a math-capable viewer to render equations.

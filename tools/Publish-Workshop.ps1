@@ -12,9 +12,9 @@ if(-not(Test-Path -LiteralPath $releaseRecord)){
 }
 $record=Get-Content -LiteralPath $releaseRecord -Raw | ConvertFrom-Json
 New-Item -ItemType Directory -Path $content -Force | Out-Null
-$files=@('plugin.json','header.header','AUTOTUNE.txt','AUTOTUNE_THEORY_KO.md','PIDSupporterCore.dll','PIDSupporterSelector.dll','0Harmony.dll')
+$files=@('plugin.json','header.header','AUTOTUNE.txt','AUTOTUNE_THEORY_KO.md','AUTOTUNE_THEORY_EN.md','PIDSupporterCore.dll','PIDSupporterSelector.dll','0Harmony.dll')
 foreach($name in $files){
- $fileSource=if($name -eq 'AUTOTUNE_THEORY_KO.md'){Join-Path $source $name}else{Join-Path $release $name}
+ $fileSource=Join-Path $release $name
  Copy-Item -LiteralPath $fileSource -Destination (Join-Path $content $name) -Force
 }
 Copy-Item -LiteralPath (Join-Path $workshop 'preview.jpg') -Destination (Join-Path $content 'header.jpg') -Force
@@ -31,7 +31,7 @@ foreach($name in ($files+'header.jpg')){$hashes[$name]=(Get-FileHash -LiteralPat
 $gallery=@()
 $jobPath=Join-Path $workshop 'publish-job.json'
 @{title='PIDSupporter';version=$version;content=$content;preview=(Join-Path $content 'header.jpg');gallery=@($gallery);description=(Join-Path $workshop 'description-bbcode.txt');changeNotes=(Join-Path $workshop $ChangeNotes);statePath=(Join-Path $workshop 'publish-state.json');hashes=$hashes} | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $jobPath -Encoding utf8
-Write-Output "Prepared $content (eight public release files, no account data)."
+Write-Output "Prepared $content (nine public release files, no account data)."
 if(-not $Publish){Write-Output 'Preparation only; no Steam requests made.';return}
 if(Get-Process From_The_Depths -ErrorAction SilentlyContinue){throw 'User game is running; no process will be stopped.'}
 $root=Join-Path ([IO.Path]::GetTempPath()) ('FR\publish-'+[guid]::NewGuid().ToString('N').Substring(0,10))

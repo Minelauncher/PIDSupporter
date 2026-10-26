@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+ <PropertyGroup><TargetFramework>netstandard2.1</TargetFramework><LangVersion>latest</LangVersion><GameManaged>C:/Program Files (x86)/Steam/steamapps/common/From The Depths/From_The_Depths_Data/Managed</GameManaged></PropertyGroup>
+ <ItemGroup>
+  <Reference Include="Ftd" HintPath="$(GameManaged)/Ftd.dll" Private="false" />
+  <Reference Include="Core" HintPath="$(GameManaged)/Core.dll" Private="false" />
+  <Reference Include="Common" HintPath="$(GameManaged)/Common.dll" Private="false" />
+  <Reference Include="Modding" HintPath="$(GameManaged)/Modding.dll" Private="false" />
+  <Reference Include="Steamworks" HintPath="$(GameManaged)/Steamworks.dll" Private="false" />
+  <Reference Include="Newtonsoft.Json" HintPath="$(GameManaged)/Newtonsoft.Json.dll" Private="false" />
+  <Reference Include="UnityEngine.CoreModule" HintPath="$(GameManaged)/UnityEngine.CoreModule.dll" Private="false" />
+ </ItemGroup>
+</Project>
