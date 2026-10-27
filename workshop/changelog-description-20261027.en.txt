@@ -1,0 +1,1 @@
+Shortened the Workshop description to focus on features and getting started. No changes to tuning behavior.

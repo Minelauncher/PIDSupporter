@@ -1,54 +1,26 @@
 [h1]PIDSupporter - Tune Helper[/h1]
 Mod latest version 1.1.5
 
-A small in-game helper for tuning PID controllers in From the Depths.
-It suggests settings for you to try. It cannot promise a good tune for every vehicle or operating condition.
+An in-game helper for tuning PID controllers in From the Depths. Collect a response, review suggested settings, and apply them when you are ready.
 
-[h2]What you can do[/h2]
+[h2]Features[/h2]
 [list]
-[*]Collect a response from the PID you are working on.
-[*]Review a suggested PID and its predicted performance.
-[*]Apply the suggestion yourself, or keep your current settings.
-[*]Restore the original settings if the result does not suit your vehicle.
+[*]30-second response recordings with automatic preparation.
+[*]PID suggestions with predicted performance and response information.
+[*]Manual Apply and Restore controls.
+[*]Combine up to five recordings from the same PID window.
+[*]Response-band displays and an in-game guide.
 [/list]
 
-[h2]Getting started[/h2]
-Enable the mod and restart the game. Open the PID window and select Auto Tune.
-Use a reasonably steady, representative flight or operating condition. Preparation may adjust the working gain before the 30-second collection begins. The setpoint is deliberately moved during collection, so leave room for the vehicle to respond.
-
-When a result is ready, review it before applying. Try it in normal operation and keep a known working tune available. Repeat collection in the same PID window if you want to add more data. Up to five recent recordings are kept; closing the window stops collection and clears that history. Preparation is separate from the 30-second recording and may take longer if the gain keeps being adjusted.
-
-[h2]What to expect[/h2]
-The helper uses a small linear model and tests nearby PID settings with output limits and integral handling. All fitting and search run in C#; no Python installation is needed. The guide and diagnostic panels explain the collection and show which response bands are visible.
-
-The displayed improvement is a model prediction, not a measured improvement in your vehicle. Strong interaction between axes, changing speed or attitude, and weak control authority can give misleading recommendations. A suggestion is not a stability guarantee or a universal optimum.
-
-[h2]How it works[/h2]
+[h2]How to use[/h2]
 [list]
-[*]Preparation adjusts the working gain, then fixes the excitation policy for a 30-second recording.
-[*]A small linear plant model is fitted using instrumental variables (IV). The injected reference signal helps separate the commanded response from feedback-related correlations. Normalization and SVD support the numerical calculation.
-[*]Candidate PIDs are simulated with the game's output limits and integral handling. Up to 27 nearby parameter combinations are checked, so a single unusually good predicted point is not enough.
-[*]Tracking comes first. Among candidates with similar tracking, the search favors less abrupt output and lower control effort.
-[*]An empirical frequency-response check rejects candidates that are too sensitive to discrepancies observed in the recorded response. This uses the recording; it does not perform an additional candidate-testing flight.
+[*]Enable the mod, restart the game, and open the PID window's Auto Tune tab.
+[*]Start collection under representative operating conditions. Preparation adjusts the working gain, then a 30-second recording begins. The setpoint moves during collection, so allow room for the vehicle to respond.
+[*]Review the suggestion, select Apply, and try it in normal operation. Use Restore to return to the original settings.
+[*]To add more data, collect again without closing the PID window. Closing it stops collection and clears its recording history.
 [/list]
 
-[h2]Known limitations[/h2]
-[list]
-[*]This is a local, single-axis linear approximation. Strong coupling from pitch, roll or yaw can make the fitted response misleading. More data alone does not necessarily fix a mismatched model.
-[*]Weak excitation, limited control authority, or changing speed, attitude and operating conditions can leave important dynamics unidentified. Output saturation is included in prediction, but saturation can still reduce useful identification information.
-[*]IV relies on informative excitation and assumptions about its relationship to disturbances. It does not automatically remove every closed-loop identification error. Normalization and SVD improve numerical handling; they cannot create missing information.
-[*]The frequency check is based on observed frequencies and empirical discrepancies. It is not a certified uncertainty bound or a stability proof across all frequencies and operating conditions.
-[*]Finite search and model predictions do not guarantee an optimal PID, improvement after application, or convergence after repeated collections. Keeping the current PID when no candidate qualifies does not certify that PID as safe either.
-[/list]
+[h2]About[/h2]
+The helper fits a model to the recorded response and searches for settings that track well without unnecessarily abrupt control. It also checks nearby PID settings and sensitivity to model error.
 
-[h2]What has been tested[/h2]
-In 72 synthetic cases without measurement noise, both the current tuner and the historical FRIT calculation were given the same current-policy 30-second recordings. With smooth setpoint tasks and nearby PID variations, the current tuner improved on the collection PID in 61 cases and worsened it in 5; historical FRIT improved in 24 and worsened in 48. Changes within 1% were treated as similar. Evaluation of the exact recommended PID also favored the current method overall.
-
-This compares tuning calculations on identical data, not the complete old FRIT excitation and collection workflow. It is a limited synthetic test, not a promise for every FTD vehicle. Coupled-disturbance cases remain a weakness, and FRIT performed better in several of those cases. The current method should be treated as a tune helper whose suggestions you review and try in normal operation.
-
-[h2]About this version[/h2]
-Version 1.1.5 fixes a timing-validation bug that could report "A continuous fixed-PID record is required" for a valid recording after the game clock had advanced. Sample time now uses the full timestamp span. Missing or duplicate samples and incomplete recordings are still checked. The IV identification, PID search and empirical robustness policies are unchanged.
-
-The current implementation uses linear IV identification instead of the earlier FRIT workflow. It checks candidate settings against observed frequency-response discrepancies and evaluates up to 27 nearby PID combinations. If no searched candidate passes, the current settings are retained. These checks can make suggestions more conservative, but do not guarantee stability or improvement. Collection, output limits, integral handling, manual Apply and Restore remain in place. No separate candidate-testing flight is performed by these checks.
-
-AUTOTUNE.txt, AUTOTUNE_THEORY_EN.md (English), and AUTOTUNE_THEORY_KO.md (Korean) are included. The theory files describe the actual implementation and distinguish mathematical assumptions from practical heuristics. Open the Markdown files in a math-capable viewer to render equations.
+English and Korean theory notes are included for anyone interested in the details.
